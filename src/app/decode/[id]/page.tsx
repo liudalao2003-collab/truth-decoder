@@ -7,6 +7,7 @@ import { DecodeResult } from '@/types';
 import RawNarrative from '@/components/features/decode/RawNarrative';
 import HardFacts from '@/components/features/decode/HardFacts';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
+import ChatTerminal from '@/components/features/terminal/ChatTerminal';
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -21,7 +22,6 @@ export default function DecodePage({ params }: PageProps) {
   
   const [rawContent, setRawContent] = useState('');
   const [result, setResult] = useState<DecodeResult | null>(null);
-  // 新增：提取并保存浏览次数
   const [viewCount, setViewCount] = useState<number>(0);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export default function DecodePage({ params }: PageProps) {
         console.log('🔵 [数据渲染] -> 组件: 成功挂载持久化数据');
         setRawContent(json.data.rawContent);
         setResult(json.data.result);
-        setViewCount(json.data.viewCount); // 挂载浏览量
+        setViewCount(json.data.viewCount);
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : '网络通信阻断';
         setError(errMsg);
@@ -73,8 +73,8 @@ export default function DecodePage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white relative overflow-hidden">
+      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
         <header className="flex items-center justify-between border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
             <ChevronLeft className="text-zinc-500" />
@@ -82,7 +82,6 @@ export default function DecodePage({ params }: PageProps) {
             <h1 className="text-2xl font-black tracking-tighter text-white uppercase">{i18n.header.title}</h1>
           </div>
           
-          {/* 商业化看板区域 */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400 border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 rounded-sm tracking-widest">
               <Eye className="w-3 h-3 text-red-500" />
@@ -100,6 +99,9 @@ export default function DecodePage({ params }: PageProps) {
         </div>
         <VerdictPanel verdict={result.verdict} isErased={isErased} />
       </div>
+
+      {/* 🚀 核心装载：挂载商业化交互终端 */}
+      <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
     </div>
   );
 }
