@@ -389,41 +389,41 @@ export async function GET(
 File: .\src\app\api\terminal\route.ts
 ============================================================
 import { createDeepSeekStream } from '@/services/deepseek-stream';
-import { TerminalStreamPayload } from '@/types';
+import { TerminalStreamPayload, TerminalMessage } from '@/types';
+import { logger } from '@/utils/logger';
 
-// 强制使用 Edge Runtime，避免 Node.js 阻塞，获得极低延迟的流式处理性能
+// 强制使用 Edge Runtime，避免 Node.js 阻塞，获得极低延迟的流式处理性能 [cite: 61]
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    // 1. 解析与安全校验 (绝对的 TS 纯洁性)
+    // 1. 解析与安全校验 (绝对的 TS 纯洁性) [cite: 62]
     const body = await request.json();
     const { signalId, messages } = body as TerminalStreamPayload;
 
-    console.log(`🟢 [状态发起] -> 变量: 接收到 Terminal 流式请求, Signal: ${signalId}`);
+    logger.start(`接收到 Terminal 流式请求, Signal: ${signalId}`);
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      console.log('🔴 [错误捕获] -> 节点: Terminal 网关 - 记忆链为空或格式异常');
+      logger.crash('Terminal 网关 - 记忆链为空或格式异常');
       return new Response(JSON.stringify({ error: '无效的上下文记忆链' }), { status: 400 });
     }
 
-    // 2. 注入系统级护栏指令 (拦截越狱与偏题)
-    // 商业逻辑约束：确保用户的追问始终围绕“商业事实”，防止用户拿此终端当免费闲聊工具
-    const systemGuardrail = {
+    // 2. 注入系统级护栏指令 (拦截越狱与偏题) [cite: 66]
+    // 严密契约：直接声明为 TerminalMessage 类型，彻底消灭 as 强转
+    const systemGuardrail: TerminalMessage = {
       role: 'system',
       content: '你现在是 TruthDecoder 的深度审讯终端。基于之前的去伪存真报告，使用极度冷峻、客观、无情的数据化口吻回答用户的追问。禁止使用任何反问句、感叹号或共情语。如果用户的问题偏离商业、金融、人事或权力更迭，冷酷地拒绝回答。'
     };
 
-    // 此处的 as any 是为了绕过 TS 对护栏类型的严苛推导，强行注入数组最前端
-    const safeMessages = [systemGuardrail, ...messages] as typeof messages;
+    // 纯洁的数组解构拼装，TS 类型严丝合缝
+    const safeMessages: TerminalMessage[] = [systemGuardrail, ...messages];
 
-    // 3. 呼叫流式引擎
+    // 3. 呼叫流式引擎 [cite: 68]
     const streamResponse = await createDeepSeekStream(safeMessages);
 
-    console.log('🔵 [数据渲染] -> 组件: Terminal 网关流式管道已连接，开始向客户端泵入字节流');
+    logger.success('Terminal 网关流式管道已连接，开始向客户端泵入字节流');
 
-    // 4. 原生流透传
-    // 将 DeepSeek 的原生流直接透传给客户端，不经过任何中间缓冲，实现打字机效果
+    // 4. 原生流透传 [cite: 69]
     return new Response(streamResponse.body, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -434,7 +434,7 @@ export async function POST(request: Request) {
 
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '流式网关级联失效';
-    console.log('🔴 [错误捕获] -> 节点: Terminal 网关异常', errMsg);
+    logger.crash(errMsg);
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
   }
 }
@@ -501,12 +501,69 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<D
 }
 
 ============================================================
+File: .\src\app\decode\[id]\error.tsx
+============================================================
+"use client";
+
+import { useEffect } from "react";
+import { AlertTriangle, RefreshCcw, ShieldAlert } from "lucide-react";
+import { i18n } from "@/config/i18n";
+
+/**
+ * 核心业务说明：
+ * 局部容灾边界组件 (Error Boundary)。
+ * 它的作用是拦截该路由下任何未被捕获的 React 渲染错误或生命周期异常，
+ * 提供物理级的降级 UI，保障 C 端/B 端用户的视觉体验不至于沦为浏览器默认的崩溃页。
+ */
+export default function DecodeError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // 强制在客户端记录崩溃死因，但不向外暴露机密环境信息
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔴 [模块_崩溃] -> Error Boundary 捕获到致命异常:`, error);
+    }
+  }, [error]);
+
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 selection:bg-red-900">
+      <div className="bg-zinc-950 border border-red-900/50 p-10 rounded-sm text-center max-w-lg shadow-[0_0_50px_rgba(153,27,27,0.1)] relative overflow-hidden">
+        <ShieldAlert className="absolute -right-10 -top-10 w-40 h-40 text-red-900/10 pointer-events-none" />
+        
+        <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-6 animate-pulse" />
+        
+        <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-widest">
+          SIGNAL LOST / 信号中断
+        </h2>
+        
+        <p className="text-zinc-400 text-sm mb-8 font-mono bg-black/50 p-4 border border-zinc-900 rounded-sm break-words">
+          {error.message || "深层解码引擎遭遇未知阻击，链路已物理切断。"}
+        </p>
+        
+        <button 
+          onClick={() => reset()} 
+          className="group relative bg-red-700 hover:bg-red-600 text-white px-8 py-4 font-black uppercase tracking-widest text-sm rounded-sm overflow-hidden transition-all flex items-center justify-center gap-3 w-full"
+        >
+          <RefreshCcw className="w-4 h-4 group-hover:-rotate-180 transition-transform duration-500" />
+          重新建立连接
+        </button>
+      </div>
+    </div>
+  );
+}
+
+============================================================
 File: .\src\app\decode\[id]\page.tsx
 ============================================================
 "use client";
+
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, ChevronLeft, AlertTriangle, Eye } from 'lucide-react';
+import { ShieldAlert, ChevronLeft, AlertTriangle, Eye, Terminal } from 'lucide-react';
 import { i18n } from '@/config/i18n';
 import { DecodeResult } from '@/types';
 import RawNarrative from '@/components/features/decode/RawNarrative';
@@ -531,14 +588,12 @@ export default function DecodePage({ params }: PageProps) {
 
   useEffect(() => {
     const fetchReport = async () => {
-      console.log('🟡 [网络请求] -> 接口: /api/report, 请求读取缓存库');
       try {
         const res = await fetch(`/api/report/${signalId}`);
         const json = await res.json();
         
         if (!res.ok || !json.success) throw new Error(json.error || '无法提取报告');
 
-        console.log('🔵 [数据渲染] -> 组件: 成功挂载持久化数据');
         setRawContent(json.data.rawContent);
         setResult(json.data.result);
         setViewCount(json.data.viewCount);
@@ -579,7 +634,9 @@ export default function DecodePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white relative overflow-hidden">
-      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+      <div className="max-w-7xl mx-auto space-y-12 relative z-10">
+        
+        {/* 顶部 Header */}
         <header className="flex items-center justify-between border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
             <ChevronLeft className="text-zinc-500" />
@@ -598,15 +655,30 @@ export default function DecodePage({ params }: PageProps) {
           </div>
         </header>
 
+        {/* 核心解码面板 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RawNarrative rawContent={rawContent} fluffWords={result.fluffWords} isErased={isErased} />
           <HardFacts hardFacts={result.hardFacts} isErased={isErased} onErase={() => setIsErased(true)} />
         </div>
+        
         <VerdictPanel verdict={result.verdict} isErased={isErased} />
-      </div>
 
-      {/* 🚀 核心装载：挂载商业化交互终端 */}
-      <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
+        {/* 🚀 独立审讯终端板块 (新辟战场) */}
+        <section className="pt-12 border-t-2 border-dashed border-zinc-900">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-widest text-white flex items-center gap-3 mb-2">
+                <Terminal className="text-red-700 w-6 h-6" />
+                DEEP INTERROGATION
+              </h2>
+              <p className="text-zinc-500 font-mono text-sm tracking-widest">{'>>'} 基于已知硬通货事实，发起对深层利益链的拷问。</p>
+            </div>
+          </div>
+          
+          <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
+        </section>
+        
+      </div>
     </div>
   );
 }
@@ -756,8 +828,8 @@ export default function VerdictPanel({ verdict, isErased }: VerdictPanelProps) {
 ============================================================
 File: .\src\components\features\terminal\ChatTerminal.tsx
 ============================================================
-import React, { useState, useRef, useEffect } from 'react';
-import { Terminal as TerminalIcon, X, Maximize2, Minimize2, Send, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Terminal as TerminalIcon, Send, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { useTerminalMachine } from '@/hooks/useTerminalMachine';
 
 interface ChatTerminalProps {
@@ -765,20 +837,23 @@ interface ChatTerminalProps {
   hardFacts: string[];
 }
 
+/**
+ * 核心业务说明：
+ * 沉浸式深度审讯终端。已剥离所有悬浮窗与折叠逻辑。
+ * 作为解码报告底部的核心常驻工作区，直接承受用户的高频追问流量。
+ */
 export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
   const { messages, isStreaming, error, submitInterrogation, clearTerminal } = useTerminalMachine({ signalId, hardFacts });
 
-  // 核心业务说明：控制终端在收到新字节流时，永远保持自动滚屏到底部。
+  // 核心业务：控制终端在收到新字节流时，永远保持自动滚屏到底部。
   useEffect(() => {
-    if (isOpen && endOfMessagesRef.current) {
+    if (endOfMessagesRef.current) {
       endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isOpen]);
+  }, [messages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -787,54 +862,39 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
     setInputValue('');
   };
 
-  if (!isOpen) {
-    return (
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-red-700 hover:bg-red-600 text-white p-4 rounded-full shadow-[0_0_20px_rgba(185,28,28,0.4)] transition-all group z-50 flex items-center gap-3"
-      >
-        <TerminalIcon className="w-6 h-6 group-hover:animate-pulse" />
-        <span className="font-black uppercase tracking-widest text-xs hidden group-hover:block pr-2">深度审讯</span>
-      </button>
-    );
-  }
-
   return (
-    <div 
-      className={`fixed right-0 md:right-6 bottom-0 md:bottom-6 z-50 bg-black border border-zinc-800 shadow-2xl flex flex-col transition-all duration-300 ${
-        isExpanded ? 'w-full md:w-[800px] h-[100vh] md:h-[80vh] md:rounded-sm' : 'w-full md:w-[400px] h-[600px] md:rounded-sm'
-      }`}
-    >
+    <div className="w-full bg-black border border-zinc-800 shadow-2xl flex flex-col h-[600px] rounded-sm relative overflow-hidden group">
       {/* 终端头部 */}
-      <div className="flex items-center justify-between p-3 border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center gap-2">
-          <TerminalIcon className="w-4 h-4 text-red-600" />
-          <span className="text-[10px] font-mono text-zinc-400 tracking-widest uppercase">PRO Terminal / {signalId}</span>
+      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
+        <div className="flex items-center gap-3">
+          <TerminalIcon className="w-5 h-5 text-red-600 group-hover:animate-pulse" />
+          <span className="text-xs font-mono text-zinc-400 tracking-widest uppercase">PRO Terminal / {signalId}</span>
         </div>
-        <div className="flex items-center gap-3 text-zinc-500">
-          <button onClick={clearTerminal} title="清空会话" className="hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-          <button onClick={() => setIsExpanded(!isExpanded)} className="hover:text-white transition-colors">
-            {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        <div className="flex items-center gap-4 text-zinc-500">
+          <button onClick={clearTerminal} title="清除物理内存" className="hover:text-red-500 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
+            <Trash2 className="w-4 h-4" /> CLEAR
           </button>
-          <button onClick={() => setIsOpen(false)} className="hover:text-red-500 transition-colors"><X className="w-5 h-5" /></button>
         </div>
       </div>
 
       {/* 消息滚动区 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-800">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-800 bg-zinc-950/30">
         {messages.length === 0 && (
-          <div className="text-zinc-600 text-xs text-center mt-10 uppercase tracking-widest">
-            系统提示：基于已知事实提问。
+          <div className="text-zinc-600 text-xs text-center mt-20 uppercase tracking-[0.2em]">
+            <span className="block mb-2 text-red-900/50">_ SYSTEM STANDBY _</span>
+            等待输入核心指令。请基于已查明的硬通货事实进行追问。
           </div>
         )}
         
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <span className={`text-[9px] uppercase tracking-widest mb-1 ${msg.role === 'user' ? 'text-zinc-500' : 'text-red-700'}`}>
+            <span className={`text-[10px] uppercase tracking-[0.2em] mb-2 ${msg.role === 'user' ? 'text-zinc-600' : 'text-red-700 font-bold'}`}>
               {msg.role === 'user' ? 'GUEST_USER' : 'SYSTEM_AI'}
             </span>
-            <div className={`p-3 max-w-[85%] leading-relaxed ${
-              msg.role === 'user' ? 'bg-zinc-900 text-zinc-300 border border-zinc-800' : 'bg-transparent text-white border-l-2 border-red-700 pl-4'
+            <div className={`p-4 max-w-[90%] md:max-w-[75%] leading-relaxed ${
+              msg.role === 'user' 
+                ? 'bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-sm' 
+                : 'bg-transparent text-white border-l-2 border-red-700 pl-5 text-base'
             }`}>
               {msg.content}
             </div>
@@ -842,32 +902,32 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
         ))}
         
         {error && (
-          <div className="bg-red-950/30 border border-red-900 text-red-500 p-3 flex items-start gap-2 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="bg-red-950/30 border border-red-900 text-red-500 p-4 flex items-start gap-3 text-sm rounded-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
-        <div ref={endOfMessagesRef} />
+        <div ref={endOfMessagesRef} className="h-4" />
       </div>
 
       {/* 输入区域 */}
-      <div className="p-3 bg-zinc-950 border-t border-zinc-800">
+      <div className="p-4 bg-zinc-950 border-t border-zinc-800">
         <form onSubmit={handleSubmit} className="relative flex items-center">
-          <span className="absolute left-3 text-red-600 font-black">{'>'}</span>
+          <span className="absolute left-4 text-red-600 font-black text-lg">{'>'}</span>
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isStreaming}
-            placeholder="输入指令进行追问..."
-            className="w-full bg-black border border-zinc-800 text-white font-mono text-sm py-3 pl-8 pr-12 focus:outline-none focus:border-red-800 transition-colors disabled:opacity-50"
+            placeholder="输入指令，洞透底层逻辑..."
+            className="w-full bg-black border border-zinc-800 text-white font-mono text-base py-4 pl-10 pr-16 focus:outline-none focus:border-red-800 transition-colors disabled:opacity-50 rounded-sm"
           />
           <button 
             type="submit" 
             disabled={!inputValue.trim() || isStreaming}
-            className="absolute right-3 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors"
+            className="absolute right-4 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors bg-zinc-900 p-2 rounded-sm"
           >
-            {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {isStreaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </form>
       </div>
@@ -1171,3 +1231,54 @@ export interface TerminalStreamPayload {
   signalId: string; // 绑定的原始通稿 ID，用于后期商业化计费、鉴权或溯源
   messages: TerminalMessage[]; // 完整的上下文记忆链
 }
+
+============================================================
+File: .\src\utils\logger.ts
+============================================================
+/**
+ * 核心说明书：
+ * 这是一个物理级隔离的全局日志引擎。它在整个业务线中的作用是：
+ * 1. 统一接管全栈的日志打印，提供 🟢🟡🔵🔴 四种标准化工业探针。
+ * 2. 强行阻断生产环境 (Production) 的一切明文输出，防止 Vercel 部署后发生内存泄漏或商业机密被恶意抓包。
+ */
+
+// 严格限定 payload 类型，坚决抵制 any 投毒
+type LogPayload = Record<string, unknown> | unknown[] | string | number | boolean | null | undefined;
+
+// 预判当前环境，只在开发环境下开启阀门
+const IS_DEV = process.env.NODE_ENV === 'development';
+
+export const logger = {
+  /**
+   * 🟢 发起探针：用于记录动作触发与入参
+   */
+  start: (action: string, payload?: LogPayload): void => {
+    if (!IS_DEV) return;
+    console.log(`🟢 [模块_发起] -> 动作/参数: ${action}`, payload ?? '');
+  },
+
+  /**
+   * 🟡 异步探针：用于记录网络请求、数据库查询等耗时目标的锁定
+   */
+  async: (target: string): void => {
+    if (!IS_DEV) return;
+    console.log(`🟡 [模块_异步] -> 目标: ${target}`);
+  },
+
+  /**
+   * 🔵 成功探针：用于记录业务闭环与核心产物
+   */
+  success: (result: LogPayload): void => {
+    if (!IS_DEV) return;
+    console.log(`🔵 [模块_成功] -> 产物:`, result);
+  },
+
+  /**
+   * 🔴 崩溃探针：用于记录异常捕获与死因分析
+   */
+  crash: (error: unknown): void => {
+    if (!IS_DEV) return;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log(`🔴 [模块_崩溃] -> 原因:`, errorMessage);
+  }
+};

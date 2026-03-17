@@ -1,7 +1,8 @@
 "use client";
+
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, ChevronLeft, AlertTriangle, Eye } from 'lucide-react';
+import { ShieldAlert, ChevronLeft, AlertTriangle, Eye, Terminal } from 'lucide-react';
 import { i18n } from '@/config/i18n';
 import { DecodeResult } from '@/types';
 import RawNarrative from '@/components/features/decode/RawNarrative';
@@ -26,14 +27,12 @@ export default function DecodePage({ params }: PageProps) {
 
   useEffect(() => {
     const fetchReport = async () => {
-      console.log('🟡 [网络请求] -> 接口: /api/report, 请求读取缓存库');
       try {
         const res = await fetch(`/api/report/${signalId}`);
         const json = await res.json();
         
         if (!res.ok || !json.success) throw new Error(json.error || '无法提取报告');
 
-        console.log('🔵 [数据渲染] -> 组件: 成功挂载持久化数据');
         setRawContent(json.data.rawContent);
         setResult(json.data.result);
         setViewCount(json.data.viewCount);
@@ -74,7 +73,9 @@ export default function DecodePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white relative overflow-hidden">
-      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+      <div className="max-w-7xl mx-auto space-y-12 relative z-10">
+        
+        {/* 顶部 Header */}
         <header className="flex items-center justify-between border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
             <ChevronLeft className="text-zinc-500" />
@@ -93,15 +94,30 @@ export default function DecodePage({ params }: PageProps) {
           </div>
         </header>
 
+        {/* 核心解码面板 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RawNarrative rawContent={rawContent} fluffWords={result.fluffWords} isErased={isErased} />
           <HardFacts hardFacts={result.hardFacts} isErased={isErased} onErase={() => setIsErased(true)} />
         </div>
+        
         <VerdictPanel verdict={result.verdict} isErased={isErased} />
-      </div>
 
-      {/* 🚀 核心装载：挂载商业化交互终端 */}
-      <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
+        {/* 🚀 独立审讯终端板块 (新辟战场) */}
+        <section className="pt-12 border-t-2 border-dashed border-zinc-900">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-widest text-white flex items-center gap-3 mb-2">
+                <Terminal className="text-red-700 w-6 h-6" />
+                DEEP INTERROGATION
+              </h2>
+              <p className="text-zinc-500 font-mono text-sm tracking-widest">{'>>'} 基于已知硬通货事实，发起对深层利益链的拷问。</p>
+            </div>
+          </div>
+          
+          <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
+        </section>
+        
+      </div>
     </div>
   );
 }
