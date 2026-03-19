@@ -1,67 +1,104 @@
+/**
+ * 核心业务说明：
+ * TruthDecoder 2.2 强化版博弈引擎 (Hotfix)。
+ * 修复：重新注入 JSON 键名硬契约，修复 Zod 校验拦截导致的 500 宕机。
+ */
+
 import { DecodeResult } from '@/types';
+import { z } from 'zod';
+import { logger } from '@/utils/logger';
 
-const SYSTEM_PROMPT = `
-你是一位年薪百万的资深商业情报分析师与地缘政治专家。你的任务是对用户输入的官方通稿、公关文或新闻进行极致的“去伪存真”。
-剥离所有宏大叙事、情绪引导词和无意义修饰，只提取底层的利益流转、权力变动或真实的商业动作。
+// 1. Zod 绝对防御契约
+const DecodeResultSchema = z.object({
+  fluffWords: z.array(z.string()).describe("原文中的粉饰词"),
+  hardFacts: z.array(z.string()).length(3).describe("3条极度冷峻的底层事实"),
+  verdict: z.string().describe("150字内深刻点评")
+});
 
-你必须严格输出纯 JSON 对象，严禁包含任何 Markdown 标记 (如 \`\`\`json) 或额外解释。
-必须严格遵循以下 JSON 结构：
-{
-  "fluffWords": ["提取原文中的煽动词", "宏大叙事修饰语", "假大空词汇"],
-  "hardFacts": [
-    "事实 1：必须极其冷峻，只包含核心商业动作、裁员、资金走向或权力更迭 (禁止形容词)。",
-    "事实 2：指出该动作的真实受害者或受益方。",
-    "事实 3：揭露其掩盖的真实危机或战略意图。"
-  ],
-  "verdict": "一句话穿透利益逻辑的终极冷峻点评"
+async function callDeepSeek(prompt: string, content: string, temp: number, json: boolean = false): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
+
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [{ role: 'system', content: prompt }, { role: 'user', content: content }],
+      response_format: json ? { type: 'json_object' } : { type: 'text' },
+      temperature: temp,
+    }),
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.text();
+    throw new Error(`上游通信失败: HTTP ${res.status} - ${errorData}`);
+  }
+  
+  const data = await res.json();
+  return data.choices[0].message.content;
 }
-要求：hardFacts 数组必须且只能有 3 条。
-`;
 
 export async function analyzeTextWithDeepSeek(content: string): Promise<DecodeResult> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  
-  if (!apiKey) {
-    console.log('🔴 [错误捕获] -> 节点: DeepSeek 服务层 - API Key 缺失');
-    throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
-  }
-
-  console.log('🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions, 载荷长度:', content.length);
+  logger.start(`启动 2.2 逻辑进化引擎`);
 
   try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `请立即解码以下截获的通稿：\n\n${content}` }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-      }),
-    });
+    // Round 1: 蓝军 - 商业逻辑推演
+    logger.async('Round 1: 蓝军发力');
+    const bluePrompt = `你是一个顶级商业顾问。请分析该动作的“商业定价逻辑”。将外交/政治动作转化为商业上的“价格谈判”、“服务订阅”或“资产重组”模型。不要说废话。`;
+    const blueRes = await callDeepSeek(bluePrompt, content, 0.4);
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`上游通信失败: HTTP ${response.status} - ${errorData}`);
+    // Round 2: 红军 - 真实代价狙击
+    logger.async('Round 2: 红军狙击');
+    const redPrompt = `你是一个多疑的风险控制专家。质疑上述的商业逻辑。指出该动作背后的真实成本、权力转嫁以及它掩盖的政治/经济漏洞。`;
+    const redContent = `原文: ${content}\n蓝方类比: ${blueRes}`;
+    const redRes = await callDeepSeek(redPrompt, redContent, 0.6);
+
+    // Round 3: 法官 - 终极合成
+    logger.async('Round 3: 法官裁决与格式化');
+    // 🚨 致命修复：强制规定 JSON 的确切键名，确保 Zod 能够精准放行
+    const judgePrompt = `你是 TruthDecoder 的首席战略官。你的任务是综合多方博弈后的逻辑，输出一份唯一的、具备顶级穿透力的报告。
+【强制要求】：
+1. 绝对禁止提及“红军”、“蓝军”、“博弈”、“分析师”等词汇。
+2. 绝对禁止描述你的分析过程，只输出结论。
+3. verdict 必须像刀刃一样，直接指出这是一场什么样的“利益收割”或“权力交换”。
+4. hardFacts 必须是基于原文数据提炼出的、不可辩驳的底层事实。
+你必须严格输出 JSON 格式，且必须完全符合以下结构：
+{
+  "fluffWords": ["煽动词1", "煽动词2"],
+  "hardFacts": ["事实1", "事实2", "事实3"],
+  "verdict": "一句话穿透利益逻辑的终极点评"
+}`;
+
+    const judgeContent = `【原始数据】: ${content}\n【内部逻辑 A】: ${blueRes}\n【内部逻辑 B】: ${redRes}`;
+
+    let final: DecodeResult | null = null;
+    let temp = 0.3;
+    let lastError = null;
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = await callDeepSeek(judgePrompt, judgeContent, temp, true);
+        const parsed = JSON.parse(raw);
+        final = DecodeResultSchema.parse(parsed) as DecodeResult;
+        break; // 格式正确，突围成功
+      } catch (e) {
+        lastError = e;
+        temp = Math.max(0.01, temp - 0.1);
+        logger.crash(`Zod 护盾击碎非法数据，触发第 ${i+1} 次降温重试`);
+      }
     }
 
-    const data = await response.json();
-    const rawContent = data.choices[0].message.content;
-    
-    const parsedData: DecodeResult = JSON.parse(rawContent);
-    console.log('🔵 [数据渲染] -> 组件: DeepSeek 服务层解析完毕, 提取事实数量:', parsedData.hardFacts?.length);
-    
-    return parsedData;
+    if (!final) {
+      throw new Error(`逻辑合成防线崩塌，最后死因: ${lastError instanceof Error ? lastError.message : 'JSON 结构严重畸形'}`);
+    }
+
+    logger.success('高净值情报已合成，契约已兑现。');
+    return final;
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : '未知解析异常';
-    console.log('🔴 [错误捕获] -> 节点: analyzeTextWithDeepSeek', errorMessage);
-    throw new Error('情报提取失败，大模型信号中断或返回了被污染的数据格式。');
+    const errMsg = error instanceof Error ? error.message : '未知解析异常';
+    logger.crash(`[节点: analyzeTextWithDeepSeek] -> ${errMsg}`);
+    throw new Error(errMsg); // 将真实死因抛给上层，不要模糊为“解密失败”
   }
 }

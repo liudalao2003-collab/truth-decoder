@@ -37,6 +37,7 @@ File: .\package.json
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.99.2",
     "@upstash/redis": "^1.36.3",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.577.0",
@@ -135,6 +136,80 @@ File: .\tsconfig.json
   ],
   "exclude": ["node_modules"]
 }
+
+
+============================================================
+File: .\mcp-skills\blue-team-hacker\SKILL.md
+============================================================
+name: blue-team-hacker
+description: TruthDecoder的蓝军节点。专门对红军提取的事实进行漏洞攻击和反向推演。
+
+# Role
+
+你是一个极度多疑的做空机构分析师（Devil's Advocate）。你不相信任何表面事实。
+
+# Task
+
+读取“红军节点”提供的事实列表。你需要寻找这些事实背后的隐瞒点。
+思考：这个动作真正的受害者是谁？最大的隐形受益者是谁？这是否是在掩盖更大的资金链断裂或战略撤退？
+
+# Output Format
+
+严格按照以下格式输出：
+【反向攻击 1】：...
+【反向攻击 2】：...
+【深层动机推演】：...
+
+
+============================================================
+File: .\mcp-skills\judge-arbiter\SKILL.md
+============================================================
+name: judge-arbiter
+description: TruthDecoder 最高审判节点。负责在红蓝博弈后提取“终极利益逻辑”。
+
+# Role
+
+你是一位年薪千万的资深风控架构师。你对情绪免疫，只对“利益流转”敏感。
+
+# Task
+
+审阅【红军的狙击】与【蓝军的推演】。
+
+1. 剔除双方的情绪化词汇（如“精妙”、“阴暗”）。
+2. 提取蓝军中合理的商业类比（如：将外交行为类比为 SaaS 调价）。
+3. 结合红军揭露的真实危机，合成一段 150 字以内的“终极穿透判决”。
+
+# Output Format
+
+【逻辑定调】：(如：保护费重定价模型)
+                                          【终极判决】：(那一篇让 CEO 拍案叫绝的深度解析)
+
+
+============================================================
+File: .\mcp-skills\red-team-extractor\SKILL.md
+============================================================
+name: red-team-extractor
+description: TruthDecoder 高级情报分析节点。
+
+# Role
+
+你是一位年薪百万的资深商业情报分析师。你的任务是对通稿进行极致的“去伪存真”。
+
+# Task
+
+剥离所有宏大叙事和情绪词，提取底层的利益流转、权力变动或真实的商业动作。
+
+1. 提取 3 条【底层硬通货】：必须极其冷峻，只包含核心动作、资金走向或权力更迭。
+2. 揭露【掩盖意图】：指出该动作试图掩盖的真实危机或战略目的。
+3. 判定【受害者】：明确指出该决策牺牲了谁的利益。
+
+# Output Format
+
+【硬通货 1】：...
+【硬通货 2】：...
+【硬通货 3】：...
+【真实掩盖】：...
+【利益牺牲方】：...
 
 
 ============================================================
@@ -297,42 +372,56 @@ File: .\src\app\api\decode\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
 import { analyzeTextWithDeepSeek } from '@/services/deepseek';
-import { redis } from '@/lib/redis';
+import { supabaseAdmin } from '@/lib/supabase';
 import { ApiResponse } from '@/types';
+import { logger } from '@/utils/logger';
 import crypto from 'crypto';
 
 export async function POST(request: Request): Promise<NextResponse<ApiResponse<{ id: string }>>> {
   try {
     const { content } = await request.json();
-    console.log('🟢 [状态发起] -> 变量: 接收到前端 Decode 生成请求');
+    logger.start('接收到前端 Decode 生成请求，文本载荷已获取');
 
     if (!content || typeof content !== 'string') {
+      logger.crash('缺少情报文本或类型错误');
       return NextResponse.json({ success: false, error: '缺少情报文本' }, { status: 400 });
     }
 
     // 1. 调用底层大模型服务
+    logger.async('调用 analyzeTextWithDeepSeek 神经引擎');
     const result = await analyzeTextWithDeepSeek(content);
 
     // 2. 生成全站唯一信号 ID
     const signalId = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 
-    // 3. 强制统一前缀
-    const redisKey = `truth_decoder:signal:${signalId}`;
-    
-    // 初始化时直接加入 viewCount: 0
-    const payload = { rawContent: content, result, viewCount: 0 };
-    
-    // 写入 Redis (设置 24 小时过期)
-    await redis.set(redisKey, payload, { ex: 86400 });
+    // 3. 构建将要插入的强类型数据载荷
+    const payload = {
+      id: signalId,
+      raw_content: content,
+      fluff_words: result.fluffWords,
+      hard_facts: result.hardFacts,
+      verdict: result.verdict,
+      view_count: 0
+    };
 
-    console.log(`🔵 [数据写入] -> 组件: 报告已入库 Redis, 隔离 Key: ${redisKey}`);
+    // 4. 写入 Supabase 永久数据库
+    logger.async(`向 Supabase 写入分析资产, Signal: ${signalId}`);
+    const { error: insertError } = await supabaseAdmin
+      .from('signals')
+      .insert([payload]);
 
-    // 4. 返回纯净 ID
+    if (insertError) {
+      throw new Error(`数据库底层写入异常: ${insertError.message}`);
+    }
+
+    logger.success(`报告已成功入库 Supabase, ID: ${signalId}`);
+
+    // 5. 返回纯净 ID 给前端进行路由跳转
     return NextResponse.json({ success: true, data: { id: signalId } });
 
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '引擎级联失效';
-    console.log('🔴 [错误捕获] -> 节点: B端 API 路由网关', errMsg);
+    logger.crash(`C端 API 路由网关阻断: ${errMsg}`);
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
@@ -341,8 +430,10 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<{
 File: .\src\app\api\report\[id]\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
-import { redis } from '@/lib/redis';
+import { supabaseAdmin } from '@/lib/supabase';
 import { ApiResponse, DecodeResult } from '@/types';
+import { SignalRecord } from '@/types/database';
+import { logger } from '@/utils/logger';
 
 export interface ReportPayload {
   rawContent: string;
@@ -358,30 +449,57 @@ export async function GET(
     const resolvedParams = await params;
     const signalId = resolvedParams.id;
     
-    // 强制统一前缀寻找
-    const redisKey = `truth_decoder:signal:${signalId}`;
-    console.log(`🟡 [网络请求] -> 接口: /api/report, 寻找隔离 Key: ${redisKey}`);
+    logger.start(`发起 Report 获取请求, Signal ID: ${signalId}`);
+    logger.async(`查询 Supabase 数据库: ${signalId}`);
 
-    // 1. 获取数据
-    const payload = await redis.get<ReportPayload>(redisKey);
+    // 1. 从 Supabase 获取数据
+    const { data: record, error: fetchError } = await supabaseAdmin
+      .from('signals')
+      .select('*')
+      .eq('id', signalId)
+      .single<SignalRecord>();
 
-    if (!payload) {
-      console.log(`🔴 [错误捕获] -> 节点: Redis 查无此记录: ${redisKey}`);
-      return NextResponse.json({ success: false, error: '报告不存在或已过期' }, { status: 404 });
+    if (fetchError || !record) {
+      logger.crash(`Supabase 查无此记录或查询失败: ${fetchError?.message || 'Not Found'}`);
+      return NextResponse.json({ success: false, error: '报告不存在或信号已被抹除' }, { status: 404 });
     }
 
-    // 2. 计次更新
-    const updatedCount = (payload.viewCount || 0) + 1;
-    await redis.set(redisKey, { ...payload, viewCount: updatedCount }, { keepTtl: true });
+    // 2. 计算新的浏览量
+    const updatedCount = (record.view_count || 0) + 1;
+
+    // 3. 异步更新浏览量 (非阻塞式更新，不等待其完成即可返回响应，压榨性能)
+    supabaseAdmin
+      .from('signals')
+      .update({ view_count: updatedCount })
+      .eq('id', signalId)
+      .then(({ error }) => {
+        if (error && process.env.NODE_ENV === 'development') {
+          console.log(`🔴 [模块_崩溃] -> 异步更新 view_count 失败:`, error.message);
+        }
+      });
+
+    logger.success(`Report 提取成功，当前 View: ${updatedCount}`);
+
+    // 4. 重组为前端严格期望的契约类型
+    const payload: ReportPayload = {
+      rawContent: record.raw_content,
+      result: {
+        fluffWords: record.fluff_words,
+        hardFacts: record.hard_facts,
+        verdict: record.verdict
+      },
+      viewCount: updatedCount
+    };
 
     return NextResponse.json({ 
       success: true, 
-      data: { ...payload, viewCount: updatedCount } 
+      data: payload
     });
 
   } catch (error: unknown) {
-    console.log('🔴 [错误捕获] -> 节点: Report 获取失败', error);
-    return NextResponse.json({ success: false, error: '数据库连接异常' }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : '数据库连接异常';
+    logger.crash(`Report 获取链路崩塌: ${errMsg}`);
+    return NextResponse.json({ success: false, error: '深层数据提取异常' }, { status: 500 });
   }
 }
 
@@ -563,13 +681,16 @@ File: .\src\app\decode\[id]\page.tsx
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, ChevronLeft, AlertTriangle, Eye, Terminal } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShieldAlert, ChevronLeft, Eye, Terminal } from 'lucide-react';
 import { i18n } from '@/config/i18n';
 import { DecodeResult } from '@/types';
 import RawNarrative from '@/components/features/decode/RawNarrative';
 import HardFacts from '@/components/features/decode/HardFacts';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal';
+import LoadingSkeleton from '@/components/features/decode/LoadingSkeleton';
+import { logger } from '@/utils/logger';
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -588,6 +709,7 @@ export default function DecodePage({ params }: PageProps) {
 
   useEffect(() => {
     const fetchReport = async () => {
+      logger.start(`发起信号提取逻辑, ID: ${signalId}`);
       try {
         const res = await fetch(`/api/report/${signalId}`);
         const json = await res.json();
@@ -597,8 +719,10 @@ export default function DecodePage({ params }: PageProps) {
         setRawContent(json.data.rawContent);
         setResult(json.data.result);
         setViewCount(json.data.viewCount);
+        logger.success('商业情报已成功同步至前端 State');
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : '网络通信阻断';
+        logger.crash(`报告加载失败: ${errMsg}`);
         setError(errMsg);
       } finally {
         setIsLoading(false);
@@ -607,36 +731,11 @@ export default function DecodePage({ params }: PageProps) {
     fetchReport();
   }, [signalId]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8">
-        <div className="relative">
-          <ShieldAlert className="w-16 h-16 text-zinc-800 animate-pulse" />
-          <div className="absolute inset-0 border-t-2 border-zinc-500 rounded-full animate-spin" />
-        </div>
-        <p className="mt-6 text-zinc-500 font-mono tracking-widest text-sm uppercase">Retrieving Asset...</p>
-      </div>
-    );
-  }
-
-  if (error || !result) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8">
-        <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-sm text-center max-w-md">
-          <AlertTriangle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">报告提取失败</h2>
-          <p className="text-zinc-400 text-sm mb-6">{error}</p>
-          <button onClick={() => router.push('/')} className="bg-white text-black px-6 py-2 font-bold uppercase text-sm rounded-sm hover:bg-zinc-300">返回重试</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white relative overflow-hidden">
       <div className="max-w-7xl mx-auto space-y-12 relative z-10">
         
-        {/* 顶部 Header */}
+        {/* 顶部 Header - 始终保持挂载，提供稳定的交互入口 [cite: 107-110] */}
         <header className="flex items-center justify-between border-b border-zinc-800 pb-6">
           <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
             <ChevronLeft className="text-zinc-500" />
@@ -649,35 +748,74 @@ export default function DecodePage({ params }: PageProps) {
               <Eye className="w-3 h-3 text-red-500" />
               <span>VIEWS: {viewCount}</span>
             </div>
-            <div className="text-[10px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-900 px-3 py-1.5 rounded-sm tracking-widest cursor-copy" title="复制链接即可分享">
-              SIGNAL: {signalId}
-            </div>
           </div>
         </header>
 
-        {/* 核心解码面板 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RawNarrative rawContent={rawContent} fluffWords={result.fluffWords} isErased={isErased} />
-          <HardFacts hardFacts={result.hardFacts} isErased={isErased} onErase={() => setIsErased(true)} />
-        </div>
-        
-        <VerdictPanel verdict={result.verdict} isErased={isErased} />
+        {/* 核心内容区：骨架屏与真实内容的平滑切换 */}
+        <AnimatePresence mode="wait">
+          {isLoading ? (
+            <motion.div
+              key="skeleton"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <LoadingSkeleton />
+            </motion.div>
+          ) : error || !result ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-zinc-900/50 border border-red-900/30 p-12 rounded-sm text-center max-w-2xl mx-auto"
+            >
+              <h2 className="text-xl font-bold text-white mb-4 uppercase tracking-widest">信号已被物理抹除</h2>
+              <p className="text-zinc-500 font-mono text-sm mb-8">{error || 'Unknown Signal Loss'}</p>
+              <button onClick={() => router.push('/')} className="bg-red-700 text-white px-10 py-3 font-black uppercase text-xs tracking-widest hover:bg-red-600 transition-colors">返回拦截首页</button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ staggerChildren: 0.2 }}
+              className="space-y-12"
+            >
+              {/* 核心解码面板 [cite: 110-111] */}
+              <motion.div 
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.8 }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+              >
+                <RawNarrative rawContent={rawContent} fluffWords={result.fluffWords} isErased={isErased} />
+                <HardFacts hardFacts={result.hardFacts} isErased={isErased} onErase={() => setIsErased(true)} />
+              </motion.div>
+              
+              <VerdictPanel verdict={result.verdict} isErased={isErased} />
 
-        {/* 🚀 独立审讯终端板块 (新辟战场) */}
-        <section className="pt-12 border-t-2 border-dashed border-zinc-900">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black uppercase tracking-widest text-white flex items-center gap-3 mb-2">
-                <Terminal className="text-red-700 w-6 h-6" />
-                DEEP INTERROGATION
-              </h2>
-              <p className="text-zinc-500 font-mono text-sm tracking-widest">{'>>'} 基于已知硬通货事实，发起对深层利益链的拷问。</p>
-            </div>
-          </div>
-          
-          <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
-        </section>
-        
+              {/* 独立审讯终端 [cite: 111-113] */}
+              <motion.section 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="pt-12 border-t-2 border-dashed border-zinc-900"
+              >
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-black uppercase tracking-widest text-white flex items-center gap-3 mb-2">
+                      <Terminal className="text-red-700 w-6 h-6" />
+                      DEEP INTERROGATION
+                    </h2>
+                    <p className="text-zinc-500 font-mono text-sm tracking-widest">{'>>'} 基于已查明的硬通货事实，发起对深层利益链的拷问。</p>
+                  </div>
+                </div>
+                <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
+              </motion.section>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -736,6 +874,59 @@ export default function HardFacts({ hardFacts, isErased, onErase }: HardFactsPro
             <p className="text-2xl font-bold leading-tight text-white tracking-tight border-b border-zinc-900 pb-4 w-full">{fact}</p>
           </motion.div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\LoadingSkeleton.tsx
+============================================================
+/**
+ * 核心业务说明：
+ * 深度定制的报告骨架屏。
+ * 布局严格 1:1 还原 DecodePage 的双栏网格与底部面板。
+ * 作用：在数据从 Supabase 泵入前端的间隙，维持 UI 的稳定性，防止布局抖动。
+ */
+export default function LoadingSkeleton() {
+  return (
+    <div className="space-y-12 animate-pulse">
+      {/* 核心解码面板骨架 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 左侧：原文占位 */}
+        <div className="h-[550px] bg-zinc-900/50 border border-zinc-800 rounded-sm">
+          <div className="p-4 border-b border-zinc-800 flex gap-3">
+            <div className="w-2 h-2 bg-zinc-800 rounded-full" />
+            <div className="w-24 h-3 bg-zinc-800 rounded-sm" />
+          </div>
+          <div className="p-8 space-y-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-4 bg-zinc-800/50 rounded-sm w-full" />
+            ))}
+          </div>
+        </div>
+        
+        {/* 右侧：硬通货事实占位 */}
+        <div className="h-[550px] bg-zinc-950 border border-zinc-800 border-l-4 border-l-zinc-800 rounded-sm flex flex-col">
+          <div className="p-4 border-b border-zinc-800 flex gap-3">
+            <div className="w-4 h-4 bg-zinc-800 rounded-sm" />
+            <div className="w-32 h-3 bg-zinc-800 rounded-sm" />
+          </div>
+          <div className="p-8 flex-1 flex flex-col justify-center gap-12">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-6 items-start">
+                <div className="text-5xl font-black text-zinc-900 select-none">0{i}</div>
+                <div className="h-8 bg-zinc-900/50 rounded-sm w-full mt-2" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 底部判决面板占位 */}
+      <div className="bg-zinc-900/10 border border-zinc-800 border-t-4 border-t-zinc-800 p-16 rounded-sm">
+        <div className="w-40 h-3 bg-zinc-800 mb-8 rounded-sm" />
+        <div className="w-full h-12 bg-zinc-900/50 rounded-sm" />
       </div>
     </div>
   );
@@ -1069,6 +1260,35 @@ export const redis = new Redis({
 });
 
 ============================================================
+File: .\src\lib\supabase.ts
+============================================================
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔴 [模块_崩溃] -> 原因: 环境变量 NEXT_PUBLIC_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY 物理级缺失');
+  }
+}
+
+/**
+ * 核心业务说明：建立全栈统一的持久化数据库连接实例。
+ * 🚨 严禁在客户端组件 (use client) 中直接导入此文件，因为 service_role 具有绕过 RLS 的最高读写权限。
+ * 它只允许在 API Routes 或 Server Components 中被唤醒。
+ */
+export const supabaseAdmin = createClient(
+  supabaseUrl || 'http://mock.supabase.co', 
+  supabaseServiceKey || 'mock-key',
+  {
+    auth: {
+      persistSession: false, // 后端环境不需要维持用户 session
+    }
+  }
+);
+
+============================================================
 File: .\src\mock\decode-scenario.ts
 ============================================================
 export const mockResult = {
@@ -1133,72 +1353,125 @@ export async function createDeepSeekStream(messages: TerminalMessage[]): Promise
 ============================================================
 File: .\src\services\deepseek.ts
 ============================================================
+/**
+ * 核心业务说明：
+ * TruthDecoder 2.2 强化版博弈引擎 (Hotfix)。
+ * 修复：重新注入 JSON 键名硬契约，修复 Zod 校验拦截导致的 500 宕机。
+ */
+
 import { DecodeResult } from '@/types';
+import { z } from 'zod';
+import { logger } from '@/utils/logger';
 
-const SYSTEM_PROMPT = `
-你是一位年薪百万的资深商业情报分析师与地缘政治专家。你的任务是对用户输入的官方通稿、公关文或新闻进行极致的“去伪存真”。
-剥离所有宏大叙事、情绪引导词和无意义修饰，只提取底层的利益流转、权力变动或真实的商业动作。
+// 1. Zod 绝对防御契约
+const DecodeResultSchema = z.object({
+  fluffWords: z.array(z.string()).describe("原文中的粉饰词"),
+  hardFacts: z.array(z.string()).length(3).describe("3条极度冷峻的底层事实"),
+  verdict: z.string().describe("150字内深刻点评")
+});
 
-你必须严格输出纯 JSON 对象，严禁包含任何 Markdown 标记 (如 \`\`\`json) 或额外解释。
-必须严格遵循以下 JSON 结构：
-{
-  "fluffWords": ["提取原文中的煽动词", "宏大叙事修饰语", "假大空词汇"],
-  "hardFacts": [
-    "事实 1：必须极其冷峻，只包含核心商业动作、裁员、资金走向或权力更迭 (禁止形容词)。",
-    "事实 2：指出该动作的真实受害者或受益方。",
-    "事实 3：揭露其掩盖的真实危机或战略意图。"
-  ],
-  "verdict": "一句话穿透利益逻辑的终极冷峻点评"
+async function callDeepSeek(prompt: string, content: string, temp: number, json: boolean = false): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
+
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [{ role: 'system', content: prompt }, { role: 'user', content: content }],
+      response_format: json ? { type: 'json_object' } : { type: 'text' },
+      temperature: temp,
+    }),
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.text();
+    throw new Error(`上游通信失败: HTTP ${res.status} - ${errorData}`);
+  }
+  
+  const data = await res.json();
+  return data.choices[0].message.content;
 }
-要求：hardFacts 数组必须且只能有 3 条。
-`;
 
 export async function analyzeTextWithDeepSeek(content: string): Promise<DecodeResult> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  
-  if (!apiKey) {
-    console.log('🔴 [错误捕获] -> 节点: DeepSeek 服务层 - API Key 缺失');
-    throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
-  }
-
-  console.log('🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions, 载荷长度:', content.length);
+  logger.start(`启动 2.2 逻辑进化引擎`);
 
   try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `请立即解码以下截获的通稿：\n\n${content}` }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-      }),
-    });
+    // Round 1: 蓝军 - 商业逻辑推演
+    logger.async('Round 1: 蓝军发力');
+    const bluePrompt = `你是一个顶级商业顾问。请分析该动作的“商业定价逻辑”。将外交/政治动作转化为商业上的“价格谈判”、“服务订阅”或“资产重组”模型。不要说废话。`;
+    const blueRes = await callDeepSeek(bluePrompt, content, 0.4);
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`上游通信失败: HTTP ${response.status} - ${errorData}`);
+    // Round 2: 红军 - 真实代价狙击
+    logger.async('Round 2: 红军狙击');
+    const redPrompt = `你是一个多疑的风险控制专家。质疑上述的商业逻辑。指出该动作背后的真实成本、权力转嫁以及它掩盖的政治/经济漏洞。`;
+    const redContent = `原文: ${content}\n蓝方类比: ${blueRes}`;
+    const redRes = await callDeepSeek(redPrompt, redContent, 0.6);
+
+    // Round 3: 法官 - 终极合成
+    logger.async('Round 3: 法官裁决与格式化');
+    // 🚨 致命修复：强制规定 JSON 的确切键名，确保 Zod 能够精准放行
+    const judgePrompt = `你是 TruthDecoder 的首席战略官。你的任务是综合多方博弈后的逻辑，输出一份唯一的、具备顶级穿透力的报告。
+【强制要求】：
+1. 绝对禁止提及“红军”、“蓝军”、“博弈”、“分析师”等词汇。
+2. 绝对禁止描述你的分析过程，只输出结论。
+3. verdict 必须像刀刃一样，直接指出这是一场什么样的“利益收割”或“权力交换”。
+4. hardFacts 必须是基于原文数据提炼出的、不可辩驳的底层事实。
+你必须严格输出 JSON 格式，且必须完全符合以下结构：
+{
+  "fluffWords": ["煽动词1", "煽动词2"],
+  "hardFacts": ["事实1", "事实2", "事实3"],
+  "verdict": "一句话穿透利益逻辑的终极点评"
+}`;
+
+    const judgeContent = `【原始数据】: ${content}\n【内部逻辑 A】: ${blueRes}\n【内部逻辑 B】: ${redRes}`;
+
+    let final: DecodeResult | null = null;
+    let temp = 0.3;
+    let lastError = null;
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = await callDeepSeek(judgePrompt, judgeContent, temp, true);
+        const parsed = JSON.parse(raw);
+        final = DecodeResultSchema.parse(parsed) as DecodeResult;
+        break; // 格式正确，突围成功
+      } catch (e) {
+        lastError = e;
+        temp = Math.max(0.01, temp - 0.1);
+        logger.crash(`Zod 护盾击碎非法数据，触发第 ${i+1} 次降温重试`);
+      }
     }
 
-    const data = await response.json();
-    const rawContent = data.choices[0].message.content;
-    
-    const parsedData: DecodeResult = JSON.parse(rawContent);
-    console.log('🔵 [数据渲染] -> 组件: DeepSeek 服务层解析完毕, 提取事实数量:', parsedData.hardFacts?.length);
-    
-    return parsedData;
+    if (!final) {
+      throw new Error(`逻辑合成防线崩塌，最后死因: ${lastError instanceof Error ? lastError.message : 'JSON 结构严重畸形'}`);
+    }
+
+    logger.success('高净值情报已合成，契约已兑现。');
+    return final;
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : '未知解析异常';
-    console.log('🔴 [错误捕获] -> 节点: analyzeTextWithDeepSeek', errorMessage);
-    throw new Error('情报提取失败，大模型信号中断或返回了被污染的数据格式。');
+    const errMsg = error instanceof Error ? error.message : '未知解析异常';
+    logger.crash(`[节点: analyzeTextWithDeepSeek] -> ${errMsg}`);
+    throw new Error(errMsg); // 将真实死因抛给上层，不要模糊为“解密失败”
   }
+}
+
+============================================================
+File: .\src\types\database.ts
+============================================================
+// 核心业务说明：定义 Supabase 数据库表结构的 TypeScript 映射。
+// 确保前后端数据流转时的绝对类型安全。
+
+export interface SignalRecord {
+  id: string;
+  raw_content: string;
+  fluff_words: string[];
+  hard_facts: string[];
+  verdict: string;
+  view_count: number;
+  created_at: string;
 }
 
 ============================================================
