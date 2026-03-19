@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Terminal, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Terminal, Activity, Zap, Cpu, ArrowRight } from 'lucide-react';
 import { i18n } from '@/config/i18n';
 import { SignalRecord } from '@/types/database';
 
@@ -12,13 +13,16 @@ export default function HomePage() {
   const [feed, setFeed] = useState<SignalRecord[]>([]);
   const router = useRouter();
 
-  // 核心：初始化拉取自动化情报流
+  // 轮询最新情报流
   useEffect(() => {
-    fetch('/api/feed')
-      .then(res => res.json())
-      .then(json => {
-        if (json.success) setFeed(json.data);
-      });
+    const fetchFeed = async () => {
+      const res = await fetch('/api/feed');
+      const json = await res.json();
+      if (json.success) setFeed(json.data);
+    };
+    fetchFeed();
+    const timer = setInterval(fetchFeed, 10000); 
+    return () => clearInterval(timer);
   }, []);
 
   const handleStart = async () => {
@@ -41,82 +45,95 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white p-6 md:p-12 selection:bg-red-900">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
+    <main className="min-h-screen bg-black text-white p-4 md:p-8 relative selection:bg-red-950">
+      <div className="scanline" />
+      
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* 左侧：情报输入与控制中心 */}
-        <div className="lg:col-span-7 space-y-12">
-          <header className="flex items-center gap-4 border-b border-red-900/50 pb-8">
-            <ShieldAlert className="text-red-600 w-16 h-16" />
-            <div>
-              <h1 className="text-5xl font-black tracking-tighter uppercase italic">{i18n.header.title}</h1>
-              <p className="text-sm font-mono text-red-500 tracking-[0.3em]">{i18n.header.version}</p>
+        {/* 左侧：情报控制中心 */}
+        <div className="lg:col-span-7 space-y-8">
+          <header className="flex items-center justify-between border-b-2 border-red-900/30 pb-6">
+            <div className="flex items-center gap-5">
+              <ShieldAlert className="text-red-600 w-12 h-12" />
+              <div>
+                <h1 className="text-3xl font-black tracking-tighter uppercase italic">{i18n.header.title}</h1>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">{i18n.header.version}</p>
+              </div>
+            </div>
+            <div className="hidden md:flex gap-6 font-mono text-[10px] text-zinc-600">
+              <div className="flex items-center gap-2"><Activity size={12} className="text-green-800" /> STATUS: STABLE</div>
+              <div className="flex items-center gap-2"><Cpu size={12} className="text-red-800" /> DEEPSEEK_V3</div>
             </div>
           </header>
 
-          <section className="bg-zinc-950 border border-zinc-800 p-8 rounded-sm shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Terminal size={120} /></div>
-            <h2 className="text-xl font-bold mb-6 border-l-4 border-red-700 pl-4">{i18n.home.title}</h2>
+          <section className="bg-zinc-950 border border-zinc-900 p-8 rounded-sm relative overflow-hidden flex flex-col group min-h-[650px]">
+            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity"><Terminal size={200} /></div>
+            <div className="flex items-center gap-3 mb-8">
+               <Zap size={18} className="text-red-700" />
+               <h2 className="text-sm font-black uppercase tracking-widest text-zinc-500">{i18n.home.title}</h2>
+            </div>
+            
             <textarea 
-              className="w-full h-80 bg-black border border-zinc-800 p-6 text-xl font-serif outline-none focus:border-red-600 transition-all resize-none mb-6"
+              className="flex-1 w-full bg-black/50 border border-zinc-900 p-8 text-lg font-serif outline-none focus:border-red-900/50 transition-all resize-none mb-8 placeholder:text-zinc-800"
               placeholder={i18n.home.placeholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isSubmitting}
             />
+            
             <button 
               onClick={handleStart}
               disabled={!input.trim() || isSubmitting}
-              className={`w-full py-6 text-xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all rounded-sm ${
-                !input.trim() || isSubmitting ? 'bg-zinc-900 text-zinc-600' : 'bg-red-700 hover:bg-red-600 shadow-[0_0_30px_rgba(185,28,28,0.3)]'
+              className={`w-full py-8 text-xl font-black uppercase tracking-[0.5em] flex items-center justify-center gap-4 transition-all border ${
+                !input.trim() || isSubmitting 
+                ? 'bg-transparent border-zinc-900 text-zinc-800' 
+                : 'bg-red-950/20 border-red-900 text-red-500 hover:bg-red-900 hover:text-white'
               }`}
             >
               {isSubmitting ? <Loader2 className="animate-spin" /> : <Sparkles />}
-              {isSubmitting ? 'DECODING REALITY...' : i18n.home.button}
+              {isSubmitting ? 'ENGAGING...' : i18n.home.button}
             </button>
-            {error && <div className="mt-4 text-red-500 font-mono text-sm flex items-center gap-2"><AlertTriangle size={14} /> {error}</div>}
           </section>
         </div>
 
-        {/* 右侧：TRUTH FEED 商业护城河 */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-            <h3 className="text-lg font-black tracking-widest uppercase text-zinc-400 flex items-center gap-2">
+        {/* 右侧：LIVE TRUTH FEED */}
+        <div className="lg:col-span-5 flex flex-col bg-zinc-950/20 border-l border-zinc-900 p-6">
+          <div className="flex items-center justify-between mb-8 border-b border-zinc-900 pb-4">
+            <h3 className="text-xs font-black tracking-[0.3em] uppercase text-zinc-500 flex items-center gap-3">
               <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
-              Live Truth Feed
+              Intelligence Stream
             </h3>
-            <span className="text-[10px] font-mono text-zinc-600 uppercase">Automated Intel</span>
+            <span className="text-[9px] font-mono text-zinc-700">SYNC_OK</span>
           </div>
 
-          <div className="space-y-4 overflow-y-auto max-h-[850px] pr-2 scrollbar-thin scrollbar-thumb-zinc-800">
-            {feed.length === 0 ? (
-              <div className="p-12 text-center border border-dashed border-zinc-900 text-zinc-700 font-mono uppercase text-xs">
-                Scanning global signals...
-              </div>
-            ) : feed.map((item) => (
-              <div 
-                key={item.id}
-                onClick={() => router.push(`/decode/${item.id}`)}
-                className="group bg-zinc-950 border border-zinc-900 p-5 rounded-sm hover:border-red-900 transition-all cursor-pointer relative"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <span className="text-[10px] font-mono text-zinc-500 italic">SIG_{item.id}</span>
-                  <span className="text-[10px] font-mono text-red-900 group-hover:text-red-600 transition-colors uppercase font-bold tracking-widest">Unlocked</span>
+          <div className="flex-1 space-y-4 overflow-y-auto max-h-[800px] scrollbar-none">
+            <AnimatePresence mode='popLayout'>
+              {feed.length === 0 ? (
+                <div className="h-40 flex items-center justify-center border border-dashed border-zinc-900 rounded-sm">
+                   <p className="text-[10px] font-mono text-zinc-800 uppercase tracking-widest">Awaiting Fresh Signals...</p>
                 </div>
-                <p className="text-sm font-bold text-zinc-300 line-clamp-2 group-hover:text-white transition-colors mb-4 leading-relaxed">
-                  {item.verdict}
-                </p>
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/50">
-                  <div className="flex gap-1">
-                    {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 bg-red-900 rounded-full" />)}
+              ) : feed.map((item, idx) => (
+                <motion.div 
+                  key={item.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  onClick={() => router.push(`/decode/${item.id}`)}
+                  className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden shadow-xl"
+                >
+                  <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="text-[9px] font-mono text-zinc-700 uppercase">SIGNAL_{item.id}</span>
+                    <ArrowRight size={12} className="text-zinc-800 group-hover:text-red-600 transition-colors" />
                   </div>
-                  <ArrowRight size={14} className="text-zinc-700 group-hover:text-red-600 group-hover:translate-x-1 transition-all" />
-                </div>
-              </div>
-            ))}
+                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors leading-relaxed line-clamp-3 italic">
+                    {item.verdict}
+                  </p>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         </div>
-
       </div>
     </main>
   );
