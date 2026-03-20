@@ -3,92 +3,114 @@ import urllib3
 import json
 import re
 import time
+import os
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from extractors import EXTRACTORS
 
-# 物理级静音：屏蔽强制绕过 SSL 时产生的警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- 核心配置区 ---
-INDEX_URL = "https://finance.yahoo.com/news/" 
+# --- 🚀 核心配置区：全域猎场 ---
+INDEX_URLS = [
+    "https://finance.yahoo.com/topic/stock-market-news/",
+    "https://finance.yahoo.com/topic/economic-news/",
+    "https://finance.yahoo.com/section/tech/"
+]
 API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
 INGEST_TOKEN = "ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ="
 
-# 🎯 商业硬通货词库
-BUSINESS_KEYWORDS = ["layoff", "job cut", "acquire", "acquisition", "merger", "bankruptcy", "chapter 11", "revenue", "profit", "stake", "resign", "restructuring", "buyout"]
+# 🎯 扩充后的商业硬通货词库 (增强嗅探灵敏度)
+BUSINESS_KEYWORDS = [
+    "layoff", "job cut", "acquire", "acquisition", "merger", "bankruptcy", 
+    "revenue", "profit", "stake", "resign", "restructuring", "buyout",
+    "fed", "interest rate", "inflation", "sec", "lawsuit", "crisis", "ai", "nvidia"
+]
+
+MEMORY_FILE = "seen_urls.txt"
+
+def load_memory():
+    if not os.path.exists(MEMORY_FILE): return set()
+    with open(MEMORY_FILE, "r") as f:
+        return set(line.strip() for line in f if line.strip())
+
+def save_memory(url):
+    with open(MEMORY_FILE, "a") as f:
+        f.write(url + "\n")
+
+def normalize_url(url: str) -> str:
+    return url.split('?')[0]
 
 def fetch_html(url: str) -> str:
-    print(f"🟢 [模块_发起] -> 动作/参数: 潜入目标节点 {url}")
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive"
     }
-    
     try:
-        # 🚀 物理补丁：强制使用适应性更强的 HTTPAdapter，解决 SSLEOFError
         session = requests.Session()
         adapter = HTTPAdapter(max_retries=3)
         session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        
-        # 🚨 关键：verify=False 配合定制 Session 绕过本地证书校验限制
         resp = session.get(url, headers=headers, verify=False, timeout=15)
         resp.raise_for_status()
         return resp.text
     except Exception as e:
-        print(f"🔴 [模块_崩溃] -> 原因: 物理连接阻断 - {str(e)}")
         return ""
 
 def discover_all_articles(index_html: str) -> list:
     soup = BeautifulSoup(index_html, 'html.parser')
     links = soup.find_all('a', href=re.compile(r'/news/.*\.html'))
-    target_urls = list(set([ (href if href.startswith('http') else f"https://finance.yahoo.com{href}") for link in links if (href := link.get('href')) and 'video' not in href ]))
-    print(f"🔵 [模块_成功] -> 产物: 建立猎杀名单，共发现 {len(target_urls)} 个潜在目标")
-    return target_urls
+    return list(set([ (href if href.startswith('http') else f"https://finance.yahoo.com{href}") for link in links if (href := link.get('href')) and 'video' not in href ]))
 
 def validate_intel(text: str) -> bool:
     text_lower = text.lower()
+    # 🚨 阈值下放：命中 1 个关键词即视为有价值，确保不漏掉任何线索
     hit_count = sum(1 for keyword in BUSINESS_KEYWORDS if keyword in text_lower)
-    return hit_count >= 2
+    return hit_count >= 1 
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - PRO SCRAPER ENGINE v4.2     ")
-    print("      [+] SSL 弹性补丁 + 持续猎杀循环             ")
+    print("      TRUTH DECODER - PRO SCRAPER ENGINE v4.5     ")
+    print("      [+] 全域猎场启动 + 嗅探阈值下放             ")
     print("==================================================")
     
-    index_html = fetch_html(INDEX_URL)
-    if not index_html: return
+    seen_urls = load_memory()
+    all_targets = []
 
-    targets = discover_all_articles(index_html)
-    for idx, target_url in enumerate(targets):
-        print(f"\n🟢 [模块_发起] -> 动作/参数: 执行下潜 [{idx + 1}/{len(targets)}]: {target_url}")
-        
-        article_html = fetch_html(target_url)
+    # 1. 执行全域侦察
+    for url in INDEX_URLS:
+        print(f"🟢 [模块_发起] -> 侦察板块: {url}")
+        html = fetch_html(url)
+        if html:
+            all_targets.extend(discover_all_articles(html))
+    
+    targets = list(set(all_targets)) # 全局去重
+    print(f"🔵 [模块_成功] -> 产物: 全域侦察完毕，共发现 {len(targets)} 个潜在目标")
+
+    # 2. 猎杀循环
+    success_count = 0
+    for target_url in targets:
+        pure_url = normalize_url(target_url)
+        if pure_url in seen_urls: continue
+
+        print(f"🟡 [模块_异步] -> 尝试下潜: {pure_url}")
+        article_html = fetch_html(pure_url)
         if not article_html: continue
 
-        # 挂载策略提取正文
         from extractors import EXTRACTORS
-        extractor = next((e for e in EXTRACTORS if e.match(target_url)), None)
-        raw_content = extractor.extract(article_html) if extractor else "\n".join([p.get_text(strip=True) for p in BeautifulSoup(article_html, 'html.parser').find_all('p') if len(p.get_text(strip=True)) > 50])
+        extractor = next((e for e in EXTRACTORS if e.match(pure_url)), None)
+        raw_content = extractor.extract(article_html) if extractor else ""
 
-        if len(raw_content) < 300 or not validate_intel(raw_content):
-            print("🔴 [模块_崩溃] -> 原因: 情报密度不足或非商业动作，放弃目标。")
-            continue
-
-        # 跨栈发射
-        try:
-            resp = requests.post(API_ENDPOINT, json={"rawContent": raw_content}, headers={"Authorization": f"Bearer {INGEST_TOKEN}"}, verify=False)
-            if resp.status_code == 200 and resp.json().get("success"):
-                print(f"🔵 [模块_成功] -> 产物: 猎杀成功！Signal ID: {resp.json()['data']['signalId']}")
-                break 
-        except Exception as e:
-            print(f"🔴 [模块_崩溃] -> 原因: API 通信失败 - {e}")
-        time.sleep(1)
+        if len(raw_content) > 300 and validate_intel(raw_content):
+            try:
+                resp = requests.post(API_ENDPOINT, json={"rawContent": raw_content}, headers={"Authorization": f"Bearer {INGEST_TOKEN}"}, verify=False)
+                if resp.status_code == 200:
+                    print(f"🔵 [模块_成功] -> 情报入库成功！")
+                    save_memory(pure_url)
+                    success_count += 1
+                    if success_count >= 3: break # 每次巡航最多抓 3 篇，防止 Token 暴涨
+            except: pass
+        else:
+            save_memory(pure_url) # 无价值的也记下来，防止重复扫描
 
 if __name__ == "__main__":
     main()

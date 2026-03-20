@@ -2,7 +2,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Terminal, Activity, Zap, Cpu, ArrowRight } from 'lucide-react';
+import { 
+  ShieldAlert, Sparkles, Loader2, AlertTriangle, 
+  Terminal, Activity, Zap, Cpu, ArrowRight, ChevronDown 
+} from 'lucide-react';
 import { i18n } from '@/config/i18n';
 import { SignalRecord } from '@/types/database';
 
@@ -10,20 +13,60 @@ export default function HomePage() {
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // 核心数据状态
   const [feed, setFeed] = useState<SignalRecord[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  
   const router = useRouter();
 
-  // 轮询最新情报流
+  // 1. 初始化拉取最新的 10 条
   useEffect(() => {
-    const fetchFeed = async () => {
-      const res = await fetch('/api/feed');
-      const json = await res.json();
-      if (json.success) setFeed(json.data);
-    };
-    fetchFeed();
-    const timer = setInterval(fetchFeed, 10000); 
+    fetchInitialFeed();
+    const timer = setInterval(fetchInitialFeed, 30000); // 30秒静默刷新首屏
     return () => clearInterval(timer);
   }, []);
+
+  const fetchInitialFeed = async () => {
+    try {
+      const res = await fetch('/api/feed');
+      const json = await res.json();
+      if (json.success) {
+        setFeed(json.data);
+        if (json.data.length < 10) setHasMore(false);
+      }
+    } catch (e) {
+      console.error("Feed 刷新失败");
+    }
+  };
+
+  // 2. 加载更多历史情报逻辑
+  const loadMore = async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    
+    try {
+      const lastSignal = feed[feed.length - 1];
+      const cursor = lastSignal ? encodeURIComponent(lastSignal.created_at) : '';
+      
+      const res = await fetch(`/api/feed?cursor=${cursor}`);
+      const json = await res.json();
+      
+      if (json.success) {
+        if (json.data.length === 0) {
+          setHasMore(false);
+        } else {
+          setFeed(prev => [...prev, ...json.data]); // 🚨 物理追加，不覆盖
+          if (json.data.length < 10) setHasMore(false);
+        }
+      }
+    } catch (e) {
+      console.error("加载更多失败");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const handleStart = async () => {
     if (!input.trim()) return;
@@ -93,20 +136,21 @@ export default function HomePage() {
               {isSubmitting ? <Loader2 className="animate-spin" /> : <Sparkles />}
               {isSubmitting ? 'ENGAGING...' : i18n.home.button}
             </button>
+            {error && <div className="mt-4 text-red-600 font-mono text-xs flex items-center gap-2"><AlertTriangle size={14} /> {error}</div>}
           </section>
         </div>
 
-        {/* 右侧：LIVE TRUTH FEED */}
-        <div className="lg:col-span-5 flex flex-col bg-zinc-950/20 border-l border-zinc-900 p-6">
+        {/* 右侧：LIVE TRUTH FEED (带无限加载) */}
+        <div className="lg:col-span-5 flex flex-col bg-zinc-950/20 border-l border-zinc-900 p-6 h-[90vh]">
           <div className="flex items-center justify-between mb-8 border-b border-zinc-900 pb-4">
             <h3 className="text-xs font-black tracking-[0.3em] uppercase text-zinc-500 flex items-center gap-3">
               <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />
               Intelligence Stream
             </h3>
-            <span className="text-[9px] font-mono text-zinc-700">SYNC_OK</span>
+            <span className="text-[9px] font-mono text-zinc-700">LIVE_SYNC</span>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto max-h-[800px] scrollbar-none">
+          <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-900">
             <AnimatePresence mode='popLayout'>
               {feed.length === 0 ? (
                 <div className="h-40 flex items-center justify-center border border-dashed border-zinc-900 rounded-sm">
@@ -117,7 +161,7 @@ export default function HomePage() {
                   key={item.id}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx % 10 * 0.05 }}
                   onClick={() => router.push(`/decode/${item.id}`)}
                   className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden shadow-xl"
                 >
@@ -127,13 +171,32 @@ export default function HomePage() {
                     <ArrowRight size={12} className="text-zinc-800 group-hover:text-red-600 transition-colors" />
                   </div>
                   <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors leading-relaxed line-clamp-3 italic">
-                    {item.verdict}
+                    “{item.verdict}”
                   </p>
                 </motion.div>
               ))}
             </AnimatePresence>
+
+            {/* 无限加载控制区 */}
+            {hasMore && (
+              <button 
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="w-full py-6 mt-4 border border-zinc-900 bg-zinc-950/50 text-[10px] font-mono text-zinc-500 hover:text-red-500 hover:border-red-900/50 transition-all flex items-center justify-center gap-3 uppercase tracking-[0.3em] group"
+              >
+                {isLoadingMore ? <Loader2 className="animate-spin text-red-600" /> : <ChevronDown size={14} className="group-hover:translate-y-1 transition-transform" />}
+                {isLoadingMore ? 'Expanding Reality...' : 'Access Historical Intel'}
+              </button>
+            )}
+
+            {!hasMore && feed.length > 0 && (
+              <div className="py-12 text-center text-[9px] font-mono text-zinc-800 uppercase tracking-[0.5em] border-t border-zinc-900/50 mt-8">
+                —— End of Recorded Truth ——
+              </div>
+            )}
           </div>
         </div>
+
       </div>
     </main>
   );
