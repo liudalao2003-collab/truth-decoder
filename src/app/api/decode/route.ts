@@ -1,55 +1,33 @@
 import { NextResponse } from 'next/server';
-import { analyzeTextWithDeepSeek } from '@/services/deepseek';
 import { supabaseAdmin } from '@/lib/supabase';
-import { ApiResponse } from '@/types';
-import { logger } from '@/utils/logger';
-import crypto from 'crypto';
 
-export async function POST(request: Request): Promise<NextResponse<ApiResponse<{ id: string }>>> {
+export const runtime = 'edge';
+
+export async function GET(request: Request) {
   try {
-    const { content } = await request.json();
-    logger.start('接收到前端 Decode 生成请求，文本载荷已获取');
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
 
-    if (!content || typeof content !== 'string') {
-      logger.crash('缺少情报文本或类型错误');
-      return NextResponse.json({ success: false, error: '缺少情报文本' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Missing ID' }, { status: 400 });
     }
 
-    // 1. 调用底层大模型服务
-    logger.async('调用 analyzeTextWithDeepSeek 神经引擎');
-    const result = await analyzeTextWithDeepSeek(content);
-
-    // 2. 生成全站唯一信号 ID
-    const signalId = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-
-    // 3. 构建将要插入的强类型数据载荷
-    const payload = {
-      id: signalId,
-      raw_content: content,
-      fluff_words: result.fluffWords,
-      hard_facts: result.hardFacts,
-      verdict: result.verdict,
-      view_count: 0
-    };
-
-    // 4. 写入 Supabase 永久数据库
-    logger.async(`向 Supabase 写入分析资产, Signal: ${signalId}`);
-    const { error: insertError } = await supabaseAdmin
+    // 🚀 执行物理检索
+    const { data, error } = await supabaseAdmin
       .from('signals')
-      .insert([payload]);
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (insertError) {
-      throw new Error(`数据库底层写入异常: ${insertError.message}`);
+    if (error || !data) {
+      console.warn(`[API_DECODE] 信号不存在: ${id}`);
+      // 🚨 即使没找到，也必须返回标准的 JSON 结构
+      return NextResponse.json({ success: false, error: 'Signal not found' }, { status: 404 });
     }
 
-    logger.success(`报告已成功入库 Supabase, ID: ${signalId}`);
-
-    // 5. 返回纯净 ID 给前端进行路由跳转
-    return NextResponse.json({ success: true, data: { id: signalId } });
-
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : '引擎级联失效';
-    logger.crash(`C端 API 路由网关阻断: ${errMsg}`);
-    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+    return NextResponse.json({ success: true, data });
+  } catch (err: any) {
+    console.error(`[API_DECODE] 链路崩溃:`, err.message);
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

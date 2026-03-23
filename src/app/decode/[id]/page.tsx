@@ -1,143 +1,173 @@
 "use client";
-
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, ChevronLeft, Eye, Terminal } from 'lucide-react';
-import { i18n } from '@/config/i18n';
-import { DecodeResult } from '@/types';
+import { ArrowLeft, Loader2, AlertCircle, Target, Skull, Database, Trash2 } from 'lucide-react';
 import RawNarrative from '@/components/features/decode/RawNarrative';
-import HardFacts from '@/components/features/decode/HardFacts';
-import VerdictPanel from '@/components/features/decode/VerdictPanel';
-import ChatTerminal from '@/components/features/terminal/ChatTerminal';
-import LoadingSkeleton from '@/components/features/decode/LoadingSkeleton';
-import { logger } from '@/utils/logger';
+import { SignalRecord } from '@/types/database';
 
-type PageProps = { params: Promise<{ id: string }> };
-
-export default function DecodePage({ params }: PageProps) {
+export default function DecodePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
-  const unwrappedParams = use(params);
-  const signalId = unwrappedParams.id;
-  
-  const [isErased, setIsErased] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [rawContent, setRawContent] = useState('');
-  const [result, setResult] = useState<DecodeResult | null>(null);
-  const [viewCount, setViewCount] = useState<number>(0);
+  const [signal, setSignal] = useState<SignalRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false); // 🚀 抹杀状态
+  const [lang, setLang] = useState<'cn' | 'en'>('cn');
 
   useEffect(() => {
-    const fetchReport = async () => {
-      logger.start(`发起信号提取逻辑, ID: ${signalId}`);
+    const fetchSignal = async () => {
       try {
-        const res = await fetch(`/api/report/${signalId}`);
-        const json = await res.json();
-        
-        if (!res.ok || !json.success) throw new Error(json.error || '无法提取报告');
+        const res = await fetch(`/api/decode?id=${id}`);
 
-        setRawContent(json.data.rawContent);
-        setResult(json.data.result);
-        setViewCount(json.data.viewCount);
-        logger.success('商业情报已成功同步至前端 State');
-      } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : '网络通信阻断';
-        logger.crash(`报告加载失败: ${errMsg}`);
-        setError(errMsg);
+        // 🛡️ 柔性拦截：如果查不到数据（404），不要抛出 Error 炸毁前端，而是静默退出
+        if (!res.ok) {
+          setSignal(null);
+          return;
+        }
+
+        const json = await res.json();
+        if (json.success) {
+          setSignal(json.data);
+        } else {
+          setSignal(null);
+        }
+      } catch (e) {
+        console.error("链路切断:", e);
+        setSignal(null);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
-    fetchReport();
-  }, [signalId]);
+    fetchSignal();
+  }, [id]);
+
+  // 🔪 核心逻辑：执行物理抹杀
+  const handlePurge = async () => {
+    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n\n此操作将从数据库中物理销毁该情报，永久不可逆转。\n\n确认抹杀？");
+    if (!confirmPurge) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/v1/delete?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` // 使用你的最高权限 Token
+        }
+      });
+      const json = await res.json();
+      
+      if (json.success) {
+        // 抹杀成功，无缝撤退回首页
+        router.push('/');
+      } else {
+        alert(`抹杀失败: ${json.error}`);
+      }
+    } catch (e) {
+      alert("终端通信切断，无法执行抹杀指令。");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <Loader2 className="animate-spin text-zinc-500 w-8 h-8" />
+    </div>
+  );
+
+  if (!signal) return (
+    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
+      <AlertCircle className="text-red-600 w-12 h-12 mb-4" />
+      <h2 className="text-zinc-400 font-mono uppercase tracking-widest text-sm">Asset Neutralized / 资产已被销毁</h2>
+      <button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 font-mono text-xs hover:bg-white hover:text-black transition-all">Back to Index</button>
+    </div>
+  );
+
+  const getBilingualField = (field: any) => (Array.isArray(field) ? field : field?.[lang] || []);
+  const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
 
   return (
-    <div className="min-h-screen bg-black text-zinc-300 p-4 md:p-8 font-sans selection:bg-red-900 selection:text-white relative overflow-hidden">
-      <div className="max-w-7xl mx-auto space-y-12 relative z-10">
+    <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
+      <div className="max-w-5xl mx-auto px-6">
         
-        {/* 顶部 Header - 始终保持挂载，提供稳定的交互入口 [cite: 107-110] */}
-        <header className="flex items-center justify-between border-b border-zinc-800 pb-6">
-          <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
-            <ChevronLeft className="text-zinc-500" />
-            <ShieldAlert className="w-8 h-8 text-red-600" />
-            <h1 className="text-2xl font-black tracking-tighter text-white uppercase">{i18n.header.title}</h1>
-          </div>
+        {/* 顶部导航 */}
+        <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-12">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all">
+            <ArrowLeft size={16} />
+            <span className="text-xs font-mono uppercase tracking-widest">Index</span>
+          </button>
           
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400 border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 rounded-sm tracking-widest">
-              <Eye className="w-3 h-3 text-red-500" />
-              <span>VIEWS: {viewCount}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex bg-black border border-zinc-800 rounded-sm overflow-hidden">
+              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
+              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
             </div>
+            
+            {/* 🔪 抹杀按钮 */}
+            <button 
+              onClick={handlePurge}
+              disabled={isDeleting}
+              className="group flex items-center justify-center w-8 h-8 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"
+              title="物理抹杀该资产"
+            >
+              {isDeleting ? <Loader2 size={14} className="animate-spin text-red-600" /> : <Trash2 size={14} className="text-red-900 group-hover:text-red-500" />}
+            </button>
           </div>
         </header>
 
-        {/* 核心内容区：骨架屏与真实内容的平滑切换 */}
-        <AnimatePresence mode="wait">
-          {isLoading ? (
-            <motion.div
-              key="skeleton"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <LoadingSkeleton />
-            </motion.div>
-          ) : error || !result ? (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-zinc-900/50 border border-red-900/30 p-12 rounded-sm text-center max-w-2xl mx-auto"
-            >
-              <h2 className="text-xl font-bold text-white mb-4 uppercase tracking-widest">信号已被物理抹除</h2>
-              <p className="text-zinc-500 font-mono text-sm mb-8">{error || 'Unknown Signal Loss'}</p>
-              <button onClick={() => router.push('/')} className="bg-red-700 text-white px-10 py-3 font-black uppercase text-xs tracking-widest hover:bg-red-600 transition-colors">返回拦截首页</button>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="content"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ staggerChildren: 0.2 }}
-              className="space-y-12"
-            >
-              {/* 核心解码面板 [cite: 110-111] */}
-              <motion.div 
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.8 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-              >
-                <RawNarrative rawContent={rawContent} fluffWords={result.fluffWords} isErased={isErased} />
-                <HardFacts hardFacts={result.hardFacts} isErased={isErased} onErase={() => setIsErased(true)} />
-              </motion.div>
-              
-              <VerdictPanel verdict={result.verdict} isErased={isErased} />
+        {/* 致命裁决 */}
+        <section className="mb-16">
+          <div className="flex items-center gap-3 mb-6">
+             <div className="w-2 h-2 bg-red-600" />
+             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Final Verdict</span>
+          </div>
+          <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-[1.2]">
+            {getBilingualVerdict()}
+          </h2>
+        </section>
 
-              {/* 独立审讯终端 [cite: 111-113] */}
-              <motion.section 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="pt-12 border-t-2 border-dashed border-zinc-900"
-              >
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-2xl font-black uppercase tracking-widest text-white flex items-center gap-3 mb-2">
-                      <Terminal className="text-red-700 w-6 h-6" />
-                      DEEP INTERROGATION
-                    </h2>
-                    <p className="text-zinc-500 font-mono text-sm tracking-widest">{'>>'} 基于已查明的硬通货事实，发起对深层利益链的拷问。</p>
-                  </div>
-                </div>
-                <ChatTerminal signalId={signalId} hardFacts={result.hardFacts} />
-              </motion.section>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* 核心数据网格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm">
+              <h4 className="flex items-center gap-3 text-zinc-400 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-zinc-800 pb-4">
+                 <Target size={14} /> Hard Facts / 骨干事实
+              </h4>
+              <div className="space-y-6">
+                 {getBilingualField(signal.hard_facts).map((fact: string, i: number) => (
+                   <div key={i} className="flex gap-4 items-start">
+                      <span className="font-mono text-[10px] text-zinc-600 mt-1 shrink-0">{(i+1).toString().padStart(2,'0')}</span>
+                      <p className="text-zinc-300 font-serif leading-relaxed text-sm md:text-base">{fact}</p>
+                   </div>
+                 ))}
+              </div>
+           </div>
+           
+           <div className="bg-red-950/10 border border-red-900/30 p-8 rounded-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-red-900/10 rounded-full blur-3xl" />
+              <h4 className="flex items-center gap-3 text-red-500 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-red-900/30 pb-4 relative z-10">
+                 <Skull size={14} /> Hidden Agenda / 隐秘动机
+              </h4>
+              <div className="space-y-6 relative z-10">
+                 {getBilingualField(signal.fluff_words).map((fluff: string, i: number) => (
+                   <div key={i} className="flex gap-4 items-start">
+                      <span className="font-mono text-[10px] text-red-900 mt-1 shrink-0">⚠</span>
+                      <p className="text-red-200/90 font-serif leading-relaxed text-sm md:text-base">{fluff}</p>
+                   </div>
+                 ))}
+              </div>
+           </div>
+        </div>
+
+        {/* 原始数据库 */}
+        <div>
+           <h4 className="flex items-center gap-3 text-zinc-600 font-mono text-xs uppercase tracking-[0.2em] mb-6">
+              <Database size={14} /> Raw Intercept / 原始截获数据
+           </h4>
+           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm font-serif text-sm leading-relaxed text-zinc-500 text-justify">
+              {signal.raw_content}
+           </div>
+        </div>
+
       </div>
-    </div>
+    </main>
   );
 }

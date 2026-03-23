@@ -1,116 +1,152 @@
 import requests
 import urllib3
-import json
-import re
 import time
 import os
+import re
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
-from extractors import EXTRACTORS
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- 🚀 核心配置区：全域猎场 ---
-INDEX_URLS = [
+# --- 🚀 全局雷达配置 ---
+API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
+INGEST_TOKEN = "ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ="
+HISTORY_FILE = "seen_urls.txt"
+
+TARGET_FEEDS = [
+    "https://finance.yahoo.com/news/",
     "https://finance.yahoo.com/topic/stock-market-news/",
     "https://finance.yahoo.com/topic/economic-news/",
     "https://finance.yahoo.com/section/tech/"
 ]
-API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
-INGEST_TOKEN = "ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ="
 
-# 🎯 扩充后的商业硬通货词库 (增强嗅探灵敏度)
-BUSINESS_KEYWORDS = [
-    "layoff", "job cut", "acquire", "acquisition", "merger", "bankruptcy", 
-    "revenue", "profit", "stake", "resign", "restructuring", "buyout",
-    "fed", "interest rate", "inflation", "sec", "lawsuit", "crisis", "ai", "nvidia"
-]
+def load_seen_urls():
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
+            return set(f.read().splitlines())
+    return set()
 
-MEMORY_FILE = "seen_urls.txt"
-
-def load_memory():
-    if not os.path.exists(MEMORY_FILE): return set()
-    with open(MEMORY_FILE, "r") as f:
-        return set(line.strip() for line in f if line.strip())
-
-def save_memory(url):
-    with open(MEMORY_FILE, "a") as f:
+def save_seen_url(url):
+    with open(HISTORY_FILE, "a") as f:
         f.write(url + "\n")
 
-def normalize_url(url: str) -> str:
-    return url.split('?')[0]
-
-def fetch_html(url: str) -> str:
+def fetch_html(url):
+    session = requests.Session()
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Connection": "keep-alive"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
     }
     try:
-        session = requests.Session()
         adapter = HTTPAdapter(max_retries=3)
         session.mount("https://", adapter)
         resp = session.get(url, headers=headers, verify=False, timeout=15)
         resp.raise_for_status()
         return resp.text
-    except Exception as e:
-        return ""
+    except:
+        return None
 
-def discover_all_articles(index_html: str) -> list:
-    soup = BeautifulSoup(index_html, 'html.parser')
-    links = soup.find_all('a', href=re.compile(r'/news/.*\.html'))
-    return list(set([ (href if href.startswith('http') else f"https://finance.yahoo.com{href}") for link in links if (href := link.get('href')) and 'video' not in href ]))
+def extract_article_links(html, base_url="https://finance.yahoo.com"):
+    soup = BeautifulSoup(html, 'html.parser')
+    links = set()
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if '/news/' in href or '/m/' in href:
+            full_url = href if href.startswith('http') else base_url + href
+            links.add(full_url)
+    return links
 
-def validate_intel(text: str) -> bool:
-    text_lower = text.lower()
-    # 🚨 阈值下放：命中 1 个关键词即视为有价值，确保不漏掉任何线索
-    hit_count = sum(1 for keyword in BUSINESS_KEYWORDS if keyword in text_lower)
-    return hit_count >= 1 
+# 🛡️ V5.6 工业级断头台算法
+def is_high_value_intel(content):
+    content_lower = content.lower()
+
+    # 1. 致命词汇一击必杀 (只要出现一次，立刻拉黑)
+    FATAL_KEYWORDS = [
+        "flagship newsletter", "inboxes every morning", "subscribe to",
+        "sign up for yahoo", "download the app", "click here to read",
+        "morning brief is yahoo"
+    ]
+    for word in FATAL_KEYWORDS:
+        if word in content_lower:
+            return False, f"触碰致命广告词 [{word}]"
+
+    # 2. 长度底线
+    if len(content) < 800:
+        return False, f"篇幅过短 ({len(content)} 字符)"
+
+    # 3. 🚀 商业数据密度检测 (真正的商业新闻必然包含数据)
+    # 提取所有数字
+    numbers = re.findall(r'\d+', content)
+    has_financial_symbols = '%' in content or '$' in content or 'billion' in content_lower or 'million' in content_lower
+    
+    # 如果一篇文章里数字少于 3 个，且没有任何金融符号，100% 是空洞的软文或散文
+    if len(numbers) < 3 and not has_financial_symbols:
+        return False, "情报密度极低 (缺乏商业数据和金额支撑)"
+
+    return True, "通过高净值甄别"
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - PRO SCRAPER ENGINE v4.5     ")
-    print("      [+] 全域猎场启动 + 嗅探阈值下放             ")
+    print("      TRUTH DECODER - OPERATION: GUILLOTINE V5.6  ")
+    print("      [+] 搭载商业数据密度扫描仪，全量斩杀软文      ")
     print("==================================================")
     
-    seen_urls = load_memory()
-    all_targets = []
+    seen_urls = load_seen_urls()
+    all_targets = set()
 
-    # 1. 执行全域侦察
-    for url in INDEX_URLS:
-        print(f"🟢 [模块_发起] -> 侦察板块: {url}")
-        html = fetch_html(url)
+    for feed in TARGET_FEEDS:
+        print(f"🟢 [雷达扫描] 侦测阵地: {feed}")
+        html = fetch_html(feed)
         if html:
-            all_targets.extend(discover_all_articles(html))
-    
-    targets = list(set(all_targets)) # 全局去重
-    print(f"🔵 [模块_成功] -> 产物: 全域侦察完毕，共发现 {len(targets)} 个潜在目标")
+            all_targets.update(extract_article_links(html))
+        time.sleep(1)
 
-    # 2. 猎杀循环
+    fresh_targets = [url for url in all_targets if url not in seen_urls]
+    print(f"\n🔵 [初筛] 锁定 {len(fresh_targets)} 条线索，进入断头台甄别舱...\n")
+
     success_count = 0
-    for target_url in targets:
-        pure_url = normalize_url(target_url)
-        if pure_url in seen_urls: continue
+    for url in fresh_targets:
+        print(f"🟡 [分析] 目标: {url[:50]}...")
+        html = fetch_html(url)
+        if not html: 
+            continue
 
-        print(f"🟡 [模块_异步] -> 尝试下潜: {pure_url}")
-        article_html = fetch_html(pure_url)
-        if not article_html: continue
+        soup = BeautifulSoup(html, 'html.parser')
+        paragraphs = soup.find_all('p')
+        raw_content = "\n".join([p.get_text() for p in paragraphs if len(p.get_text()) > 60])
 
-        from extractors import EXTRACTORS
-        extractor = next((e for e in EXTRACTORS if e.match(pure_url)), None)
-        raw_content = extractor.extract(article_html) if extractor else ""
+        # 🚨 断头台铡刀落下
+        is_valuable, reject_reason = is_high_value_intel(raw_content)
+        if not is_valuable:
+            print(f"   🚫 [物理拦截] {reject_reason}，已销毁。")
+            save_seen_url(url) # 记入黑名单，不再碰它
+            continue
 
-        if len(raw_content) > 300 and validate_intel(raw_content):
-            try:
-                resp = requests.post(API_ENDPOINT, json={"rawContent": raw_content}, headers={"Authorization": f"Bearer {INGEST_TOKEN}"}, verify=False)
-                if resp.status_code == 200:
-                    print(f"🔵 [模块_成功] -> 情报入库成功！")
-                    save_memory(pure_url)
-                    success_count += 1
-                    if success_count >= 3: break # 每次巡航最多抓 3 篇，防止 Token 暴涨
-            except: pass
-        else:
-            save_memory(pure_url) # 无价值的也记下来，防止重复扫描
+        try:
+            print("   🟢 [密度达标] 确认包含核心商业数据，正在提交 AI 破译...")
+            resp = requests.post(
+                API_ENDPOINT, 
+                json={"rawContent": raw_content}, 
+                headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                timeout=60
+            )
+            if resp.status_code == 200:
+                print("   ✅ [入库成功] 致命裁决已生成！")
+                save_seen_url(url)
+                success_count += 1
+            else:
+                print(f"   ❌ [被后端拦截] 状态码: {resp.status_code} (可能是重复通稿)")
+        except requests.exceptions.Timeout:
+            print(f"   ❌ [链路中断] DeepSeek 思考超时，跳过。")
+        except Exception as e:
+            print(f"   ❌ [未知异常] {str(e)[:30]}")
+        
+        time.sleep(2)
+
+    print("\n==================================================")
+    print(f"      🎉 猎杀结束！成功斩获 {success_count} 条纯粹的高密度商业资产。")
+    print("==================================================")
 
 if __name__ == "__main__":
     main()

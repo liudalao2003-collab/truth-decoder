@@ -1,68 +1,63 @@
 "use client";
-import { motion } from 'framer-motion';
-import { i18n } from '@/config/i18n';
+import React from 'react';
+import { FileText, Cpu } from 'lucide-react';
 
 interface RawNarrativeProps {
   rawContent: string;
-  fluffWords: string[];
-  isErased: boolean;
+  fluffWords: any;
+  lang?: 'cn' | 'en';
 }
 
-export default function RawNarrative({ rawContent, fluffWords, isErased }: RawNarrativeProps) {
+export default function RawNarrative({ rawContent, fluffWords, lang = 'cn' }: RawNarrativeProps) {
   const renderRawText = () => {
-    if (!fluffWords || fluffWords.length === 0) return rawContent;
-    const safeWords = fluffWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const regex = new RegExp(`(${safeWords.join('|')})`, 'g');
-    const parts = rawContent.split(regex);
-    
-    return parts.map((part, i) => {
-      if (fluffWords.includes(part)) {
-        return (
-          <motion.span
-            key={i}
-            initial={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', borderBottom: '1px solid rgba(220, 38, 38, 0.3)' }}
-            animate={
-              isErased 
-                ? { 
-                    backgroundColor: 'rgba(239, 68, 68, 0)', 
-                    color: '#dc2626', 
-                    borderBottom: '1px dashed rgba(220, 38, 38, 1)',
-                    scale: 0.9,
-                    filter: "blur(2px)",
-                    opacity: 0.1
-                  } 
-                : { 
-                    backgroundColor: 'rgba(239, 68, 68, 0.15)', 
-                    color: '#fca5a5', 
-                    borderBottom: '1px solid rgba(220, 38, 38, 0.3)'
-                  }
-            }
-            // 🚨 駭客特效：物理电击剥离，配合 Glitch 效果
-            transition={{ duration: 0.6, ease: [0.17, 0.67, 0.83, 0.67] }}
-            className="px-0.5 mx-0.5 rounded-[1px] font-bold inline-block relative overflow-hidden"
-          >
+    if (!rawContent) return null;
+    let activeWords: string[] = Array.isArray(fluffWords) ? fluffWords : (fluffWords?.[lang] || []);
+    if (activeWords.length === 0) return rawContent;
+
+    try {
+      const safeWords = activeWords
+        .filter(w => typeof w === 'string' && w.length > 0)
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      
+      const regex = new RegExp(`(${safeWords.join('|')})`, 'g');
+      const parts = rawContent.split(regex);
+
+      return parts.map((part, i) => {
+        const isMatch = activeWords.includes(part);
+        return isMatch ? (
+          <mark key={i} className="bg-red-600/10 text-red-500 px-0.5 border-b border-red-500/50 transition-all hover:bg-red-600/30 cursor-crosshair">
             {part}
-            {/* 物理电击线 */}
-            <motion.div 
-              animate={isErased ? { x: "100%", opacity: [1, 0] } : { x: "-100%", opacity: [0, 1] }}
-              transition={{ duration: 0.3 }}
-              className="absolute inset-x-0 bottom-0 h-0.5 bg-red-600 rounded-sm"
-            />
-          </motion.span>
-        );
-      }
-      return <span key={i} className="transition-all duration-700">{part}</span>;
-    });
+          </mark>
+        ) : <span key={i} className="opacity-80">{part}</span>;
+      });
+    } catch (e) { return rawContent; }
   };
 
   return (
-    <div className="bg-zinc-950 border border-zinc-900 rounded-sm overflow-hidden flex flex-col shadow-[0_0_100px_rgba(185,28,28,0.01)]">
-      <div className="p-4 border-b border-zinc-900 bg-zinc-950/80 flex items-center gap-3">
-        <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse" />
-        <span className="text-xs font-bold uppercase tracking-[0.3em] text-zinc-300">{i18n.decode.rawTitle}</span>
+    <div className="bg-black border border-zinc-900 rounded-sm overflow-hidden shadow-2xl">
+      <div className="bg-zinc-900/30 px-6 py-3 border-b border-zinc-900 flex items-center justify-between">
+         <div className="flex items-center gap-3">
+            <FileText size={14} className="text-zinc-500" />
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Evidence_File_Raw.txt</span>
+         </div>
+         <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+            <span className="text-[9px] font-mono text-red-900">DECODED_VIEW</span>
+         </div>
       </div>
-      <div className="p-10 text-xl font-serif leading-loose text-zinc-300 h-[550px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-900 selection:bg-red-950 selection:text-white">
-        {renderRawText()}
+      
+      <div className="p-10 md:p-16 relative">
+        {/* 背景装饰 */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]" />
+        
+        <div className="relative z-20 font-serif text-lg leading-[1.8] text-zinc-500 tracking-wide text-justify">
+          {renderRawText()}
+        </div>
+      </div>
+
+      <div className="bg-zinc-900/10 px-6 py-4 border-t border-zinc-900 flex justify-between items-center font-mono text-[8px] text-zinc-700">
+         <span>SHA-256: 8f92b...d3e1</span>
+         <span>SECURITY LEVEL: CLASSIFIED</span>
       </div>
     </div>
   );

@@ -1,85 +1,88 @@
 import { NextResponse } from 'next/server';
-import { analyzeTextWithDeepSeek } from '@/services/deepseek';
 import { supabaseAdmin } from '@/lib/supabase';
-import { ApiResponse } from '@/types';
-import { logger } from '@/utils/logger';
-import crypto from 'crypto';
+import OpenAI from 'openai';
 
-// 严格的 TS 纯洁性：定义注入网关请求的载荷契约
-interface IngestRequest {
-  rawContent: string;
-}
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
 
-/**
- * 核心业务说明：
- * 这是 TruthDecoder 面向自动化爬虫的专属高权限注入网关。
- * 它负责接收外部脚本抓取的原始通稿，驱动底层博弈引擎，并直接将最终的高净值情报强制写入数据库。
- */
-export async function POST(request: Request): Promise<NextResponse<ApiResponse<{ signalId: string }>>> {
+export async function POST(req: Request) {
   try {
-    logger.start('内部高权限情报注入网关被唤醒');
-
-    // 1. 物理级鉴权防线 (Anti-Leak)
-    // 业务说明：严禁任何未经授权的外部节点向我们的系统注入脏数据
-    const authHeader = request.headers.get('authorization');
-    const expectedKey = process.env.INTERNAL_INGEST_KEY;
-
-    if (!expectedKey) {
-      logger.crash('内部注入网关缺失主密钥 (INTERNAL_INGEST_KEY)');
-      return NextResponse.json({ success: false, error: '注入网关未配置' }, { status: 503 });
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (authHeader !== `Bearer ${expectedKey}`) {
-      logger.crash('越权注入尝试已被物理拦截');
-      return NextResponse.json({ success: false, error: '非法注入凭证 (Invalid Token)' }, { status: 401 });
-    }
+    const { rawContent } = await req.json();
+    if (!rawContent) throw new Error('Empty content');
 
-    // 2. 载荷解析与 TS 类型断言
-    const body = await request.json();
-    const { rawContent } = body as IngestRequest;
-
-    if (!rawContent || typeof rawContent !== 'string') {
-      logger.crash('注入载荷非法：缺少 rawContent');
-      return NextResponse.json({ success: false, error: '缺少有效的文本通稿' }, { status: 400 });
-    }
-
-    logger.async(`调度神经引擎进行深度洗稿, 文本长度: ${rawContent.length}`);
-
-    // 3. 核心解耦：直接调度底层的 DeepSeek 引擎进行博弈分析
-    const result = await analyzeTextWithDeepSeek(rawContent);
-
-    // 4. 生成全站唯一信号 ID
-    const signalId = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-
-    // 5. 构建将要插入的强类型数据载荷
-    const payload = {
-      id: signalId,
-      raw_content: rawContent,
-      fluff_words: result.fluffWords,
-      hard_facts: result.hardFacts,
-      verdict: result.verdict,
-      view_count: 0
-    };
-
-    logger.async(`向 Supabase 写入高净值情报资产, Signal: ${signalId}`);
-
-    // 6. 写入 Supabase 永久数据库
-    const { error: insertError } = await supabaseAdmin
+    // 🛡️ 穹顶预检：提取前 100 个字符进行匹配 (避开完整长文本可能导致的 GET URL 长度超限问题)
+    const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
+    const { data: existing } = await supabaseAdmin
       .from('signals')
-      .insert([payload]);
+      .select('id')
+      .ilike('raw_content', `${safeSnippet}%`)
+      .limit(1);
 
-    if (insertError) {
-      throw new Error(`数据库底层写入异常: ${insertError.message}`);
+    // 🚀 如果库里已经有了，直接返回现有 ID，让前端“秒切”过去，不消耗任何 Token
+    if (existing && existing.length > 0) {
+      console.log(`[前置拦截] 资产已存在，引导至: ${existing[0].id}`);
+      return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
     }
 
-    logger.success(`自动化情报已成功入库, Signal ID: ${signalId}`);
+    const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-    // 7. 纯净输出给 Python 爬虫，完成业务闭环
+    const completion = await openai.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: "你是一个冷酷的华尔街做空分析师。请将通稿解码为中英双语 JSON：\n{\n  \"facts\": { \"cn\":[], \"en\":[] },\n  \"fluff\": { \"cn\":[], \"en\":[] },\n  \"verdict\": { \"cn\":\"\", \"en\":\"\" }\n}"
+        },
+        { role: "user", content: rawContent }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    let rawJson = completion.choices[0].message.content || '{}';
+    rawJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
+    
+    let intel;
+    try {
+      intel = JSON.parse(rawJson);
+    } catch (parseError) {
+      throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
+    }
+
+    const { error: dbError } = await supabaseAdmin
+      .from('signals')
+      .insert([{
+        id: signalId,
+        raw_content: rawContent,
+        fluff_words: intel.fluff || { cn: [], en: [] }, 
+        hard_facts: intel.facts || { cn: [], en: [] },
+        verdict: intel.verdict?.cn || "解析失败",
+        metadata: { bilingual: intel.verdict || {} } 
+      }]);
+
+    // 🛡️ 底层兜底：万一并发导致预检穿透，被底层物理规则弹回
+    if (dbError) {
+      if (dbError.code === '23505') {
+        // 顺势查出现有 ID 并返回，优雅地化解崩溃
+        const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
+        if (retry && retry.length > 0) {
+            return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
+        }
+        return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
+      }
+      throw dbError; 
+    }
+
     return NextResponse.json({ success: true, data: { signalId } });
 
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : '注入网关级联失效';
-    logger.crash(`自动化注入链路崩塌: ${errMsg}`);
-    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+  } catch (error: any) {
+    console.error("[INGEST_API_ERROR]", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
