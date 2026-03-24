@@ -1,13 +1,10 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // 🚀 核心指令：允许在存在 TypeScript 错误的情况下强行构建上线
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // 🚀 只保留 TypeScript 强行忽略，顺应 Next.js 16 规则
   typescript: {
     ignoreBuildErrors: true,
-  },
-  // 顺便屏蔽 ESLint 错误，确保万无一失
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  }
 };
 
 export default nextConfig;
