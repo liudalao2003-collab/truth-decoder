@@ -1112,11 +1112,30 @@ export async function GET(req: Request) {
         let fullText = await articleRes.text();
         fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
 
+        // 🧹 毒饵拦截：如果 Jina 被墙，立刻丢弃本篇
+        if (fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack') || fullText.includes('Too many domains')) {
+            console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
+            continue; // 如果是手动投喂的独立文件，这里用 return 报错
+        }
+
         if (fullText.length < 200) continue;
 
-        const depthPrompt = aiDepth === 'quick' 
-          ? "提取核心 facts 和一句 verdict，双语 JSON。"
-          : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }";
+        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
+请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
+{
+  "facts": {
+    "cn": ["骨干事实1 (必须提取3-5条剥离修饰语的冰冷数据或核心政策底牌)", "骨干事实2", "骨干事实3"],
+    "en": []
+  },
+  "fluff": {
+    "cn": ["隐秘动机1 (必须深度剖析3-5条！【禁止摘抄原文】请直接一针见血地指出：文章在掩盖什么风险？想诱导大众相信什么？例如：用'历史耐心'来掩盖'短期内无法产生经济回报'的事实)", "隐秘动机2", "隐秘动机3"],
+    "en": []
+  },
+  "verdict": {
+    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话（不超过50字），直接点破这篇通稿背后真正的利益导向、资本运作逻辑或政治意图。",
+    "en": ""
+  }
+}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
@@ -1124,7 +1143,10 @@ export async function GET(req: Request) {
           response_format: { type: 'json_object' }
         });
 
-        const intel = JSON.parse(completion.choices[0].message.content || '{}');
+        // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
+        const rawAiOutput = completion.choices[0].message.content || ''
+        const cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const intel = JSON.parse(cleanedJsonString);
 
         await supabaseAdmin.from('signals').insert([{
           id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
@@ -1473,6 +1495,12 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) throw new Error('Empty content');
 
+    // 🧹 毒饵拦截：如果 Jina 被墙，立刻丢弃本篇
+    if (rawContent.includes('SecurityCompromiseError') || rawContent.includes('DDoS attack') || rawContent.includes('Too many domains')) {
+        console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
+        return NextResponse.json({ success: false, error: 'Content is blocked by WAF.' }, { status: 423 });
+    }
+
     // 🛡️ 穹顶预检：提取前 100 个字符进行匹配 (避开完整长文本可能导致的 GET URL 长度超限问题)
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
@@ -1494,19 +1522,35 @@ export async function POST(req: Request) {
       messages: [
         { 
           role: "system", 
-          content: "你是一个冷酷的华尔街做空分析师。请将通稿解码为中英双语 JSON：\n{\n  \"facts\": { \"cn\":[], \"en\":[] },\n  \"fluff\": { \"cn\":[], \"en\":[] },\n  \"verdict\": { \"cn\":\"\", \"en\":\"\" }\n}"
+          content: `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
+请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
+{
+  "facts": {
+    "cn": ["骨干事实1 (必须提取3-5条剥离修饰语的冰冷数据或核心政策底牌)", "骨干事实2", "骨干事实3"],
+    "en": []
+  },
+  "fluff": {
+    "cn": ["隐秘动机1 (必须深度剖析3-5条！【禁止摘抄原文】请直接一针见血地指出：文章在掩盖什么风险？想诱导大众相信什么？例如：用'历史耐心'来掩盖'短期内无法产生经济回报'的事实)", "隐秘动机2", "隐秘动机3"],
+    "en": []
+  },
+  "verdict": {
+    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话（不超过50字），直接点破这篇通稿背后真正的利益导向、资本运作逻辑或政治意图。",
+    "en": ""
+  }
+}`
         },
         { role: "user", content: rawContent }
       ],
       response_format: { type: 'json_object' }
     });
 
-    let rawJson = completion.choices[0].message.content || '{}';
-    rawJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
+    const rawAiOutput = completion.choices[0].message.content || ''
+    const cleanedJsonString = rawAiOutput.replace(/```json/g, '').replace(/```/g, '').trim();
     
     let intel;
     try {
-      intel = JSON.parse(rawJson);
+      intel = JSON.parse(cleanedJsonString);
     } catch (parseError) {
       throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
     }
