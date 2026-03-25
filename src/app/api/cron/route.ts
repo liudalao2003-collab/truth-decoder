@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import OpenAI from 'openai';
 
+// 🚀 加上这一行：强行将 Vercel 无服务器函数的存活时间提升至 60 秒极限！
+export const maxDuration = 60;
+
 const openai = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
   baseURL: 'https://api.deepseek.com',
