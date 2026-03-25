@@ -90,9 +90,24 @@ export async function GET(req: Request) {
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = aiDepth === 'quick' 
+        const depthPrompt = aiDepth === 'quick'
           ? "提取核心 facts 和一句 verdict，双语 JSON。"
-          : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }";
+          : `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
+请严格输出中英双语 JSON：
+{
+  "facts": {
+    "cn": ["剥离所有修饰语、形容词后的冰冷数据、核心动作或政策底牌 1", "事实 2"],
+    "en": []
+  },
+  "fluff": {
+    "cn": ["【禁止摘抄原文原文】请直接一针见血地指出：文章在掩盖什么风险？或者想诱导大众相信什么？（例如：用'历史耐心'来掩盖'短期内无法产生经济回报'的事实）"],
+    "en": []
+  },
+  "verdict": {
+    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话（不超过50字），直接点破这篇通稿背后真正的利益导向或资本/政治意图。",
+    "en": ""
+  }
+}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
