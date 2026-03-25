@@ -42,8 +42,8 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
-        { 
-          role: "system", 
+        {
+          role: "system",
           content: `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
 请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
 {
@@ -66,14 +66,27 @@ export async function POST(req: Request) {
       response_format: { type: 'json_object' }
     });
 
-    // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
-    const rawAiOutput = completion.choices[0].message.content || ''
-    const cleanedJsonString = rawAiOutput.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+    // 🛡️ 工业级 JSON 护盾：暴力清洗大模型可能的幻觉输出
+    const rawAiOutput = completion.choices[0].message.content || '';
+
+    // 1. 消除大小写不敏感的 markdown 标识 (追加 /i 标志，防备 ```JSON 或 ```Json 漏网)
+    let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // 2. 物理级剪裁：强制锁定 { 和 } 之间的核心内容，切除大模型可能生成的开头结尾废话
+    const firstBrace = cleanedJsonString.indexOf('{');
+    const lastBrace = cleanedJsonString.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+      cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+    }
+
     let intel;
     try {
       intel = JSON.parse(cleanedJsonString);
     } catch (parseError) {
+      // 3. 绝境探针：如果 JSON.parse 依然失败，在后台抛出原生的畸形结构，便于排查
+      if (process.env.NODE_ENV === 'development') {
+         console.log("🔴 [模块_崩溃] -> 大模型吐出的畸形数据:", rawAiOutput);
+      }
       throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
     }
 
@@ -82,23 +95,22 @@ export async function POST(req: Request) {
       .insert([{
         id: signalId,
         raw_content: rawContent,
-        fluff_words: intel.fluff || { cn: [], en: [] }, 
+        fluff_words: intel.fluff || { cn: [], en: [] },
         hard_facts: intel.facts || { cn: [], en: [] },
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict || {} } 
+        metadata: { bilingual: intel.verdict || {} }
       }]);
 
     // 🛡️ 底层兜底：万一并发导致预检穿透，被底层物理规则弹回
     if (dbError) {
       if (dbError.code === '23505') {
-        // 顺势查出现有 ID 并返回，优雅地化解崩溃
         const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
         if (retry && retry.length > 0) {
             return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
         }
         return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
       }
-      throw dbError; 
+      throw dbError;
     }
 
     return NextResponse.json({ success: true, data: { signalId } });

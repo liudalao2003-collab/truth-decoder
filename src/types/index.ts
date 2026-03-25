@@ -1,10 +1,12 @@
-// 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版)
+// 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版 + 暗影卷宗版)
 export interface DecodeResult {
   // 适配新版 { cn: string[], en: string[] } 或旧版 string[]
-  fluffWords: any; 
+  fluffWords: any;
   hardFacts: any;
   // verdict 现在也可能包含 metadata 里的双语对象
   verdict: any; 
+  // 🚀 核心新增：暗影卷宗的长文承载字段
+  dossierContent?: string;
 }
 
 // 统一的 API 响应契约
