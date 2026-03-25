@@ -1,0 +1,3072 @@
+
+
+============================================================
+File: .\next-env.d.ts
+============================================================
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+
+============================================================
+File: .\next.config.ts
+============================================================
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // 🚀 只保留 TypeScript 强行忽略，顺应 Next.js 16 规则
+  typescript: {
+    ignoreBuildErrors: true,
+  }
+};
+
+export default nextConfig;
+
+============================================================
+File: .\package.json
+============================================================
+{
+  "name": "truth-decoder",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.2",
+    "@upstash/redis": "^1.36.3",
+    "framer-motion": "^12.35.0",
+    "lucide-react": "^0.577.0",
+    "next": "16.1.6",
+    "openai": "^6.32.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+============================================================
+File: .\README.md
+============================================================
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+============================================================
+File: .\tsconfig.json
+============================================================
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+
+
+============================================================
+File: .\vercel.json
+============================================================
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 10 * * *"
+    }
+  ]
+}
+
+============================================================
+File: .\mcp-skills\blue-team-hacker\SKILL.md
+============================================================
+name: blue-team-hacker
+description: TruthDecoder的蓝军节点。专门对红军提取的事实进行漏洞攻击和反向推演。
+
+# Role
+
+你是一个极度多疑的做空机构分析师（Devil's Advocate）。你不相信任何表面事实。
+
+# Task
+
+读取“红军节点”提供的事实列表。你需要寻找这些事实背后的隐瞒点。
+思考：这个动作真正的受害者是谁？最大的隐形受益者是谁？这是否是在掩盖更大的资金链断裂或战略撤退？
+
+# Output Format
+
+严格按照以下格式输出：
+【反向攻击 1】：...
+【反向攻击 2】：...
+【深层动机推演】：...
+
+
+============================================================
+File: .\mcp-skills\judge-arbiter\SKILL.md
+============================================================
+name: judge-arbiter
+description: TruthDecoder 最高审判节点。负责在红蓝博弈后提取“终极利益逻辑”。
+
+# Role
+
+你是一位年薪千万的资深风控架构师。你对情绪免疫，只对“利益流转”敏感。
+
+# Task
+
+审阅【红军的狙击】与【蓝军的推演】。
+
+1. 剔除双方的情绪化词汇（如“精妙”、“阴暗”）。
+2. 提取蓝军中合理的商业类比（如：将外交行为类比为 SaaS 调价）。
+3. 结合红军揭露的真实危机，合成一段 150 字以内的“终极穿透判决”。
+
+# Output Format
+
+【逻辑定调】：(如：保护费重定价模型)
+                                          【终极判决】：(那一篇让 CEO 拍案叫绝的深度解析)
+
+
+============================================================
+File: .\mcp-skills\red-team-extractor\SKILL.md
+============================================================
+name: red-team-extractor
+description: TruthDecoder 高级情报分析节点。
+
+# Role
+
+你是一位年薪百万的资深商业情报分析师。你的任务是对通稿进行极致的“去伪存真”。
+
+# Task
+
+剥离所有宏大叙事和情绪词，提取底层的利益流转、权力变动或真实的商业动作。
+
+1. 提取 3 条【底层硬通货】：必须极其冷峻，只包含核心动作、资金走向或权力更迭。
+2. 揭露【掩盖意图】：指出该动作试图掩盖的真实危机或战略目的。
+3. 判定【受害者】：明确指出该决策牺牲了谁的利益。
+
+# Output Format
+
+【硬通货 1】：...
+【硬通货 2】：...
+【硬通货 3】：...
+【真实掩盖】：...
+【利益牺牲方】：...
+
+
+============================================================
+File: .\src\proxy.ts
+============================================================
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+// 🚨 核心修复：必须命名为 proxy
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // 🛡️ 保护所有 /admin 下的路由，但放行 /admin/login 本身
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+    const token = request.cookies.get('truth_admin_token');
+    
+    // 如果没有通行证，或者通行证造假，直接遣送回暗门入口
+    if (!token || token.value !== 'ACCESS_GRANTED_2026') {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+  }
+  
+  return NextResponse.next();
+}
+
+// 配置保安的巡逻范围
+export const config = {
+  matcher: ['/admin/:path*'],
+};
+
+============================================================
+File: .\src\app\globals.css
+============================================================
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+/* 核心视觉：骇客扫描线特效 */
+.scanline {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to bottom, transparent, rgba(185, 28, 28, 0.1), transparent);
+  position: fixed;
+  top: -100px;
+  animation: scanline 8s linear infinite;
+  z-index: 999;
+  pointer-events: none;
+}
+
+@keyframes scanline {
+  0% { top: -100px; }
+  100% { top: 100%; }
+}
+
+body {
+  background: black;
+  color: white;
+  overflow-x: hidden;
+  font-family: var(--font-geist-sans);
+}
+
+============================================================
+File: .\src\app\layout.tsx
+============================================================
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Truth Decoder - 商业情报解码",
+  description: "去伪存真引擎",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    // 核心微操：加入 suppressHydrationWarning，无视翻译插件篡改引发的报错
+    <html lang="zh-CN" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+
+============================================================
+File: .\src\app\page.tsx
+============================================================
+"use client";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ShieldAlert, Sparkles, Loader2, AlertTriangle, ArrowRight 
+} from 'lucide-react';
+import { SignalRecord } from '@/types/database';
+
+export default function HomePage() {
+  const router = useRouter();
+  const [input, setInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null); // 🚨 故障状态已就绪
+  
+  const [feed, setFeed] = useState<SignalRecord[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  
+  useEffect(() => {
+    fetchFeed();
+  }, []);
+
+  const fetchFeed = async (isLoadMore = false) => {
+    if (isLoadMore && isLoadingMore) return;
+    if (isLoadMore) setIsLoadingMore(true);
+    const cursor = isLoadMore && feed.length > 0 ? feed[feed.length - 1].created_at : '';
+    try {
+      const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}`);
+      const json = await res.json();
+      if (json.success) {
+        if (isLoadMore) {
+          setFeed(prev => {
+            const existingIds = new Set(prev.map(item => item.id));
+            const uniqueNewData = json.data.filter((item: SignalRecord) => !existingIds.has(item.id));
+            return [...prev, ...uniqueNewData];
+          });
+          if (json.data.length < 15) setHasMore(false);
+        } else {
+          setFeed(json.data);
+          if (json.data.length >= 15) setHasMore(true);
+        }
+      }
+    } catch (e) { console.error(e); }
+    finally { setIsLoadingMore(false); setIsInitialLoading(false); }
+  };
+
+  const handleStart = async () => {
+    if (!input.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null); // 每次点击前清空历史错误
+    try {
+      const res = await fetch('/api/v1/ingest', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
+        },
+        body: JSON.stringify({ rawContent: input })
+      });
+      const json = await res.json();
+      
+      // 🚀 核心判定：只在 100% 确认拿到 ID 时跳转
+      if (json.success && json.data?.signalId) {
+        setInput('');
+        router.push(`/decode/${json.data.signalId}`);
+      } else { 
+        // 否则必定抛出给 Catch 块
+        throw new Error(json.error || '引擎拒绝入库 (发生未知错误)'); 
+      }
+    } catch (err: any) { 
+      console.error("提交被拦截:", err.message);
+      setError(err.message); // 把错误信息挂载到界面上
+    } finally {
+      setIsSubmitting(false); // 必须重置按钮状态
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-black text-white p-4 md:p-8 relative selection:bg-red-950">
+      <div className="scanline" />
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* 左侧控制台 */}
+        <div className="lg:col-span-7 space-y-8">
+          <header className="flex items-center justify-between border-b-2 border-red-900/30 pb-6">
+            <div className="flex items-center gap-5">
+              <ShieldAlert className="text-red-600 w-12 h-12" />
+              <div>
+                <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.0 SECURE_GATE</p>
+              </div>
+            </div>
+          </header>
+
+          <section className="bg-zinc-950 border border-zinc-900 p-8 rounded-sm relative overflow-hidden group min-h-[600px] flex flex-col">
+            <textarea 
+              className="flex-1 w-full bg-black/30 border border-zinc-900 p-8 text-lg font-serif outline-none focus:border-red-900/50 transition-all resize-none mb-8 placeholder:text-zinc-800"
+              placeholder="请在此粘贴长篇大论的官方通稿..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isSubmitting}
+            />
+            
+            <button 
+              onClick={handleStart}
+              disabled={!input.trim() || isSubmitting}
+              className={`w-full py-8 text-xl font-black uppercase tracking-[0.5em] flex items-center justify-center gap-4 transition-all border ${
+                !input.trim() || isSubmitting ? 'bg-transparent border-zinc-900 text-zinc-800 cursor-not-allowed' : 'bg-red-950/20 border-red-900 text-red-500 hover:bg-red-900 hover:text-white'
+              }`}
+            >
+              {isSubmitting ? <Loader2 className="animate-spin" /> : <Sparkles />}
+              {isSubmitting ? 'Securing Intelligence...' : '载入去伪存真引擎'}
+            </button>
+
+            {/* 🚨 故障监控屏 (本次修复核心) */}
+            <AnimatePresence>
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-6 p-5 bg-red-950/30 border border-red-900 flex items-start gap-4 rounded-sm"
+                >
+                  <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <h4 className="text-[10px] font-mono text-red-500 uppercase tracking-widest mb-1.5 font-bold">System Fault / 引擎驳回</h4>
+                    <p className="text-sm text-red-400 font-mono leading-relaxed">{error}</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </section>
+        </div>
+
+        {/* 右侧情报流 */}
+        <div className="lg:col-span-5 flex flex-col bg-zinc-950/20 border-l border-zinc-900 p-6 h-[90vh]">
+          <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-900">
+            <AnimatePresence mode='popLayout'>
+              {feed.map((item) => (
+                <motion.div 
+                  key={item.id}
+                  layout
+                  onClick={() => router.push(`/decode/${item.id}`)}
+                  className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]"
+                >
+                  <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
+                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">“{item.verdict}”</p>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {hasMore && !isInitialLoading && (
+              <button onClick={() => fetchFeed(true)} className="w-full py-4 text-[10px] text-zinc-600 uppercase font-mono hover:text-red-500 transition-colors">Access Historical Intel</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+============================================================
+File: .\src\app\admin\dashboard\page.tsx
+============================================================
+"use client";
+import { useState, useEffect } from 'react';
+import { 
+  Power, Activity, Clock, BrainCircuit, Rocket, 
+  ShieldAlert, Settings2, Loader2, CheckCircle2
+} from 'lucide-react';
+
+export default function AdminDashboard() {
+  const [masterSwitch, setMasterSwitch] = useState(true);
+  const [intensity, setIntensity] = useState(50);
+  const [frequency, setFrequency] = useState('60'); 
+  const [aiDepth, setAiDepth] = useState('deep'); 
+  
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); 
+
+  // 📡 挂载时：拉取真实配置
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        const res = await fetch('/api/admin/config');
+        const json = await res.json();
+        if (json.success && json.data) {
+          const cfg = json.data;
+          if (cfg.master_switch) setMasterSwitch(cfg.master_switch.status === 'ON');
+          if (cfg.scrape_intensity) setIntensity(cfg.scrape_intensity.limit);
+          if (cfg.scrape_frequency) setFrequency(String(cfg.scrape_frequency.interval_minutes));
+          if (cfg.ai_depth) setAiDepth(cfg.ai_depth.mode);
+        }
+      } catch (e) {
+        console.error("连接神经中枢失败", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchConfigs();
+  }, []);
+
+  // 📡 交互时：精准轰入数据库
+  const saveConfig = async (id: string, value: any) => {
+    setIsSaving(true);
+    try {
+      await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, value })
+      });
+    } catch (e) {
+      console.error(`更新 ${id} 失败`, e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExecuteNow = async () => {
+    setIsExecuting(true);
+    try {
+      const res = await fetch('/api/admin/trigger', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        alert(`引擎轰炸完毕！成功新增 ${json.processedCount} 条绝密情报。请去前端首页查看！`);
+      } else {
+        alert(`拦截：${json.message || json.error}`);
+      }
+    } catch (e) {
+      alert("引擎启动失败，请检查控制台日志。");
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-red-600">
+          <Loader2 className="animate-spin w-12 h-12" />
+          <p className="font-mono text-xs tracking-widest uppercase">Syncing with Core...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-red-900 selection:text-white p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        <header className="flex items-center justify-between border-b border-zinc-900 pb-6">
+          <div className="flex items-center gap-4">
+            <ShieldAlert className="text-red-600 w-10 h-10" />
+            <div>
+              <h1 className="text-2xl font-black tracking-widest uppercase italic text-white">Command Center</h1>
+              <p className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">TRUTH DECODER // ADMIN DASHBOARD</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+            </span>
+            <span className="text-xs font-mono text-zinc-400">DB CONNECTED</span>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <section className="bg-black border border-zinc-900 p-6 flex items-center justify-between group hover:border-red-900/50 transition-colors">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-full ${masterSwitch ? 'bg-red-900/20 text-red-500' : 'bg-zinc-900 text-zinc-500'}`}>
+                <Power size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">系统总开关</h3>
+                <p className="text-xs text-zinc-500 font-mono">遇到紧急情况或 API 欠费，一键断电</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => { 
+                const newVal = !masterSwitch;
+                setMasterSwitch(newVal); 
+                saveConfig('master_switch', { status: newVal ? 'ON' : 'OFF' }); 
+              }}
+              className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${masterSwitch ? 'bg-red-600' : 'bg-zinc-700'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${masterSwitch ? 'translate-x-9' : 'translate-x-1'}`} />
+            </button>
+          </section>
+
+          <section className="bg-black border border-zinc-900 p-6 flex flex-col justify-center group hover:border-zinc-700 transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Rocket className="text-blue-500" size={20} />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">即刻触发 (Override)</h3>
+              </div>
+            </div>
+            <button 
+              onClick={handleExecuteNow}
+              disabled={isExecuting || !masterSwitch}
+              className={`w-full py-4 text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-3 transition-all ${
+                !masterSwitch ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed' :
+                isExecuting ? 'bg-blue-900/50 text-blue-400 border border-blue-900' : 
+                'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]'
+              }`}
+            >
+              {isExecuting ? <Loader2 className="animate-spin" size={18} /> : <Rocket size={18} />}
+              {isExecuting ? '云端引擎轰鸣中...' : '立即手动执行一次'}
+            </button>
+          </section>
+
+          <section className="bg-black border border-zinc-900 p-6 group hover:border-zinc-700 transition-colors md:col-span-2">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Activity className="text-yellow-500" size={20} />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">抓取猛烈程度 (Intensity)</h3>
+              </div>
+              <span className="text-2xl font-black text-yellow-500 font-mono">{intensity} <span className="text-sm text-zinc-500">条/次</span></span>
+            </div>
+            <input 
+              type="range" min="1" max="500" 
+              value={intensity}
+              onChange={(e) => setIntensity(Number(e.target.value))}
+              onMouseUp={() => saveConfig('scrape_intensity', { limit: intensity })}
+              onTouchEnd={() => saveConfig('scrape_intensity', { limit: intensity })}
+              className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+            />
+            <div className="flex justify-between text-xs text-zinc-600 font-mono mt-2">
+              <span>温柔扫街 (1)</span><span>饱和式轰炸 (500)</span>
+            </div>
+          </section>
+
+          <section className="bg-black border border-zinc-900 p-6 group hover:border-zinc-700 transition-colors">
+            <div className="flex items-center gap-3 mb-4">
+              <Clock className="text-purple-500" size={20} />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">捕获频率 (Frequency)</h3>
+            </div>
+            <select 
+              value={frequency}
+              onChange={(e) => { 
+                const val = e.target.value;
+                setFrequency(val); 
+                saveConfig('scrape_frequency', { interval_minutes: Number(val) }); 
+              }}
+              className="w-full bg-zinc-900 border border-zinc-800 text-white p-3 font-mono outline-none focus:border-purple-500 transition-colors cursor-pointer"
+            >
+              <option value="30">每 30 分钟 (极速盯盘)</option>
+              <option value="60">每 1 小时 (常规巡视)</option>
+              <option value="360">每 6 小时 (慢速沉淀)</option>
+              <option value="1440">每 24 小时 (每日复盘)</option>
+            </select>
+          </section>
+
+          <section className="bg-black border border-zinc-900 p-6 group hover:border-zinc-700 transition-colors">
+            <div className="flex items-center gap-3 mb-4">
+              <BrainCircuit className="text-emerald-500" size={20} />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">AI 深度 (Cognition)</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => { setAiDepth('quick'); saveConfig('ai_depth', { mode: 'quick' }); }}
+                className={`p-3 text-sm font-bold border transition-all ${aiDepth === 'quick' ? 'bg-emerald-900/30 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
+              >快速摘要</button>
+              <button 
+                onClick={() => { setAiDepth('deep'); saveConfig('ai_depth', { mode: 'deep' }); }}
+                className={`p-3 text-sm font-bold border transition-all ${aiDepth === 'deep' ? 'bg-emerald-900/30 border-emerald-500 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
+              >深度复盘</button>
+            </div>
+          </section>
+
+        </div>
+
+        <div className="flex justify-end pt-4">
+          <div className="flex items-center gap-2 text-xs font-mono">
+            {isSaving ? (
+              <span className="text-yellow-500 flex items-center gap-2"><Loader2 className="animate-spin w-3 h-3" /> 同步至神经中枢...</span>
+            ) : (
+              <span className="text-green-500 flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> 遥控器与 Supabase 保持心跳连接</span>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </main>
+  );
+}
+
+============================================================
+File: .\src\app\admin\login\page.tsx
+============================================================
+"use client";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ShieldAlert, Terminal, Loader2 } from 'lucide-react';
+
+export default function AdminLogin() {
+  const [passcode, setPasscode] = useState('');
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passcode) return;
+    
+    setLoading(true);
+    setError(false);
+
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode })
+      });
+
+      if (res.ok) {
+        // 门锁开启，前往中控台 (Dashboard)
+        router.push('/admin/dashboard');
+      } else {
+        setError(true);
+        setPasscode('');
+      }
+    } catch (err) {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 selection:bg-red-900">
+      <div className="scanline" />
+      <div className="w-full max-w-md">
+        <div className="flex flex-col items-center mb-12">
+          <ShieldAlert className="text-red-600 w-16 h-16 mb-6" />
+          <h1 className="text-2xl font-black tracking-[0.3em] uppercase italic text-zinc-300">Command Center</h1>
+          <p className="text-[10px] font-mono text-red-600 tracking-[0.4em] mt-2">RESTRICTED AREA</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="relative group">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+            <Terminal className={`w-5 h-5 ${error ? 'text-red-500' : 'text-zinc-600 group-focus-within:text-red-500'} transition-colors`} />
+          </div>
+          <input
+            type="password"
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            disabled={loading}
+            className={`w-full bg-zinc-950/50 border-2 ${error ? 'border-red-600 text-red-500' : 'border-zinc-800 focus:border-red-900'} p-4 pl-12 text-center text-lg font-mono tracking-widest outline-none transition-all placeholder:text-zinc-800 placeholder:tracking-normal`}
+            placeholder="ENTER PASSCODE"
+            autoFocus
+          />
+          {error && <p className="absolute -bottom-8 left-0 w-full text-center text-xs font-mono text-red-500 tracking-widest uppercase">Unauthorized Access</p>}
+          
+          <button type="submit" className="hidden">Submit</button>
+        </form>
+
+        {loading && (
+          <div className="mt-8 flex justify-center">
+            <Loader2 className="animate-spin text-red-600 w-6 h-6" />
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+============================================================
+File: .\src\app\api\admin\config\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { cookies } from 'next/headers';
+
+// 🛡️ 强制鉴权
+async function verifyCommander() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('truth_admin_token');
+  console.log("🔐 [API鉴权] 当前携带的 Token = "[CENSORED_BY_ARCHITECT]"无");
+  return token?.value === 'ACCESS_GRANTED_2026';
+}
+
+export async function GET() {
+  console.log("📡 [API-GET] 收到读取配置请求！");
+  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    const { data, error } = await supabaseAdmin.from('system_configs').select('*');
+    if (error) {
+      console.error("❌ [API-GET] 数据库查询失败:", error.message);
+      throw error;
+    }
+    console.log("✅ [API-GET] 从 Supabase 成功拉取配置条数:", data?.length);
+    const configMap = data.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {});
+    return NextResponse.json({ success: true, data: configMap });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  console.log("📡 [API-POST] 收到修改配置请求！");
+  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    const { id, value } = await req.json();
+    console.log(`📝 [API-POST] 准备写入 Supabase -> 键: [${id}], 值:`, value);
+    
+    const { error } = await supabaseAdmin
+      .from('system_configs')
+      .upsert({ id, value, updated_at: new Date().toISOString() });
+
+    if (error) {
+      console.error("❌ [API-POST] 数据库写入失败:", error.message);
+      throw error;
+    }
+    console.log("✅ [API-POST] 写入 Supabase 成功！");
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("❌ [API-POST] 致命错误:", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\admin\trigger\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { cookies } from 'next/headers';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
+
+async function verifyCommander() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('truth_admin_token');
+  return token?.value === 'ACCESS_GRANTED_2026';
+}
+
+export async function POST() {
+  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    console.log("-----------------------------------------");
+    console.log("🚀 [云端引擎] 战术迂回：全面切入 CNBC 国际金融流...");
+    
+    const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
+    const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
+
+    if (configMap.master_switch?.status === 'OFF') {
+      return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
+    }
+
+    const rawIntensity = configMap.scrape_intensity?.limit || 1;
+    const intensity = Math.min(rawIntensity, 3); // 强行限制为 3 条，防 Vercel 超时
+    const aiDepth = configMap.ai_depth?.mode || 'deep';
+
+    // 🎯 战术转移：CNBC 的 RSS 极度稳定，绝对不会 403
+    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+    console.log("📡 [1/4] 正在无阻碍接入 CNBC RSS...");
+    
+    const rssRes = await fetch(targetUrl, { 
+      cache: 'no-store',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' }
+    });
+
+    if (!rssRes.ok) throw new Error(`CNBC 接入失败: ${rssRes.status}`);
+    const rssText = await rssRes.text();
+    
+    const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity);
+    if (items.length === 0) throw new Error("未能提取到有效新闻链接");
+
+    let processedCount = 0;
+
+    for (const item of items) {
+      try {
+        const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
+        const link = item[2].trim();
+        
+        console.log(`🕵️‍♂️ [2/4] 正在潜入 CNBC 原文: ${title.substring(0, 30)}...`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const articleRes = await fetch(`https://r.jina.ai/${link}`, {
+          headers: { 'X-Return-Format': 'markdown' },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        let fullText = await articleRes.text();
+
+        console.log("🧹 [3/4] 绞肉机启动：抹除 CNBC 导航垃圾...");
+        // 🚀 核心过滤：彻底粉碎 Jina 解析出来的网页杂质
+        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, ''); // 抹除超链接
+        fullText = fullText.replace(/!\[.*?\]/g, '');       // 抹除图片
+        fullText = fullText.replace(/#+/g, '');             // 抹除 Markdown 标题符号
+        fullText = fullText.replace(/\s+/g, ' ').substring(0, 3500); // 压缩空格，截取精华
+
+        if (fullText.length < 200) {
+          console.warn("⚠️ 提纯后情报量过低 (可能是视频新闻)，跳过该目标。");
+          continue;
+        }
+
+        console.log(`🧠 [4/4] 已获得完美纯净生肉 (${fullText.length}字)，移交 AI 深度审判...`);
+
+        const depthPrompt = aiDepth === 'quick' 
+          ? "提取核心 facts 和一句 verdict，双语 JSON。"
+          : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\", \"事实2\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }";
+
+        const completion = await openai.chat.completions.create({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: depthPrompt },
+            { role: "user", content: `标题：${title}\n内容：${fullText}` }
+          ],
+          response_format: { type: 'json_object' }
+        });
+
+        const intel = JSON.parse(completion.choices[0].message.content || '{}');
+
+        await supabaseAdmin.from('signals').insert([{
+          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
+          fluff_words: intel.fluff || { cn: [], en: [] }, 
+          hard_facts: intel.facts || { cn: [], en: [] },
+          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
+          metadata: { source_url: link } 
+        }]);
+
+        processedCount++;
+        console.log("✅ 纯净审判完成，已落盘。");
+
+      } catch (innerError: any) {
+        console.error(`⚠️ 单条情报处理失败 (${innerError.name}):`, innerError.message);
+        continue; 
+      }
+    }
+
+    return NextResponse.json({ success: true, processedCount });
+
+  } catch (error: any) {
+    console.error("❌ [云端引擎] 核心逻辑崩溃:", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\auth\route.ts
+============================================================
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+
+export async function POST(req: Request) {
+  try {
+    const { passcode } = await req.json();
+    const serverPass = process.env.ADMIN_PASSCODE;
+
+    // 🚨 这里的日志会直接出现在你的 VS Code 终端里
+    console.log("-----------------------------------------");
+    console.log("🔐 [DEBUG] 正在核对指挥官权限...");
+    console.log("📡 [收到请求] 用户输入:", `[${passcode}]`);
+    console.log("📦 [后端读取] 环境变量:", `[${serverPass}]`);
+    
+    if (passcode === serverPass && serverPass !== undefined) {
+      console.log("✅ [结果] 匹配成功，准予进入！");
+      (await cookies()).set('truth_admin_token', 'ACCESS_GRANTED_2026', { 
+        maxAge: 60 * 60 * 24 * 7, 
+        httpOnly: true,
+        path: '/'
+      });
+      return NextResponse.json({ success: true });
+    }
+    
+    console.log("❌ [结果] 匹配失败：密码不一致或环境变量未读取");
+    return NextResponse.json({ success: false }, { status: 401 });
+  } catch (e) {
+    return NextResponse.json({ success: false }, { status: 400 });
+  }
+}
+
+============================================================
+File: .\src\app\api\cron\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import OpenAI from 'openai';
+
+// 🚀 加上这一行：强行将 Vercel 无服务器函数的存活时间提升至 60 秒极限！
+export const maxDuration = 60;
+
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
+
+export async function GET(req: Request) {
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  try {
+    console.log("-----------------------------------------");
+    console.log("⏰ [自动巡航] Vercel 送报员准点敲门...");
+    
+    const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
+    const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
+
+    if (configMap.master_switch?.status === 'OFF') {
+      console.log("🛑 [自动巡航] 总开关关闭，拒绝开门。");
+      return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
+    }
+
+    const frequencyMinutes = configMap.scrape_frequency?.interval_minutes || 60; 
+    const lastRunTimeStr = configMap.cron_last_run?.time; 
+    
+    if (lastRunTimeStr) {
+      const lastRun = new Date(lastRunTimeStr).getTime();
+      const now = new Date().getTime();
+      const minutesPassed = (now - lastRun) / (1000 * 60);
+
+      if (minutesPassed < (frequencyMinutes - 1)) {
+        console.log(`💤 [自动巡航] 离合器介入：距离上次执行仅过去 ${Math.round(minutesPassed)} 分钟，未达设定的 ${frequencyMinutes} 分钟。继续休眠。`);
+        return NextResponse.json({ success: true, message: 'Clutch engaged' });
+      }
+    }
+
+    console.log(`🔥 [自动巡航] 离合器放行！面板设定: 每 ${frequencyMinutes} 分钟。开始执行打击！`);
+
+    await supabaseAdmin.from('system_configs').upsert({ 
+      id: 'cron_last_run', 
+      value: { time: new Date().toISOString() },
+      updated_at: new Date().toISOString() 
+    });
+
+    const rawIntensity = configMap.scrape_intensity?.limit || 1;
+    const intensity = Math.min(rawIntensity, 3); 
+    const aiDepth = configMap.ai_depth?.mode || 'deep';
+
+    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+    const rssRes = await fetch(targetUrl, { 
+      cache: 'no-store',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome/122.0.0.0 Safari/537.36' }
+    });
+
+    if (!rssRes.ok) throw new Error("RSS 接入失败");
+    const rssText = await rssRes.text();
+    const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity);
+    
+    let processedCount = 0;
+
+    for (const item of items) {
+      try {
+        const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
+        const link = item[2].trim();
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const articleRes = await fetch(`https://r.jina.ai/${link}`, {
+          headers: { 'X-Return-Format': 'markdown' },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        let fullText = await articleRes.text();
+        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
+
+        if (fullText.length < 200) continue;
+
+        const depthPrompt = aiDepth === 'quick' 
+          ? "提取核心 facts 和一句 verdict，双语 JSON。"
+          : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }";
+
+        const completion = await openai.chat.completions.create({
+          model: "deepseek-chat",
+          messages: [{ role: "system", content: depthPrompt }, { role: "user", content: `标题：${title}\n内容：${fullText}` }],
+          response_format: { type: 'json_object' }
+        });
+
+        const intel = JSON.parse(completion.choices[0].message.content || '{}');
+
+        await supabaseAdmin.from('signals').insert([{
+          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
+          fluff_words: intel.fluff || { cn: [], en: [] }, 
+          hard_facts: intel.facts || { cn: [], en: [] },
+          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
+          metadata: { source_url: link } 
+        }]);
+
+        processedCount++;
+      } catch (e) {
+        continue;
+      }
+    }
+
+    console.log(`✅ [自动巡航] 本次轰炸完毕！新增 ${processedCount} 篇情报。`);
+    return NextResponse.json({ success: true, processedCount });
+
+  } catch (error: any) {
+    console.error("❌ [自动巡航] 核心崩溃:", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\decode\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) throw new Error('Missing ID');
+
+    const { data, error } = await supabaseAdmin
+      .from('signals')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    
+    // 🛡️ 强制类型断言，防止 TS 报错
+    return NextResponse.json({ success: true, data: data as any });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\feed\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { ApiResponse } from '@/types';
+import { SignalRecord } from '@/types/database';
+
+export const runtime = 'edge';
+
+/**
+ * 核心业务：工业级游标分页的情报流接口
+ * 接受 searchParams 中的 cursor (created_at 时间戳)
+ */
+export async function GET(request: Request): Promise<NextResponse<ApiResponse<SignalRecord[]>>> {
+  try {
+    const { searchParams } = new URL(request.url);
+    const cursor = searchParams.get('cursor'); // 获取前端传来的上一片末尾时间戳
+
+    let query = supabaseAdmin
+      .from('signals')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(15); // 工业级分片厚度：15条
+
+    // 🚨 核心逻辑：分页防线
+    if (cursor) {
+      // LT 代表 Lower Than (小于)，只查询比当前 cursor 更早的情报
+      query = query.lt('created_at', cursor);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, data: data || [] });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\report\[id]\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { ApiResponse, DecodeResult } from '@/types';
+import { SignalRecord } from '@/types/database';
+import { logger } from '@/utils/logger';
+
+export interface ReportPayload {
+  rawContent: string;
+  result: DecodeResult;
+  viewCount?: number;
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse<ApiResponse<ReportPayload>>> {
+  try {
+    const resolvedParams = await params;
+    const signalId = resolvedParams.id;
+    
+    logger.start(`发起 Report 获取请求, Signal ID: ${signalId}`);
+    logger.async(`查询 Supabase 数据库: ${signalId}`);
+
+    // 1. 从 Supabase 获取数据
+    const { data: record, error: fetchError } = await supabaseAdmin
+      .from('signals')
+      .select('*')
+      .eq('id', signalId)
+      .single<SignalRecord>();
+
+    if (fetchError || !record) {
+      logger.crash(`Supabase 查无此记录或查询失败: ${fetchError?.message || 'Not Found'}`);
+      return NextResponse.json({ success: false, error: '报告不存在或信号已被抹除' }, { status: 404 });
+    }
+
+    // 2. 计算新的浏览量
+    const updatedCount = (record.view_count || 0) + 1;
+
+    // 3. 异步更新浏览量 (非阻塞式更新，不等待其完成即可返回响应，压榨性能)
+    supabaseAdmin
+      .from('signals')
+      .update({ view_count: updatedCount })
+      .eq('id', signalId)
+      .then(({ error }) => {
+        if (error && process.env.NODE_ENV === 'development') {
+          console.log(`🔴 [模块_崩溃] -> 异步更新 view_count 失败:`, error.message);
+        }
+      });
+
+    logger.success(`Report 提取成功，当前 View: ${updatedCount}`);
+
+    // 4. 重组为前端严格期望的契约类型
+    const payload: ReportPayload = {
+      rawContent: record.raw_content,
+      result: {
+        fluffWords: record.fluff_words,
+        hardFacts: record.hard_facts,
+        verdict: record.verdict
+      },
+      viewCount: updatedCount
+    };
+
+    return NextResponse.json({ 
+      success: true, 
+      data: payload
+    });
+
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : '数据库连接异常';
+    logger.crash(`Report 获取链路崩塌: ${errMsg}`);
+    return NextResponse.json({ success: false, error: '深层数据提取异常' }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\terminal\route.ts
+============================================================
+import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { TerminalStreamPayload, TerminalMessage } from '@/types';
+import { logger } from '@/utils/logger';
+
+// 强制使用 Edge Runtime，避免 Node.js 阻塞，获得极低延迟的流式处理性能 [cite: 61]
+export const runtime = 'edge';
+
+export async function POST(request: Request) {
+  try {
+    // 1. 解析与安全校验 (绝对的 TS 纯洁性) [cite: 62]
+    const body = await request.json();
+    const { signalId, messages } = body as TerminalStreamPayload;
+
+    logger.start(`接收到 Terminal 流式请求, Signal: ${signalId}`);
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      logger.crash('Terminal 网关 - 记忆链为空或格式异常');
+      return new Response(JSON.stringify({ error: '无效的上下文记忆链' }), { status: 400 });
+    }
+
+    // 2. 注入系统级护栏指令 (拦截越狱与偏题) [cite: 66]
+    // 严密契约：直接声明为 TerminalMessage 类型，彻底消灭 as 强转
+    const systemGuardrail: TerminalMessage = {
+      role: 'system',
+      content: '你现在是 TruthDecoder 的深度审讯终端。基于之前的去伪存真报告，使用极度冷峻、客观、无情的数据化口吻回答用户的追问。禁止使用任何反问句、感叹号或共情语。如果用户的问题偏离商业、金融、人事或权力更迭，冷酷地拒绝回答。'
+    };
+
+    // 纯洁的数组解构拼装，TS 类型严丝合缝
+    const safeMessages: TerminalMessage[] = [systemGuardrail, ...messages];
+
+    // 3. 呼叫流式引擎 [cite: 68]
+    const streamResponse = await createDeepSeekStream(safeMessages);
+
+    logger.success('Terminal 网关流式管道已连接，开始向客户端泵入字节流');
+
+    // 4. 原生流透传 [cite: 69]
+    return new Response(streamResponse.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : '流式网关级联失效';
+    logger.crash(errMsg);
+    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\decode\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { analyzeTextWithDeepSeek } from '@/services/deepseek';
+import { ApiResponse, DecodeResult } from '@/types';
+
+// 强制声明 Edge 运行时。由于不涉及 Redis 连接，Edge Runtime 能提供极低延迟的全球分布响应
+export const runtime = 'edge';
+
+// 严格的 TS 纯洁性：定义 B 端请求的载荷契约
+interface BSideDecodeRequest {
+  content: string;
+}
+
+export async function POST(request: Request): Promise<NextResponse<ApiResponse<DecodeResult>>> {
+  try {
+    console.log('🟢 [状态发起] -> 变量: B端网关接收到外部直连请求');
+
+    // 1. 物理级鉴权防线 (商业化闸机核心)
+    // 业务说明：拦截一切白嫖请求。B端客户必须在 HTTP Header 中携带我们分发的凭证
+    const authHeader = request.headers.get('authorization');
+    const expectedKey = process.env.B_SIDE_API_KEY;
+
+    if (!expectedKey) {
+      console.log('🔴 [错误捕获] -> 节点: B端网关 - 系统未配置商业化主密钥 (B_SIDE_API_KEY)');
+      return NextResponse.json({ success: false, error: '商业化网关暂未激活，请联系商务' }, { status: 503 });
+    }
+
+    if (authHeader !== `Bearer ${expectedKey}`) {
+      console.log('🔴 [错误捕获] -> 节点: B端网关 - 越权访问尝试已被拦截');
+      return NextResponse.json({ success: false, error: '未经授权的调用凭证 (Invalid API Key)' }, { status: 401 });
+    }
+
+    // 2. 载荷解析与 TS 类型断言
+    const body = await request.json();
+    const { content } = body as BSideDecodeRequest;
+
+    if (!content || typeof content !== 'string') {
+      console.log('🔴 [错误捕获] -> 节点: B端网关 - 客户入参非法');
+      return NextResponse.json({ success: false, error: '缺少有效的情报文本 (字段名需为 content)' }, { status: 400 });
+    }
+
+    console.log(`🟡 [网络请求] -> 接口: 调度底层 DeepSeek 引擎, 文本长度: ${content.length}`);
+
+    // 3. 核心解耦：直接调度底层分析服务
+    // 业务说明：直接拿到纯净的 DecodeResult，彻底绕开 C 端的 Redis 存储与 Signal ID 逻辑
+    const result = await analyzeTextWithDeepSeek(content);
+
+    console.log('🔵 [数据渲染] -> 组件: B端网关成功向外泵出高净值 JSON 资产');
+
+    // 4. 纯净输出给 B 端调用者
+    return NextResponse.json({ success: true, data: result });
+
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'B端网关级联失效';
+    console.log('🔴 [错误捕获] -> 节点: B端 API 商业化网关', errMsg);
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\delete\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+
+export const runtime = 'edge';
+
+export async function DELETE(request: Request) {
+  try {
+    // 🛡️ 最高权限校验 (上帝模式通行证)
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Clearance Level Too Low' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Missing Target ID' }, { status: 400 });
+    }
+
+    // 🔪 物理抹杀执行
+    const { error } = await supabaseAdmin
+      .from('signals')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error(`[PURGE_FAILED] 抹杀失败: ${error.message}`);
+      throw error;
+    }
+
+    console.log(`[PURGE_SUCCESS] 资产已物理销毁: ${id}`);
+    return NextResponse.json({ success: true, message: 'Asset Neutralized' });
+
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\ingest\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
+
+export async function POST(req: Request) {
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { rawContent } = await req.json();
+    if (!rawContent) throw new Error('Empty content');
+
+    // 🛡️ 穹顶预检：提取前 100 个字符进行匹配 (避开完整长文本可能导致的 GET URL 长度超限问题)
+    const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
+    const { data: existing } = await supabaseAdmin
+      .from('signals')
+      .select('id')
+      .ilike('raw_content', `${safeSnippet}%`)
+      .limit(1);
+
+    // 🚀 如果库里已经有了，直接返回现有 ID，让前端“秒切”过去，不消耗任何 Token
+    if (existing && existing.length > 0) {
+      console.log(`[前置拦截] 资产已存在，引导至: ${existing[0].id}`);
+      return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
+    }
+
+    const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+
+    const completion = await openai.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: "你是一个冷酷的华尔街做空分析师。请将通稿解码为中英双语 JSON：\n{\n  \"facts\": { \"cn\":[], \"en\":[] },\n  \"fluff\": { \"cn\":[], \"en\":[] },\n  \"verdict\": { \"cn\":\"\", \"en\":\"\" }\n}"
+        },
+        { role: "user", content: rawContent }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    let rawJson = completion.choices[0].message.content || '{}';
+    rawJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
+    
+    let intel;
+    try {
+      intel = JSON.parse(rawJson);
+    } catch (parseError) {
+      throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
+    }
+
+    const { error: dbError } = await supabaseAdmin
+      .from('signals')
+      .insert([{
+        id: signalId,
+        raw_content: rawContent,
+        fluff_words: intel.fluff || { cn: [], en: [] }, 
+        hard_facts: intel.facts || { cn: [], en: [] },
+        verdict: intel.verdict?.cn || "解析失败",
+        metadata: { bilingual: intel.verdict || {} } 
+      }]);
+
+    // 🛡️ 底层兜底：万一并发导致预检穿透，被底层物理规则弹回
+    if (dbError) {
+      if (dbError.code === '23505') {
+        // 顺势查出现有 ID 并返回，优雅地化解崩溃
+        const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
+        if (retry && retry.length > 0) {
+            return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
+        }
+        return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
+      }
+      throw dbError; 
+    }
+
+    return NextResponse.json({ success: true, data: { signalId } });
+
+  } catch (error: any) {
+    console.error("[INGEST_API_ERROR]", error.message);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\wash\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
+
+export async function POST(req: Request) {
+  try {
+    // 1. 严格鉴权
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, rawContent } = await req.json();
+    if (!id || !rawContent) throw new Error('Missing ID or Content');
+
+    // 2. 挂载 V5 版本最新暗黑投行 Prompt 进行重铸
+    const completion = await openai.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: `你是一个冷酷、极度敏锐的华尔街做空机构分析师。你的任务是撕开新闻稿的伪装，直击资本底牌。
+          请将输入的商业通稿解码为中英双语的 JSON。
+          
+          输出结构严格如下：
+          {
+            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only", "..."] },
+            "fluff": { "cn": ["分析对方刻意隐瞒的风险/隐秘动机/资本意图"], "en": ["Hidden agenda/Covered-up risks"] },
+            "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict." }
+          }`
+        },
+        { role: "user", content: rawContent }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    const intel = JSON.parse(completion.choices[0].message.content || '{}');
+
+    // 3. 🚨 物理覆盖：使用 .update() 而不是 .insert()，精准覆盖旧记录
+    const { error: dbError } = await supabaseAdmin
+      .from('signals')
+      .update({
+        fluff_words: intel.fluff, // 注入新的隐秘动机
+        hard_facts: intel.facts,
+        verdict: intel.verdict?.cn || "解析失败",
+        metadata: { bilingual: intel.verdict, washed: true } // 打上清洗标记
+      })
+      .eq('id', id);
+
+    if (dbError) throw dbError;
+    return NextResponse.json({ success: true, message: `Signal ${id} Washed` });
+
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\decode\[id]\error.tsx
+============================================================
+"use client";
+
+import { useEffect } from "react";
+import { AlertTriangle, RefreshCcw, ShieldAlert } from "lucide-react";
+import { i18n } from "@/config/i18n";
+
+/**
+ * 核心业务说明：
+ * 局部容灾边界组件 (Error Boundary)。
+ * 它的作用是拦截该路由下任何未被捕获的 React 渲染错误或生命周期异常，
+ * 提供物理级的降级 UI，保障 C 端/B 端用户的视觉体验不至于沦为浏览器默认的崩溃页。
+ */
+export default function DecodeError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // 强制在客户端记录崩溃死因，但不向外暴露机密环境信息
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔴 [模块_崩溃] -> Error Boundary 捕获到致命异常:`, error);
+    }
+  }, [error]);
+
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 selection:bg-red-900">
+      <div className="bg-zinc-950 border border-red-900/50 p-10 rounded-sm text-center max-w-lg shadow-[0_0_50px_rgba(153,27,27,0.1)] relative overflow-hidden">
+        <ShieldAlert className="absolute -right-10 -top-10 w-40 h-40 text-red-900/10 pointer-events-none" />
+        
+        <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-6 animate-pulse" />
+        
+        <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-widest">
+          SIGNAL LOST / 信号中断
+        </h2>
+        
+        <p className="text-zinc-400 text-sm mb-8 font-mono bg-black/50 p-4 border border-zinc-900 rounded-sm break-words">
+          {error.message || "深层解码引擎遭遇未知阻击，链路已物理切断。"}
+        </p>
+        
+        <button 
+          onClick={() => reset()} 
+          className="group relative bg-red-700 hover:bg-red-600 text-white px-8 py-4 font-black uppercase tracking-widest text-sm rounded-sm overflow-hidden transition-all flex items-center justify-center gap-3 w-full"
+        >
+          <RefreshCcw className="w-4 h-4 group-hover:-rotate-180 transition-transform duration-500" />
+          重新建立连接
+        </button>
+      </div>
+    </div>
+  );
+}
+
+============================================================
+File: .\src\app\decode\[id]\page.tsx
+============================================================
+"use client";
+import { useState, useEffect, use } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Loader2, AlertCircle, Target, Skull, Database, Trash2 } from 'lucide-react';
+import RawNarrative from '@/components/features/decode/RawNarrative';
+import { SignalRecord } from '@/types/database';
+
+export default function DecodePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [signal, setSignal] = useState<SignalRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false); // 🚀 抹杀状态
+  const [lang, setLang] = useState<'cn' | 'en'>('cn');
+
+  useEffect(() => {
+    const fetchSignal = async () => {
+      try {
+        const res = await fetch(`/api/decode?id=${id}`);
+
+        // 🛡️ 柔性拦截：如果查不到数据（404），不要抛出 Error 炸毁前端，而是静默退出
+        if (!res.ok) {
+          setSignal(null);
+          return;
+        }
+
+        const json = await res.json();
+        if (json.success) {
+          setSignal(json.data);
+        } else {
+          setSignal(null);
+        }
+      } catch (e) {
+        console.error("链路切断:", e);
+        setSignal(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSignal();
+  }, [id]);
+
+  // 🔪 核心逻辑：执行物理抹杀
+  const handlePurge = async () => {
+    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n\n此操作将从数据库中物理销毁该情报，永久不可逆转。\n\n确认抹杀？");
+    if (!confirmPurge) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/v1/delete?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` // 使用你的最高权限 Token
+        }
+      });
+      const json = await res.json();
+      
+      if (json.success) {
+        // 抹杀成功，无缝撤退回首页
+        router.push('/');
+      } else {
+        alert(`抹杀失败: ${json.error}`);
+      }
+    } catch (e) {
+      alert("终端通信切断，无法执行抹杀指令。");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <Loader2 className="animate-spin text-zinc-500 w-8 h-8" />
+    </div>
+  );
+
+  if (!signal) return (
+    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
+      <AlertCircle className="text-red-600 w-12 h-12 mb-4" />
+      <h2 className="text-zinc-400 font-mono uppercase tracking-widest text-sm">Asset Neutralized / 资产已被销毁</h2>
+      <button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 font-mono text-xs hover:bg-white hover:text-black transition-all">Back to Index</button>
+    </div>
+  );
+
+  const getBilingualField = (field: any) => (Array.isArray(field) ? field : field?.[lang] || []);
+  const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
+
+  return (
+    <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
+      <div className="max-w-5xl mx-auto px-6">
+        
+        {/* 顶部导航 */}
+        <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-12">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all">
+            <ArrowLeft size={16} />
+            <span className="text-xs font-mono uppercase tracking-widest">Index</span>
+          </button>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex bg-black border border-zinc-800 rounded-sm overflow-hidden">
+              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
+              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
+            </div>
+            
+            {/* 🔪 抹杀按钮 */}
+            <button 
+              onClick={handlePurge}
+              disabled={isDeleting}
+              className="group flex items-center justify-center w-8 h-8 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"
+              title="物理抹杀该资产"
+            >
+              {isDeleting ? <Loader2 size={14} className="animate-spin text-red-600" /> : <Trash2 size={14} className="text-red-900 group-hover:text-red-500" />}
+            </button>
+          </div>
+        </header>
+
+        {/* 致命裁决 */}
+        <section className="mb-16">
+          <div className="flex items-center gap-3 mb-6">
+             <div className="w-2 h-2 bg-red-600" />
+             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Final Verdict</span>
+          </div>
+          <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-[1.2]">
+            {getBilingualVerdict()}
+          </h2>
+        </section>
+
+        {/* 核心数据网格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm">
+              <h4 className="flex items-center gap-3 text-zinc-400 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-zinc-800 pb-4">
+                 <Target size={14} /> Hard Facts / 骨干事实
+              </h4>
+              <div className="space-y-6">
+                 {getBilingualField(signal.hard_facts).map((fact: string, i: number) => (
+                   <div key={i} className="flex gap-4 items-start">
+                      <span className="font-mono text-[10px] text-zinc-600 mt-1 shrink-0">{(i+1).toString().padStart(2,'0')}</span>
+                      <p className="text-zinc-300 font-serif leading-relaxed text-sm md:text-base">{fact}</p>
+                   </div>
+                 ))}
+              </div>
+           </div>
+           
+           <div className="bg-red-950/10 border border-red-900/30 p-8 rounded-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-red-900/10 rounded-full blur-3xl" />
+              <h4 className="flex items-center gap-3 text-red-500 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-red-900/30 pb-4 relative z-10">
+                 <Skull size={14} /> Hidden Agenda / 隐秘动机
+              </h4>
+              <div className="space-y-6 relative z-10">
+                 {getBilingualField(signal.fluff_words).map((fluff: string, i: number) => (
+                   <div key={i} className="flex gap-4 items-start">
+                      <span className="font-mono text-[10px] text-red-900 mt-1 shrink-0">⚠</span>
+                      <p className="text-red-200/90 font-serif leading-relaxed text-sm md:text-base">{fluff}</p>
+                   </div>
+                 ))}
+              </div>
+           </div>
+        </div>
+
+        {/* 原始数据库 */}
+        <div>
+           <h4 className="flex items-center gap-3 text-zinc-600 font-mono text-xs uppercase tracking-[0.2em] mb-6">
+              <Database size={14} /> Raw Intercept / 原始截获数据
+           </h4>
+           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm font-serif text-sm leading-relaxed text-zinc-500 text-justify">
+              {signal.raw_content}
+           </div>
+        </div>
+
+      </div>
+    </main>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\HardFacts.tsx
+============================================================
+"use client";
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, EyeOff, CheckSquare, Target } from 'lucide-react';
+import { i18n } from '@/config/i18n';
+
+interface HardFactsProps {
+  hardFacts: string[];
+  isErased: boolean;
+  onErase: () => void;
+}
+
+export default function HardFacts({ hardFacts, isErased, onErase }: HardFactsProps) {
+  // 赛博卡片升腾变体
+  const cardVariants = {
+    hidden: { opacity: 0, y: 100, filter: "blur(10px)" },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      filter: "blur(0px)",
+      transition: { 
+        duration: 0.8,
+        ease: [0.17, 0.67, 0.83, 0.67],
+        staggerChildren: 0.2 // 子 facts 升腾延迟
+      } 
+    }
+  };
+
+  // Fact 升腾变体
+  const factVariants = {
+    hidden: { opacity: 0, x: 20 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.7 } }
+  };
+
+  return (
+    <motion.div 
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      className="bg-black border border-zinc-900 border-l-4 border-l-red-900 rounded-sm relative overflow-hidden flex flex-col shadow-[0_0_50px_rgba(239,68,68,0.05)] selection:bg-red-950 selection:text-white"
+    >
+      <AnimatePresence>
+        {!isErased && (
+          <motion.div 
+            exit={{ opacity: 0, filter: "blur(20px)" }}
+            className="absolute inset-0 z-10 bg-black flex flex-col items-center justify-center p-8 text-center"
+          >
+            <EyeOff className="w-16 h-16 text-red-900 mb-6 opacity-40" />
+            <h3 className="text-2xl font-black uppercase text-white mb-4 tracking-[0.2em]">滤镜检测完成</h3>
+            <p className="text-zinc-500 font-serif mb-10 max-w-sm text-sm">点击执行物理级数据剔除，同步底层利益逻辑。</p>
+            <button onClick={onErase} className="group relative bg-red-700 hover:bg-red-600 text-white px-10 py-5 text-xl font-black tracking-widest uppercase transition-all rounded-sm overflow-hidden shadow-[0_0_30px_rgba(185,28,28,0.3)]">
+              <span className="relative z-10 flex items-center gap-4">
+                <Zap size={24} className="group-hover:animate-bounce" />
+                {i18n.decode.eraseButton}
+              </span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="p-4 border-b border-zinc-900 bg-zinc-950 flex items-center gap-3">
+        <CheckSquare className="w-4 h-4 text-red-700" />
+        <span className="text-xs font-bold uppercase tracking-[0.3em] text-zinc-300">{i18n.decode.factTitle}</span>
+      </div>
+      
+      <div className="p-8 flex-1 flex flex-col justify-center gap-12 h-[550px]">
+        {hardFacts.map((fact, index) => (
+          <motion.div 
+            key={index}
+            variants={factVariants}
+            className="flex gap-6 items-start group"
+          >
+            <span className="text-6xl font-black text-zinc-900 group-hover:text-red-950 transition-colors font-mono select-none -translate-y-2">0{index + 1}</span>
+            <div className="flex-1 space-y-3">
+                <p className="text-2xl font-bold leading-tight text-white tracking-tight">{fact}</p>
+                {/* 动态连线：模拟利益流转 */}
+                <motion.div 
+                    initial={{ width: "0%" }}
+                    animate={isErased ? { width: "100%" } : { width: "0%" }}
+                    transition={{ delay: index * 0.4 + 0.6, duration: 1 }}
+                    className="h-[1px] bg-red-800 rounded-sm"
+                />
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\LoadingSkeleton.tsx
+============================================================
+/**
+ * 核心业务说明：
+ * 深度定制的报告骨架屏。
+ * 布局严格 1:1 还原 DecodePage 的双栏网格与底部面板。
+ * 作用：在数据从 Supabase 泵入前端的间隙，维持 UI 的稳定性，防止布局抖动。
+ */
+export default function LoadingSkeleton() {
+  return (
+    <div className="space-y-12 animate-pulse">
+      {/* 核心解码面板骨架 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 左侧：原文占位 */}
+        <div className="h-[550px] bg-zinc-900/50 border border-zinc-800 rounded-sm">
+          <div className="p-4 border-b border-zinc-800 flex gap-3">
+            <div className="w-2 h-2 bg-zinc-800 rounded-full" />
+            <div className="w-24 h-3 bg-zinc-800 rounded-sm" />
+          </div>
+          <div className="p-8 space-y-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-4 bg-zinc-800/50 rounded-sm w-full" />
+            ))}
+          </div>
+        </div>
+        
+        {/* 右侧：硬通货事实占位 */}
+        <div className="h-[550px] bg-zinc-950 border border-zinc-800 border-l-4 border-l-zinc-800 rounded-sm flex flex-col">
+          <div className="p-4 border-b border-zinc-800 flex gap-3">
+            <div className="w-4 h-4 bg-zinc-800 rounded-sm" />
+            <div className="w-32 h-3 bg-zinc-800 rounded-sm" />
+          </div>
+          <div className="p-8 flex-1 flex flex-col justify-center gap-12">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-6 items-start">
+                <div className="text-5xl font-black text-zinc-900 select-none">0{i}</div>
+                <div className="h-8 bg-zinc-900/50 rounded-sm w-full mt-2" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 底部判决面板占位 */}
+      <div className="bg-zinc-900/10 border border-zinc-800 border-t-4 border-t-zinc-800 p-16 rounded-sm">
+        <div className="w-40 h-3 bg-zinc-800 mb-8 rounded-sm" />
+        <div className="w-full h-12 bg-zinc-900/50 rounded-sm" />
+      </div>
+    </div>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\RawNarrative.tsx
+============================================================
+"use client";
+import React from 'react';
+import { FileText, Cpu } from 'lucide-react';
+
+interface RawNarrativeProps {
+  rawContent: string;
+  fluffWords: any;
+  lang?: 'cn' | 'en';
+}
+
+export default function RawNarrative({ rawContent, fluffWords, lang = 'cn' }: RawNarrativeProps) {
+  const renderRawText = () => {
+    if (!rawContent) return null;
+    let activeWords: string[] = Array.isArray(fluffWords) ? fluffWords : (fluffWords?.[lang] || []);
+    if (activeWords.length === 0) return rawContent;
+
+    try {
+      const safeWords = activeWords
+        .filter(w => typeof w === 'string' && w.length > 0)
+        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      
+      const regex = new RegExp(`(${safeWords.join('|')})`, 'g');
+      const parts = rawContent.split(regex);
+
+      return parts.map((part, i) => {
+        const isMatch = activeWords.includes(part);
+        return isMatch ? (
+          <mark key={i} className="bg-red-600/10 text-red-500 px-0.5 border-b border-red-500/50 transition-all hover:bg-red-600/30 cursor-crosshair">
+            {part}
+          </mark>
+        ) : <span key={i} className="opacity-80">{part}</span>;
+      });
+    } catch (e) { return rawContent; }
+  };
+
+  return (
+    <div className="bg-black border border-zinc-900 rounded-sm overflow-hidden shadow-2xl">
+      <div className="bg-zinc-900/30 px-6 py-3 border-b border-zinc-900 flex items-center justify-between">
+         <div className="flex items-center gap-3">
+            <FileText size={14} className="text-zinc-500" />
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Evidence_File_Raw.txt</span>
+         </div>
+         <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+            <span className="text-[9px] font-mono text-red-900">DECODED_VIEW</span>
+         </div>
+      </div>
+      
+      <div className="p-10 md:p-16 relative">
+        {/* 背景装饰 */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]" />
+        
+        <div className="relative z-20 font-serif text-lg leading-[1.8] text-zinc-500 tracking-wide text-justify">
+          {renderRawText()}
+        </div>
+      </div>
+
+      <div className="bg-zinc-900/10 px-6 py-4 border-t border-zinc-900 flex justify-between items-center font-mono text-[8px] text-zinc-700">
+         <span>SHA-256: 8f92b...d3e1</span>
+         <span>SECURITY LEVEL: CLASSIFIED</span>
+      </div>
+    </div>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\VerdictPanel.tsx
+============================================================
+"use client";
+import { motion } from 'framer-motion';
+import { Target } from 'lucide-react';
+
+interface VerdictPanelProps {
+  verdict: string;
+  isErased: boolean;
+}
+
+export default function VerdictPanel({ verdict, isErased }: VerdictPanelProps) {
+  // 最终判决数字雨固化动效
+  const digitalRainVariants = {
+    hidden: { 
+        opacity: 0, 
+        y: -100, 
+        filter: "blur(15px)", 
+        color: '#dc2626',
+        textShadow: "0 0 10px rgba(220, 38, 38, 1)"
+    },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      filter: "blur(0px)",
+      color: '#ffffff',
+      textShadow: "0 0 0px rgba(220, 38, 38, 0)",
+      transition: { 
+        delay: 2.2, // 等 facts 动效全放完
+        duration: 1.2,
+        ease: [0.17, 0.67, 0.83, 0.67] 
+      } 
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={isErased ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }}
+      transition={{ delay: 1.8, duration: 1 }}
+      className="bg-black border border-zinc-900 border-t-4 border-t-red-900 p-10 md:p-16 rounded-sm relative overflow-hidden shadow-[0_-20px_100px_rgba(220,38,38,0.1)] selection:bg-red-950 selection:text-white"
+    >
+      <Target className="absolute -right-20 -top-20 w-80 h-80 text-red-950 pointer-events-none" />
+      
+      <div className="relative z-10 max-w-4xl">
+        <span className="text-xs font-black uppercase tracking-[0.4em] text-red-700 block mb-8">FINAL VERDICT / 最终判决</span>
+        <motion.p 
+            variants={digitalRainVariants}
+            className="text-4xl md:text-5xl font-black tracking-tighter leading-none italic"
+        >
+          “{verdict}”
+        </motion.p>
+      </div>
+    </motion.div>
+  );
+}
+
+============================================================
+File: .\src\components\features\terminal\ChatTerminal.tsx
+============================================================
+import React, { useRef, useEffect, useState } from 'react';
+import { Terminal as TerminalIcon, Send, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import { useTerminalMachine } from '@/hooks/useTerminalMachine';
+
+interface ChatTerminalProps {
+  signalId: string;
+  hardFacts: string[];
+}
+
+/**
+ * 核心业务说明：
+ * 沉浸式深度审讯终端。已剥离所有悬浮窗与折叠逻辑。
+ * 作为解码报告底部的核心常驻工作区，直接承受用户的高频追问流量。
+ */
+export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps) {
+  const [inputValue, setInputValue] = useState('');
+  const endOfMessagesRef = useRef<HTMLDivElement>(null);
+
+  const { messages, isStreaming, error, submitInterrogation, clearTerminal } = useTerminalMachine({ signalId, hardFacts });
+
+  // 核心业务：控制终端在收到新字节流时，永远保持自动滚屏到底部。
+  useEffect(() => {
+    if (endOfMessagesRef.current) {
+      endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isStreaming) return;
+    submitInterrogation(inputValue);
+    setInputValue('');
+  };
+
+  return (
+    <div className="w-full bg-black border border-zinc-800 shadow-2xl flex flex-col h-[600px] rounded-sm relative overflow-hidden group">
+      {/* 终端头部 */}
+      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
+        <div className="flex items-center gap-3">
+          <TerminalIcon className="w-5 h-5 text-red-600 group-hover:animate-pulse" />
+          <span className="text-xs font-mono text-zinc-400 tracking-widest uppercase">PRO Terminal / {signalId}</span>
+        </div>
+        <div className="flex items-center gap-4 text-zinc-500">
+          <button onClick={clearTerminal} title="清除物理内存" className="hover:text-red-500 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
+            <Trash2 className="w-4 h-4" /> CLEAR
+          </button>
+        </div>
+      </div>
+
+      {/* 消息滚动区 */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-800 bg-zinc-950/30">
+        {messages.length === 0 && (
+          <div className="text-zinc-600 text-xs text-center mt-20 uppercase tracking-[0.2em]">
+            <span className="block mb-2 text-red-900/50">_ SYSTEM STANDBY _</span>
+            等待输入核心指令。请基于已查明的硬通货事实进行追问。
+          </div>
+        )}
+        
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <span className={`text-[10px] uppercase tracking-[0.2em] mb-2 ${msg.role === 'user' ? 'text-zinc-600' : 'text-red-700 font-bold'}`}>
+              {msg.role === 'user' ? 'GUEST_USER' : 'SYSTEM_AI'}
+            </span>
+            <div className={`p-4 max-w-[90%] md:max-w-[75%] leading-relaxed ${
+              msg.role === 'user' 
+                ? 'bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-sm' 
+                : 'bg-transparent text-white border-l-2 border-red-700 pl-5 text-base'
+            }`}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+        
+        {error && (
+          <div className="bg-red-950/30 border border-red-900 text-red-500 p-4 flex items-start gap-3 text-sm rounded-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+        <div ref={endOfMessagesRef} className="h-4" />
+      </div>
+
+      {/* 输入区域 */}
+      <div className="p-4 bg-zinc-950 border-t border-zinc-800">
+        <form onSubmit={handleSubmit} className="relative flex items-center">
+          <span className="absolute left-4 text-red-600 font-black text-lg">{'>'}</span>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            disabled={isStreaming}
+            placeholder="输入指令，洞透底层逻辑..."
+            className="w-full bg-black border border-zinc-800 text-white font-mono text-base py-4 pl-10 pr-16 focus:outline-none focus:border-red-800 transition-colors disabled:opacity-50 rounded-sm"
+          />
+          <button 
+            type="submit" 
+            disabled={!inputValue.trim() || isStreaming}
+            className="absolute right-4 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors bg-zinc-900 p-2 rounded-sm"
+          >
+            {isStreaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+============================================================
+File: .\src\config\i18n.ts
+============================================================
+export const i18n = {
+  header: {
+    title: "TRUTH DECODER",
+    version: "V4.0 CLEAR SIGNAL",
+  },
+  home: {
+    title: "SIGNAL INTERCEPT / 截获通稿",
+    placeholder: "请在此粘贴长篇大论的官方通稿...",
+    button: "载入去伪存真引擎",
+  },
+  decode: {
+    rawTitle: "RAW NARRATIVE / 原始叙事",
+    factTitle: "THE HARD FACTS / 底层硬通货",
+    eraseButton: "一键卸妆 (ERASE FLUFF)",
+    verdict: "THE ULTIMATE VERDICT / 一针见血点评",
+  }
+};
+
+============================================================
+File: .\src\hooks\useTerminalMachine.ts
+============================================================
+import { useState } from 'react';
+import { TerminalMessage } from '@/types';
+
+interface UseTerminalMachineProps {
+  signalId: string;
+  hardFacts: string[];
+}
+
+export function useTerminalMachine({ signalId, hardFacts }: UseTerminalMachineProps) {
+  const [messages, setMessages] = useState<TerminalMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitInterrogation = async (content: string) => {
+    if (!content.trim() || isStreaming) return;
+
+    console.log('🟢 [状态发起] -> 变量: 用户发起深度审讯:', content);
+
+    // 1. 组装当前视角的完整 UI 历史
+    const newUserMessage: TerminalMessage = { role: 'user', content };
+    const currentHistory = [...messages, newUserMessage];
+
+    // 2. UI 乐观更新：立刻上屏用户输入，并预置一个空的 assistant 气泡占位
+    setMessages([...currentHistory, { role: 'assistant', content: '' }]);
+    setIsStreaming(true);
+    setError(null);
+
+    try {
+      // 3. 组装发往后端的载荷 (隐式首部强行挂载事实记忆，不暴露给 UI)
+      const contextPayload: TerminalMessage = {
+        role: 'system',
+        content: `【系统强制指令】：本次审讯的底层硬通货如下：\n${hardFacts.join('\n')}\n请严格基于上述事实回答用户，保持冷酷、客观。`
+      };
+      
+      const payloadMessages = [contextPayload, ...currentHistory];
+      console.log('🟡 [网络请求] -> 接口: /api/terminal, 载荷深度:', payloadMessages.length);
+
+      const res = await fetch('/api/terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signalId, messages: payloadMessages }),
+      });
+
+      if (!res.ok) throw new Error(`流式网关阻断: HTTP ${res.status}`);
+      if (!res.body) throw new Error('流式管道未建立');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      
+      console.log('🔵 [数据渲染] -> 组件: 终端字节流开始泵入，启动逐字解析');
+
+      let done = false;
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                const delta = data.choices[0]?.delta?.content || '';
+
+                if (delta) {
+                  // 🚀 核心防线：绝对纯洁的闭包更新，精准锁定 UI 数组最后一条消息进行字符追加
+                  setMessages((prev) => {
+                    const newArr = [...prev];
+                    const lastIdx = newArr.length - 1;
+                    newArr[lastIdx] = {
+                      ...newArr[lastIdx],
+                      content: newArr[lastIdx].content + delta,
+                    };
+                    return newArr;
+                  });
+                }
+              } catch (e) {
+                // 忽略流传输过程中的单行 JSON 碎片化报错
+              }
+            }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : '字节流解析崩塌';
+      console.log('🔴 [错误捕获] -> 节点: SSE 字节流泵入失败', errMsg);
+      setError(errMsg);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  const clearTerminal = () => setMessages([]);
+
+  return { messages, isStreaming, error, submitInterrogation, clearTerminal };
+}
+
+============================================================
+File: .\src\lib\redis.ts
+============================================================
+import { Redis } from '@upstash/redis';
+
+// 确保在无凭证的环境下不会导致构建崩溃
+export const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || 'https://mock.upstash.io',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || 'mock-token',
+});
+
+============================================================
+File: .\src\lib\supabase.ts
+============================================================
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔴 [模块_崩溃] -> 原因: 环境变量 NEXT_PUBLIC_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY 物理级缺失');
+  }
+}
+
+/**
+ * 核心业务说明：建立全栈统一的持久化数据库连接实例。
+ * 🚨 严禁在客户端组件 (use client) 中直接导入此文件，因为 service_role 具有绕过 RLS 的最高读写权限。
+ * 它只允许在 API Routes 或 Server Components 中被唤醒。
+ */
+export const supabaseAdmin = createClient(
+  supabaseUrl || 'http://mock.supabase.co', 
+  supabaseServiceKey || 'mock-key',
+  {
+    auth: {
+      persistSession: false, // 后端环境不需要维持用户 session
+    }
+  }
+);
+
+============================================================
+File: .\src\mock\decode-scenario.ts
+============================================================
+export const mockResult = {
+  id: "001",
+  rawContent: "本着负责任的态度，公司决定进行战略性的业务架构优化。在充满挑战的市场环境下，我们通过整合资源、提升组织效率，旨在为长远的发展奠定坚实基础。这不仅是挑战，更是机遇...",
+  fluffWords: ["负责任", "战略性", "优化", "整合资源", "提升组织效率", "奠定坚实基础"],
+  hardFacts: [
+    "事实 1：公司实质上启动了 30% 的全员裁员计划。",
+    "事实 2：核心研发预算被削减了 5,000 万美元，用于填补坏账。",
+    "事实 3：CXO 级别高管正在进行秘密套现和离职交接。"
+  ],
+  verdict: "这根本不是优化，而是一场通过行政修饰来掩盖资金链断裂的撤退。"
+};
+
+============================================================
+File: .\src\services\deepseek-stream.ts
+============================================================
+import { TerminalMessage } from '@/types';
+
+// 核心业务说明：此模块专门负责建立与 DeepSeek 的流式连接 (SSE)。
+// 剥离了所有 UI 逻辑，只提供纯粹的 Response 对象流供上层网关消费。
+export async function createDeepSeekStream(messages: TerminalMessage[]): Promise<Response> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  if (!apiKey) {
+    console.log('🔴 [错误捕获] -> 节点: 流式引擎层 - API Key 物理级缺失');
+    throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
+  }
+
+  console.log('🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions (Stream), 记忆链长度:', messages.length);
+
+  // 防御性编程：强制拦截过长上下文，防止 Token 爆炸与恶意刷量
+  if (messages.length > 20) {
+    console.log('🔴 [错误捕获] -> 节点: 流式引擎层 - 上下文超载');
+    throw new Error('上下文记忆链超出阈值，已强制阻断。');
+  }
+
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: messages,
+      stream: true, // 开启流式输出核心开关
+      temperature: 0.3, // 终端问答需要多一点推演能力，但必须维持冷峻基调
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.log('🔴 [错误捕获] -> 节点: 流式引擎连接中断', errorData);
+    throw new Error(`上游通信失败: HTTP ${response.status}`);
+  }
+
+  console.log('🟢 [状态发起] -> 变量: 流式通道已成功握手');
+  return response;
+}
+
+============================================================
+File: .\src\services\deepseek.ts
+============================================================
+/**
+ * 核心业务说明：
+ * TruthDecoder 2.2 强化版博弈引擎 (Hotfix)。
+ * 修复：重新注入 JSON 键名硬契约，修复 Zod 校验拦截导致的 500 宕机。
+ */
+
+import { DecodeResult } from '@/types';
+import { z } from 'zod';
+import { logger } from '@/utils/logger';
+
+// 1. Zod 绝对防御契约
+const DecodeResultSchema = z.object({
+  fluffWords: z.array(z.string()).describe("原文中的粉饰词"),
+  hardFacts: z.array(z.string()).length(3).describe("3条极度冷峻的底层事实"),
+  verdict: z.string().describe("150字内深刻点评")
+});
+
+async function callDeepSeek(prompt: string, content: string, temp: number, json: boolean = false): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
+
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [{ role: 'system', content: prompt }, { role: 'user', content: content }],
+      response_format: json ? { type: 'json_object' } : { type: 'text' },
+      temperature: temp,
+    }),
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.text();
+    throw new Error(`上游通信失败: HTTP ${res.status} - ${errorData}`);
+  }
+  
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+export async function analyzeTextWithDeepSeek(content: string): Promise<DecodeResult> {
+  logger.start(`启动 2.2 逻辑进化引擎`);
+
+  try {
+    // Round 1: 蓝军 - 商业逻辑推演
+    logger.async('Round 1: 蓝军发力');
+    const bluePrompt = `你是一个顶级商业顾问。请分析该动作的“商业定价逻辑”。将外交/政治动作转化为商业上的“价格谈判”、“服务订阅”或“资产重组”模型。不要说废话。`;
+    const blueRes = await callDeepSeek(bluePrompt, content, 0.4);
+
+    // Round 2: 红军 - 真实代价狙击
+    logger.async('Round 2: 红军狙击');
+    const redPrompt = `你是一个多疑的风险控制专家。质疑上述的商业逻辑。指出该动作背后的真实成本、权力转嫁以及它掩盖的政治/经济漏洞。`;
+    const redContent = `原文: ${content}\n蓝方类比: ${blueRes}`;
+    const redRes = await callDeepSeek(redPrompt, redContent, 0.6);
+
+    // Round 3: 法官 - 终极合成
+    logger.async('Round 3: 法官裁决与格式化');
+    // 🚨 致命修复：强制规定 JSON 的确切键名，确保 Zod 能够精准放行
+    const judgePrompt = `你是 TruthDecoder 的首席战略官。你的任务是综合多方博弈后的逻辑，输出一份唯一的、具备顶级穿透力的报告。
+【强制要求】：
+1. 绝对禁止提及“红军”、“蓝军”、“博弈”、“分析师”等词汇。
+2. 绝对禁止描述你的分析过程，只输出结论。
+3. verdict 必须像刀刃一样，直接指出这是一场什么样的“利益收割”或“权力交换”。
+4. hardFacts 必须是基于原文数据提炼出的、不可辩驳的底层事实。
+你必须严格输出 JSON 格式，且必须完全符合以下结构：
+{
+  "fluffWords": ["煽动词1", "煽动词2"],
+  "hardFacts": ["事实1", "事实2", "事实3"],
+  "verdict": "一句话穿透利益逻辑的终极点评"
+}`;
+
+    const judgeContent = `【原始数据】: ${content}\n【内部逻辑 A】: ${blueRes}\n【内部逻辑 B】: ${redRes}`;
+
+    let final: DecodeResult | null = null;
+    let temp = 0.3;
+    let lastError = null;
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = await callDeepSeek(judgePrompt, judgeContent, temp, true);
+        const parsed = JSON.parse(raw);
+        final = DecodeResultSchema.parse(parsed) as DecodeResult;
+        break; // 格式正确，突围成功
+      } catch (e) {
+        lastError = e;
+        temp = Math.max(0.01, temp - 0.1);
+        logger.crash(`Zod 护盾击碎非法数据，触发第 ${i+1} 次降温重试`);
+      }
+    }
+
+    if (!final) {
+      throw new Error(`逻辑合成防线崩塌，最后死因: ${lastError instanceof Error ? lastError.message : 'JSON 结构严重畸形'}`);
+    }
+
+    logger.success('高净值情报已合成，契约已兑现。');
+    return final;
+
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : '未知解析异常';
+    logger.crash(`[节点: analyzeTextWithDeepSeek] -> ${errMsg}`);
+    throw new Error(errMsg); // 将真实死因抛给上层，不要模糊为“解密失败”
+  }
+}
+
+============================================================
+File: .\src\types\database.ts
+============================================================
+export interface SignalRecord {
+  id: string;
+  created_at: string;
+  raw_content: string;
+  verdict: string;
+  hard_facts: any; // 兼容旧数组和新版双语对象
+  fluff_words: any; // 兼容旧数组和新版双语对象
+  view_count: number;
+  
+  // 🚀 核心修复：注入 metadata 基因
+  metadata?: {
+    bilingual?: {
+      cn?: string;
+      en?: string;
+    };
+    washed?: boolean;
+    [key: string]: any; // 允许未来扩展其他元数据
+  };
+}
+
+============================================================
+File: .\src\types\index.ts
+============================================================
+// 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版)
+export interface DecodeResult {
+  // 适配新版 { cn: string[], en: string[] } 或旧版 string[]
+  fluffWords: any; 
+  hardFacts: any;
+  // verdict 现在也可能包含 metadata 里的双语对象
+  verdict: any; 
+}
+
+// 统一的 API 响应契约
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// --- 深度审讯终端 (Chat Terminal) 状态机契约 ---
+
+// 单条对话记忆上下文 (严格遵循大模型角色分离原则)
+export interface TerminalMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+// 流式请求载荷 (前端打向后端的弹药)
+export interface TerminalStreamPayload {
+  signalId: string; // 绑定的原始通稿 ID
+  messages: TerminalMessage[]; // 完整的上下文记忆链
+}
+
+============================================================
+File: .\src\utils\logger.ts
+============================================================
+/**
+ * 核心说明书：
+ * 这是一个物理级隔离的全局日志引擎。它在整个业务线中的作用是：
+ * 1. 统一接管全栈的日志打印，提供 🟢🟡🔵🔴 四种标准化工业探针。
+ * 2. 强行阻断生产环境 (Production) 的一切明文输出，防止 Vercel 部署后发生内存泄漏或商业机密被恶意抓包。
+ */
+
+// 严格限定 payload 类型，坚决抵制 any 投毒
+type LogPayload = Record<string, unknown> | unknown[] | string | number | boolean | null | undefined;
+
+// 预判当前环境，只在开发环境下开启阀门
+const IS_DEV = process.env.NODE_ENV === 'development';
+
+export const logger = {
+  /**
+   * 🟢 发起探针：用于记录动作触发与入参
+   */
+  start: (action: string, payload?: LogPayload): void => {
+    if (!IS_DEV) return;
+    console.log(`🟢 [模块_发起] -> 动作/参数: ${action}`, payload ?? '');
+  },
+
+  /**
+   * 🟡 异步探针：用于记录网络请求、数据库查询等耗时目标的锁定
+   */
+  async: (target: string): void => {
+    if (!IS_DEV) return;
+    console.log(`🟡 [模块_异步] -> 目标: ${target}`);
+  },
+
+  /**
+   * 🔵 成功探针：用于记录业务闭环与核心产物
+   */
+  success: (result: LogPayload): void => {
+    if (!IS_DEV) return;
+    console.log(`🔵 [模块_成功] -> 产物:`, result);
+  },
+
+  /**
+   * 🔴 崩溃探针：用于记录异常捕获与死因分析
+   */
+  crash: (error: unknown): void => {
+    if (!IS_DEV) return;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log(`🔴 [模块_崩溃] -> 原因:`, errorMessage);
+  }
+};
+
+============================================================
+File: .\truth_scraper\auto_pilot.py
+============================================================
+import schedule
+import time
+import subprocess
+import os
+
+# 核心业务说明：这是 TruthDecoder 的自动化总控台（守护进程）。
+# 它永远不会退出，只会在你设定的时间点，默默拉起 main.py 去外网“进货”。
+
+def run_hunter_killer():
+    """唤醒底层爬虫引擎"""
+    print("\n" + "="*50)
+    print("      TRUTH DECODER - SYSTEM WAKEUP [AUTO]        ")
+    print("      [+] 定时巡航已触发，释放猎犬...             ")
+    print("==================================================")
+    
+    # 物理级拉起子进程执行 main.py
+    # cwd 确保在项目的根目录下执行，防止路径错乱
+    subprocess.run(["python", "truth_scraper/main.py"], cwd=os.getcwd())
+    
+    print("\n🟢 [总控台] -> 状态: 本次巡航任务结束。系统进入深度休眠，等待下一次唤醒...\n")
+
+def main():
+    print("==================================================")
+    print("      TRUTH DECODER - AUTO PILOT ENGAGED          ")
+    print("      [+] 本地守护进程已就绪，保持窗口开启...     ")
+    print("==================================================")
+
+    # 测试期间，每 60 秒扫射一次全网
+    schedule.every(1).minutes.do(run_hunter_killer)
+
+    # 物理级死循环：永远保持心脏跳动 (1秒检查一次到没到时间)
+    while True:
+        try:
+            schedule.run_pending()
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n🔴 [总控台] -> 状态: 接收到物理阻断信号 (Ctrl+C)，守护进程已终止。")
+            break
+        except Exception as e:
+            print(f"\n🔴 [总控台] -> 严重错误: 守护进程崩溃 - {str(e)}")
+            time.sleep(60) # 如果崩溃，强行休眠一分钟再试，防止 CPU 爆炸
+
+if __name__ == "__main__":
+    main()
+
+============================================================
+File: .\truth_scraper\main.py
+============================================================
+import requests
+import urllib3
+import time
+import os
+import re
+from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# --- 🚀 全局雷达配置 ---
+API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
+INGEST_TOKEN = "[CENSORED_BY_ARCHITECT]"
+HISTORY_FILE = "seen_urls.txt"
+
+TARGET_FEEDS = [
+    "https://finance.yahoo.com/news/",
+    "https://finance.yahoo.com/topic/stock-market-news/",
+    "https://finance.yahoo.com/topic/economic-news/",
+    "https://finance.yahoo.com/section/tech/"
+]
+
+def load_seen_urls():
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
+            return set(f.read().splitlines())
+    return set()
+
+def save_seen_url(url):
+    with open(HISTORY_FILE, "a") as f:
+        f.write(url + "\n")
+
+def fetch_html(url):
+    session = requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
+    try:
+        adapter = HTTPAdapter(max_retries=3)
+        session.mount("https://", adapter)
+        resp = session.get(url, headers=headers, verify=False, timeout=15)
+        resp.raise_for_status()
+        return resp.text
+    except:
+        return None
+
+def extract_article_links(html, base_url="https://finance.yahoo.com"):
+    soup = BeautifulSoup(html, 'html.parser')
+    links = set()
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if '/news/' in href or '/m/' in href:
+            full_url = href if href.startswith('http') else base_url + href
+            links.add(full_url)
+    return links
+
+# 🛡️ V5.6 工业级断头台算法
+def is_high_value_intel(content):
+    content_lower = content.lower()
+
+    # 1. 致命词汇一击必杀 (只要出现一次，立刻拉黑)
+    FATAL_KEYWORDS = [
+        "flagship newsletter", "inboxes every morning", "subscribe to",
+        "sign up for yahoo", "download the app", "click here to read",
+        "morning brief is yahoo"
+    ]
+    for word in FATAL_KEYWORDS:
+        if word in content_lower:
+            return False, f"触碰致命广告词 [{word}]"
+
+    # 2. 长度底线
+    if len(content) < 800:
+        return False, f"篇幅过短 ({len(content)} 字符)"
+
+    # 3. 🚀 商业数据密度检测 (真正的商业新闻必然包含数据)
+    # 提取所有数字
+    numbers = re.findall(r'\d+', content)
+    has_financial_symbols = '%' in content or '$' in content or 'billion' in content_lower or 'million' in content_lower
+    
+    # 如果一篇文章里数字少于 3 个，且没有任何金融符号，100% 是空洞的软文或散文
+    if len(numbers) < 3 and not has_financial_symbols:
+        return False, "情报密度极低 (缺乏商业数据和金额支撑)"
+
+    return True, "通过高净值甄别"
+
+def main():
+    print("==================================================")
+    print("      TRUTH DECODER - OPERATION: GUILLOTINE V5.6  ")
+    print("      [+] 搭载商业数据密度扫描仪，全量斩杀软文      ")
+    print("==================================================")
+    
+    seen_urls = load_seen_urls()
+    all_targets = set()
+
+    for feed in TARGET_FEEDS:
+        print(f"🟢 [雷达扫描] 侦测阵地: {feed}")
+        html = fetch_html(feed)
+        if html:
+            all_targets.update(extract_article_links(html))
+        time.sleep(1)
+
+    fresh_targets = [url for url in all_targets if url not in seen_urls]
+    print(f"\n🔵 [初筛] 锁定 {len(fresh_targets)} 条线索，进入断头台甄别舱...\n")
+
+    success_count = 0
+    for url in fresh_targets:
+        print(f"🟡 [分析] 目标: {url[:50]}...")
+        html = fetch_html(url)
+        if not html: 
+            continue
+
+        soup = BeautifulSoup(html, 'html.parser')
+        paragraphs = soup.find_all('p')
+        raw_content = "\n".join([p.get_text() for p in paragraphs if len(p.get_text()) > 60])
+
+        # 🚨 断头台铡刀落下
+        is_valuable, reject_reason = is_high_value_intel(raw_content)
+        if not is_valuable:
+            print(f"   🚫 [物理拦截] {reject_reason}，已销毁。")
+            save_seen_url(url) # 记入黑名单，不再碰它
+            continue
+
+        try:
+            print("   🟢 [密度达标] 确认包含核心商业数据，正在提交 AI 破译...")
+            resp = requests.post(
+                API_ENDPOINT, 
+                json={"rawContent": raw_content}, 
+                headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                timeout=60
+            )
+            if resp.status_code == 200:
+                print("   ✅ [入库成功] 致命裁决已生成！")
+                save_seen_url(url)
+                success_count += 1
+            else:
+                print(f"   ❌ [被后端拦截] 状态码: {resp.status_code} (可能是重复通稿)")
+        except requests.exceptions.Timeout:
+            print(f"   ❌ [链路中断] DeepSeek 思考超时，跳过。")
+        except Exception as e:
+            print(f"   ❌ [未知异常] {str(e)[:30]}")
+        
+        time.sleep(2)
+
+    print("\n==================================================")
+    print(f"      🎉 猎杀结束！成功斩获 {success_count} 条纯粹的高密度商业资产。")
+    print("==================================================")
+
+if __name__ == "__main__":
+    main()
+
+============================================================
+File: .\truth_scraper\wash_legacy.py
+============================================================
+import requests
+import time
+import urllib.parse
+
+# --- ⚙️ 核心配置 ---
+API_FEED = "http://localhost:3000/api/feed"
+API_WASH = "http://localhost:3000/api/v1/wash"
+TOKEN = "[CENSORED_BY_ARCHITECT]"
+
+def main():
+    print("==================================================")
+    print("      TRUTH DECODER - UNSTOPPABLE WASH V5.1       ")
+    print("      [+] 正在执行全量资产红利重铸协议...         ")
+    print("      [!] 警告：此操作将消耗大量 DeepSeek Token = "[CENSORED_BY_ARCHITECT]"==================================================")
+    
+    cursor = ""
+    total_washed = 0
+    batch_count = 1
+
+    while True:
+        # 1. 物理拉取当前批次的情报
+        url = f"{API_FEED}?cursor={urllib.parse.quote(cursor)}" if cursor else API_FEED
+        print(f"\n📡 [批次 {batch_count}] 正在从数据库提取情报分片...")
+        
+        try:
+            res = requests.get(url, timeout=20).json()
+            batch_data = res.get("data", [])
+            
+            if not batch_data:
+                print("🏁 [终点] 数据库已全部扫荡完毕。没有更多资产需要清洗。")
+                break
+
+            print(f"🔎 发现 {len(batch_data)} 条资产，准备注入“暗黑做空”灵魂...")
+
+            # 2. 逐条进行“心脏搭桥”手术
+            for s in batch_data:
+                signal_id = s.get('id')
+                raw_content = s.get('raw_content')
+
+                print(f"   🟡 [重塑中] {signal_id} ... ", end="", flush=True)
+                
+                try:
+                    payload = {"id": signal_id, "rawContent": raw_content}
+                    resp = requests.post(
+                        API_WASH, 
+                        json=payload, 
+                        headers={"Authorization": f"Bearer {TOKEN}"}, 
+                        timeout=90 # DeepSeek 深度思考可能较慢，给足耐心
+                    )
+                    
+                    if resp.status_code == 200:
+                        print("✅ 已觉醒")
+                        total_washed += 1
+                    else:
+                        print(f"❌ 失败 ({resp.status_code})")
+                except Exception as e:
+                    print(f"❌ 链路超时 ({str(e)})")
+                
+                # 3. 物理冷却：防止 DeepSeek 并发限制，给 AI 喘息时间
+                time.sleep(2)
+
+            # 4. 更新游标，指向下一片猎场
+            cursor = batch_data[-1]["created_at"]
+            batch_count += 1
+            print(f"--------------------------------------------------")
+            print(f"💡 当前进度：已重铸 {total_washed} 条资产")
+            print(f"--------------------------------------------------")
+
+        except Exception as e:
+            print(f"🔴 [致命错误] 数据库通信中断: {e}")
+            break
+
+    print(f"\n==================================================")
+    print(f"      🎉 战役结束！全量资产重塑完毕。")
+    print(f"      共计清洗：{total_washed} 条情报资产")
+    print("==================================================")
+
+if __name__ == "__main__":
+    main()
+
+============================================================
+File: .\truth_scraper\extractors\base.py
+============================================================
+from abc import ABC, abstractmethod
+from bs4 import BeautifulSoup
+
+# 核心业务说明：所有专属媒体提取器必须严格遵守此契约
+class BaseExtractor(ABC):
+    @abstractmethod
+    def match(self, url: str) -> bool:
+        """判定当前提取器是否负责处理该 URL"""
+        pass
+
+    @abstractmethod
+    def extract(self, html: str) -> str:
+        """执行定制化的 DOM 树切割"""
+        pass
+
+    def clean_soup(self, soup: BeautifulSoup):
+        """通用物理噪音剔除防线，彻底粉碎广告与追踪脚本"""
+        for element in soup(["script", "style", "nav", "footer", "aside", "iframe", "noscript"]):
+            element.decompose()
+
+============================================================
+File: .\truth_scraper\extractors\reuters.py
+============================================================
+from bs4 import BeautifulSoup
+from .base import BaseExtractor
+
+class ReutersExtractor(BaseExtractor):
+    def match(self, url: str) -> bool:
+        return "reuters.com" in url
+
+    def extract(self, html: str) -> str:
+        print("🟡 [模块_异步] -> 目标: 挂载 路透社 (Reuters) 专属解析策略")
+        soup = BeautifulSoup(html, 'html.parser')
+        self.clean_soup(soup)
+
+        # 锁定路透社的核心新闻容器，防止旁路侧边栏的新闻标题污染事实数据
+        article = soup.find('article')
+        if not article:
+            # 如果没找到标准 article 标签，降级处理
+            paragraphs = soup.find_all('p')
+        else:
+            paragraphs = article.find_all('p')
+
+        # 过滤掉低于 30 个字符的无意义短句（如图片来源声明、记者名字）
+        text = "\n".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30])
+        return text
+
+============================================================
+File: .\truth_scraper\extractors\wsj.py
+============================================================
+from bs4 import BeautifulSoup
+from .base import BaseExtractor
+
+class WSJExtractor(BaseExtractor):
+    def match(self, url: str) -> bool:
+        return "wsj.com" in url
+
+    def extract(self, html: str) -> str:
+        print("🟡 [模块_异步] -> 目标: 挂载 华尔街日报 (WSJ) 专属解析策略")
+        soup = BeautifulSoup(html, 'html.parser')
+        self.clean_soup(soup)
+
+        # WSJ 的前导段落通常包含最核心的商业硬通货，过滤极短的版权声明
+        paragraphs = soup.find_all('p')
+        text = "\n".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30])
+        return text
+
+============================================================
+File: .\truth_scraper\extractors\yahoo_finance.py
+============================================================
+from bs4 import BeautifulSoup
+from .base import BaseExtractor
+
+class YahooFinanceExtractor(BaseExtractor):
+    def match(self, url: str) -> bool:
+        return "finance.yahoo.com" in url
+
+    def extract(self, html: str) -> str:
+        print("🟡 [模块_异步] -> 目标: 挂载 雅虎财经 (Yahoo Finance) 强化版解析策略")
+        soup = BeautifulSoup(html, 'html.parser')
+        self.clean_soup(soup)
+
+        # 🚀 策略 1：尝试标准容器
+        body = soup.find('div', class_='caas-body')
+        
+        # 🚀 策略 2：如果失败，尝试雅虎另一种常见的正文容器
+        if not body:
+            body = soup.find('div', class_='body')
+            
+        # 🚀 策略 3：如果还失败，尝试锁定文章主标签
+        if not body:
+            body = soup.find('article')
+
+        if body:
+            paragraphs = body.find_all('p')
+        else:
+            # 🚀 策略 4：降级到全网页段落提取，但增加厚度过滤
+            print("🔴 [模块_崩溃] -> 原因: 深度容器全部失效，执行暴力段落提取")
+            paragraphs = soup.find_all('p')
+
+        # 提高容错性：合并文本，同时过滤掉导航栏等极短的废话
+        text_parts = [p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 40]
+        text = "\n".join(text_parts)
+        
+        return text
+
+============================================================
+File: .\truth_scraper\extractors\__init__.py
+============================================================
+from .reuters import ReutersExtractor
+from .wsj import WSJExtractor
+from .yahoo_finance import YahooFinanceExtractor
+
+# 架构师防线：所有新增的媒体源，必须在此处注册进阵列，主程序将自动遍历匹配
+EXTRACTORS = [
+    ReutersExtractor(),
+    WSJExtractor(),
+    YahooFinanceExtractor() # 🟢 新增：挂载雅虎财经策略
+]

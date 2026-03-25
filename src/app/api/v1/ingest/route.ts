@@ -17,6 +17,12 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) throw new Error('Empty content');
 
+    // 🧹 毒饵拦截：如果 Jina 被墙，立刻丢弃本篇
+    if (rawContent.includes('SecurityCompromiseError') || rawContent.includes('DDoS attack') || rawContent.includes('Too many domains')) {
+        console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
+        return NextResponse.json({ success: false, error: 'Content is blocked by WAF.' }, { status: 423 });
+    }
+
     // 🛡️ 穹顶预检：提取前 100 个字符进行匹配 (避开完整长文本可能导致的 GET URL 长度超限问题)
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
@@ -45,12 +51,13 @@ export async function POST(req: Request) {
       response_format: { type: 'json_object' }
     });
 
-    let rawJson = completion.choices[0].message.content || '{}';
-    rawJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
+    // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
+    const rawAiOutput = completion.choices[0].message.content || ''
+    const cleanedJsonString = rawAiOutput.replace(/```json/g, '').replace(/```/g, '').trim();
     
     let intel;
     try {
-      intel = JSON.parse(rawJson);
+      intel = JSON.parse(cleanedJsonString);
     } catch (parseError) {
       throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
     }

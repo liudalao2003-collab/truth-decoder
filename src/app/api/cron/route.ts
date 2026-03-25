@@ -82,6 +82,12 @@ export async function GET(req: Request) {
         let fullText = await articleRes.text();
         fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
 
+        // 🧹 毒饵拦截：如果 Jina 被墙，立刻丢弃本篇
+        if (fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack') || fullText.includes('Too many domains')) {
+            console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
+            continue; // 如果是手动投喂的独立文件，这里用 return 报错
+        }
+
         if (fullText.length < 200) continue;
 
         const depthPrompt = aiDepth === 'quick' 
@@ -94,7 +100,10 @@ export async function GET(req: Request) {
           response_format: { type: 'json_object' }
         });
 
-        const intel = JSON.parse(completion.choices[0].message.content || '{}');
+        // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
+        const rawAiOutput = completion.choices[0].message.content || ''
+        const cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const intel = JSON.parse(cleanedJsonString);
 
         await supabaseAdmin.from('signals').insert([{
           id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
