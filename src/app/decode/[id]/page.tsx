@@ -19,7 +19,6 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
-  // 🟢 将当前的 lang 传入流式管道钩子
   const { dossierContent, setDossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => {
@@ -44,41 +43,65 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     fetchSignal();
   }, [id, setDossierContent]);
 
+  // 🚀 核心修复：跨语言阵列映射 (Cross-Language Index Mapping)
   useEffect(() => {
     if (signal) {
-      const fluffs = Array.isArray(signal.fluff_words) 
+      // 1. 永远提取中文数组作为雷达探测器
+      const cnFluffs = Array.isArray(signal.fluff_words) 
+        ? signal.fluff_words 
+        : (signal.fluff_words as any)?.['cn'] || [];
+      
+      // 2. 提取当前语种数组作为气泡展示载荷
+      const targetFluffs = Array.isArray(signal.fluff_words) 
         ? signal.fluff_words 
         : (signal.fluff_words as any)?.[lang] || [];
         
-      buildDictionary(fluffs, signal.raw_content || '');
+      buildDictionary(cnFluffs, targetFluffs, signal.raw_content || '');
     }
   }, [signal, lang]);
 
-  const buildDictionary = (fluffs: string[], rawText: string) => {
+  const buildDictionary = (cnFluffs: string[], targetFluffs: string[], rawText: string) => {
     const dict: Record<string, string> = {};
-    const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
     
-    fluffs.forEach(sentence => {
-      let match;
+    cnFluffs.forEach((cnSentence, index) => {
+      const hoverText = targetFluffs[index] || cnSentence;
       let found = false;
       
-      while ((match = quoteRegex.exec(sentence)) !== null) {
+      // 🚨 致命 Bug 修复：必须在循环内部初始化正则，防止 /g 导致的 lastIndex 全局污染
+      const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
+      let match;
+      
+      // 策略 1: 利用中文原句的引号精确抓取原文关键字
+      while ((match = quoteRegex.exec(cnSentence)) !== null) {
         const keyword = match[1].trim();
         if (keyword.length >= 2 && rawText.includes(keyword)) {
-          dict[keyword] = sentence;
+          dict[keyword] = hoverText; 
           found = true;
         }
       }
       
-      if (!found && lang === 'cn') {
-        const markers = ["暗示", "掩盖", "意味着", "说明", "意图"];
+      // 策略 2: 暴力降级匹配 (增加词库容错)
+      if (!found) {
+        const markers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称"];
         for (const marker of markers) {
-          if (sentence.includes(marker)) {
-            const prefix = sentence.split(marker)[0];
-            const potentialWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-6);
-            if (potentialWord.length >= 2 && rawText.includes(potentialWord)) {
-              dict[potentialWord] = sentence;
+          if (cnSentence.includes(marker)) {
+            const prefix = cnSentence.split(marker)[0];
+            
+            // a. 尝试提取中文字符（应对中文原文，增加截取长度提高精度）
+            const potentialCnWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-8);
+            if (potentialCnWord.length >= 2 && rawText.includes(potentialCnWord)) {
+              dict[potentialCnWord] = hoverText;
               break;
+            }
+            
+            // b. 尝试提取英文字符串（应对英文原文，但 AI 没加引号的情况）
+            const potentialEnMatch = prefix.match(/([a-zA-Z0-9\s\-]+)$/);
+            if (potentialEnMatch && potentialEnMatch[1].trim().length >= 4) {
+               const enWord = potentialEnMatch[1].trim();
+               if (rawText.includes(enWord)) {
+                  dict[enWord] = hoverText;
+                  break;
+               }
             }
           }
         }
