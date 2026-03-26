@@ -61,15 +61,19 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     const parts = [];
     let lastIndex = 0;
     let match;
-    let chunkCounter = 0; // 🚨 架构师防线：引入块级切片自增 ID，确保 Spread 展平后 React Key 的绝对物理唯一性
+    let chunkCounter = 0;
 
     // 第一层：解析大模型特供的 [[词汇::深度注脚]] 语法
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) {
         const beforeText = text.slice(lastIndex, match.index);
-        // 挂载 chunk ID
         parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`));
       }
+      
+      // 🚨 架构师防线：利用块级作用域锁定当前匹配值，切断闭包突变陷阱
+      const surfaceWord = match[1];
+      const deepInsight = match[2];
+
       // 渲染高密度专属气泡
       parts.push(
         <span
@@ -77,12 +81,13 @@ export default function DossierReader({ content, isStreaming = false, dictionary
           onMouseEnter={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
-            setHoverInfo({ text: match[2], x: safeX, y: rect.top });
+            // 使用块级常量，绝不读取处于突变状态的 match[2]
+            setHoverInfo({ text: deepInsight, x: safeX, y: rect.top });
           }}
           onMouseLeave={() => setHoverInfo(null)}
           className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold"
         >
-          {match[1]}
+          {surfaceWord}
         </span>
       );
       lastIndex = tagRegex.lastIndex;
