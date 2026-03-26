@@ -43,70 +43,96 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     fetchSignal();
   }, [id, setDossierContent]);
 
-  // 🚀 核心修复：跨语言阵列映射 (Cross-Language Index Mapping)
+  // 🚀 核心修复：全天候双语并发雷达 (Dual-Radar Scanning)
   useEffect(() => {
     if (signal) {
-      // 1. 永远提取中文数组作为雷达探测器
+      // 1. 同时提取中文和英文的阵列
       const cnFluffs = Array.isArray(signal.fluff_words) 
         ? signal.fluff_words 
         : (signal.fluff_words as any)?.['cn'] || [];
-      
-      // 2. 提取当前语种数组作为气泡展示载荷
-      const targetFluffs = Array.isArray(signal.fluff_words) 
-        ? signal.fluff_words 
-        : (signal.fluff_words as any)?.[lang] || [];
         
-      buildDictionary(cnFluffs, targetFluffs, signal.raw_content || '');
+      const enFluffs = Array.isArray(signal.fluff_words) 
+        ? signal.fluff_words 
+        : (signal.fluff_words as any)?.['en'] || [];
+      
+      // 2. 锁定当前界面需要展示的目标语种
+      const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
+        
+      buildDictionary(cnFluffs, enFluffs, targetFluffs, signal.raw_content || '');
     }
   }, [signal, lang]);
 
-  const buildDictionary = (cnFluffs: string[], targetFluffs: string[], rawText: string) => {
+  // 接收三个数组：中文扫描阵列、英文扫描阵列、目标展示文案阵列
+  const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => {
     const dict: Record<string, string> = {};
-    
-    cnFluffs.forEach((cnSentence, index) => {
-      const hoverText = targetFluffs[index] || cnSentence;
+    const maxLen = Math.max(cnFluffs.length, enFluffs.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const cnSentence = cnFluffs[i] || "";
+      const enSentence = enFluffs[i] || "";
+      // 优先使用目标语种气泡，缺失则降级
+      const hoverText = targetFluffs[i] || cnSentence || enSentence;
       let found = false;
-      
-      // 🚨 致命 Bug 修复：必须在循环内部初始化正则，防止 /g 导致的 lastIndex 全局污染
-      const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
-      let match;
-      
-      // 策略 1: 利用中文原句的引号精确抓取原文关键字
-      while ((match = quoteRegex.exec(cnSentence)) !== null) {
-        const keyword = match[1].trim();
-        if (keyword.length >= 2 && rawText.includes(keyword)) {
-          dict[keyword] = hoverText; 
-          found = true;
+
+      // 🚨 策略 1：双语雷达并发扫描（寻找被引号包裹的原文原话）
+      const searchQuotes = (sentence: string) => {
+        let localFound = false;
+        const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
+        let match;
+        while ((match = quoteRegex.exec(sentence)) !== null) {
+          const keyword = match[1].trim();
+          // 放宽长度限制到 3，适应英文单词，并在原文中验证存活
+          if (keyword.length >= 3 && rawText.includes(keyword)) {
+            dict[keyword] = hoverText;
+            localFound = true;
+          }
         }
-      }
-      
-      // 策略 2: 暴力降级匹配 (增加词库容错)
+        return localFound;
+      };
+
+      // 优先让中文雷达扫，没扫到再让英文雷达扫
+      if (searchQuotes(cnSentence)) found = true;
+      if (!found && searchQuotes(enSentence)) found = true;
+
+      // 🚨 策略 2：暴力降级匹配 (当 AI 彻底忘记使用引号时)
       if (!found) {
-        const markers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称"];
-        for (const marker of markers) {
+        // A. 中文降级雷达
+        const cnMarkers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称", "掩饰"];
+        for (const marker of cnMarkers) {
           if (cnSentence.includes(marker)) {
             const prefix = cnSentence.split(marker)[0];
-            
-            // a. 尝试提取中文字符（应对中文原文，增加截取长度提高精度）
             const potentialCnWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-8);
             if (potentialCnWord.length >= 2 && rawText.includes(potentialCnWord)) {
               dict[potentialCnWord] = hoverText;
+              found = true;
               break;
             }
-            
-            // b. 尝试提取英文字符串（应对英文原文，但 AI 没加引号的情况）
-            const potentialEnMatch = prefix.match(/([a-zA-Z0-9\s\-]+)$/);
-            if (potentialEnMatch && potentialEnMatch[1].trim().length >= 4) {
-               const enWord = potentialEnMatch[1].trim();
-               if (rawText.includes(enWord)) {
-                  dict[enWord] = hoverText;
+          }
+        }
+
+        // B. 英文降级雷达（专门拦截英文报道）
+        if (!found) {
+          const enMarkers = ["implies", "covers up", "means", "indicates", "intends to", "tries to", "packages", "claims", "hides", "masks", "distracts"];
+          for (const marker of enMarkers) {
+            const lowerEn = enSentence.toLowerCase();
+            if (lowerEn.includes(marker)) {
+              const splitIdx = lowerEn.indexOf(marker);
+              const prefix = enSentence.substring(0, splitIdx).trim();
+              const words = prefix.split(/\s+/);
+              if (words.length > 0) {
+                // 提取 marker 前面的最后 3 个单词尝试撞库原文
+                const potentialEnWord = words.slice(-3).join(" ").replace(/[^\w\s-]/g, '');
+                if (potentialEnWord.length >= 4 && rawText.includes(potentialEnWord)) {
+                  dict[potentialEnWord] = hoverText;
+                  found = true;
                   break;
-               }
+                }
+              }
             }
           }
         }
       }
-    });
+    }
     setDictionary(dict);
   };
 
