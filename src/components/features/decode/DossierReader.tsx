@@ -6,17 +6,16 @@ import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
 interface DossierReaderProps {
   content: string; 
   isStreaming?: boolean; 
-  dictionary?: Record<string, string>; 
+  dictionary?: Record<string, string>;
 }
 
-// 修改子组件：通过 props 接收 setHover 方法
 const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => {
   if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>;
   const keys = Object.keys(dictionary).filter(k => k.trim() !== '');
   if (keys.length === 0) return <>{text}</>;
 
   try {
-    const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})`, 'g');
+    const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
     const parts = text.split(regex);
     return (
       <>
@@ -56,14 +55,52 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     }
   }, [content, isStreaming]);
 
+  // 🚨 核心超载：支持处理原版加粗 + 独创的 [[词汇::注脚]] 语法
   const parseInlineFormat = (text: string) => {
+    const tagRegex = /\[\[(.*?)::(.*?)\]\]/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    // 第一层：解析大模型特供的 [[词汇::深度注脚]] 语法
+    while ((match = tagRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        const beforeText = text.slice(lastIndex, match.index);
+        parts.push(...parseBoldAndDict(beforeText));
+      }
+      // 渲染高密度专属气泡
+      parts.push(
+        <span
+          key={`tag-${match.index}`}
+          onMouseEnter={(e) => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
+            setHoverInfo({ text: match[2], x: safeX, y: rect.top });
+          }}
+          onMouseLeave={() => setHoverInfo(null)}
+          className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold"
+        >
+          {match[1]}
+        </span>
+      );
+      lastIndex = tagRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(...parseBoldAndDict(text.slice(lastIndex)));
+    }
+    return parts;
+  };
+
+  // 第二层：常规加粗和全局词典探测
+  const parseBoldAndDict = (text: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         const cleanText = part.slice(2, -2);
-        return <strong key={i} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
+        return <strong key={`bold-${i}`} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
       }
-      return <DecodedText key={i} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
+      return <DecodedText key={`text-${i}`} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
     });
   };
 
@@ -71,7 +108,6 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     if (!content) return null;
     
     const blocks = content.split(/\n+/);
-
     return blocks.map((block, index) => {
       const trimmed = block.trim();
       if (!trimmed) return null;
@@ -113,7 +149,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
             <BookOpen className="text-red-700" size={20} />
             <div>
               <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
-              <p className="text-[10px] font-mono text-zinc-600 mt-1 tracking-widest">TOP SECRET // EXECUTIVE SUMMARY</p>
+              <p className="text-[10px] font-mono text-zinc-600 mt-1 tracking-widest">TOP SECRET // CROSS-DOMAIN ANALYSIS</p>
             </div>
           </div>
           
@@ -132,7 +168,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
 
         <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent relative">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-            <ShieldAlert className="w-[500px] h-[500px] text-white" />
+             <ShieldAlert className="w-[500px] h-[500px] text-white" />
           </div>
 
           <div className="relative z-10 max-w-4xl mx-auto">
@@ -144,14 +180,14 @@ export default function DossierReader({ content, isStreaming = false, dictionary
         </div>
       </motion.div>
 
-      {/* 🚀 逃逸渲染层：脱离 Overflow 裁剪的全局固定气泡 */}
+      {/* 🚀 逃逸渲染层：暗影注脚专属呈现 */}
       {hoverInfo && (
         <div
           className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed text-left font-sans transition-all duration-75"
           style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}
         >
           <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2">
-            <Zap size={12} /> 真相破译
+            <Zap size={12} /> 深层剖析 (Deep Insight)
           </span>
           {hoverInfo.text}
         </div>

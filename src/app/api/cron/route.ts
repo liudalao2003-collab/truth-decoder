@@ -83,7 +83,7 @@ export async function GET(req: Request) {
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": ["Fact 1 (PURE ENGLISH ONLY)"]}, "fluff": {"cn": ["隐秘动机1"], "en": ["Fluff 1 (PURE ENGLISH ONLY)"]}, "verdict": {"cn": "一句话点评", "en": "Single sentence verdict (PURE ENGLISH ONLY)"}}`;
+        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": ["Fact 1"]}, "fluff": {"cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(至少提取 6-8 条致命隐患！)"], "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS)"]}, "verdict": {"cn": "一句话点评", "en": "Single sentence verdict"}}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
@@ -102,7 +102,6 @@ export async function GET(req: Request) {
 
         const intel = JSON.parse(cleanedJsonString);
 
-        // 🚨 核心修复：强制捕获并抛出数据库错误，补充 view_count 兜底
         const { error: dbError } = await supabaseAdmin.from('signals').insert([{
           id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
           raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
@@ -117,9 +116,6 @@ export async function GET(req: Request) {
 
         processedCount++;
       } catch (e: any) {
-        if (process.env.NODE_ENV === 'development') {
-           console.log(`🔴 [模块_崩溃] -> 定时抓取单条失败:`, e.message);
-        }
         continue;
       }
     }
@@ -127,9 +123,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: true, processedCount });
 
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-       console.log(`🔴 [模块_崩溃] -> 定时引擎核心崩溃:`, error.message);
-    }
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

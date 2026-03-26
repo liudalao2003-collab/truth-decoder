@@ -9,7 +9,6 @@ const openai = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    // 1. 严格鉴权
     const authHeader = req.headers.get('Authorization');
     if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -18,7 +17,6 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 2. 挂载 V5.6 最新暗黑投行 Prompt 进行重铸 (增强英文约束)
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
@@ -29,8 +27,11 @@ export async function POST(req: Request) {
           
           输出结构严格如下：
           {
-            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only (MUST BE 100% PURE NATIVE ENGLISH, NO CHINESE)", "..."] },
-            "fluff": { "cn": ["分析对方刻意隐瞒的风险/隐秘动机/资本意图"], "en": ["Hidden agenda/Covered-up risks (PURE ENGLISH ONLY)"] },
+            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only", "..."] },
+            "fluff": { 
+              "cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(必须深度剖析！至少提取 6-8 条致命隐患！)"], 
+              "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS, PURE ENGLISH)"] 
+            },
             "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)" }
           }`
         },
@@ -41,14 +42,13 @@ export async function POST(req: Request) {
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
 
-    // 3. 🚨 物理覆盖：使用 .update() 而不是 .insert()，精准覆盖旧记录
     const { error: dbError } = await supabaseAdmin
       .from('signals')
       .update({
-        fluff_words: intel.fluff, // 注入新的隐秘动机
+        fluff_words: intel.fluff,
         hard_facts: intel.facts,
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict, washed: true } // 打上清洗标记
+        metadata: { bilingual: intel.verdict, washed: true }
       })
       .eq('id', id);
 
