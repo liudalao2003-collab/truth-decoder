@@ -2,16 +2,17 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ShieldAlert, Sparkles, Loader2, AlertTriangle, ArrowRight 
-} from 'lucide-react';
+import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe } from 'lucide-react';
 import { SignalRecord } from '@/types/database';
+import { useGlobalLang } from '@/hooks/useGlobalLang';
 
 export default function HomePage() {
   const router = useRouter();
+  const { lang, setLang } = useGlobalLang(); // 🟢 接入全局语种状态
+  
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null); // 🚨 故障状态已就绪
+  const [error, setError] = useState<string | null>(null);
   
   const [feed, setFeed] = useState<SignalRecord[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -25,10 +26,13 @@ export default function HomePage() {
   const fetchFeed = async (isLoadMore = false) => {
     if (isLoadMore && isLoadingMore) return;
     if (isLoadMore) setIsLoadingMore(true);
+
     const cursor = isLoadMore && feed.length > 0 ? feed[feed.length - 1].created_at : '';
+
     try {
       const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}`);
       const json = await res.json();
+
       if (json.success) {
         if (isLoadMore) {
           setFeed(prev => {
@@ -42,14 +46,25 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e) { console.error(e); }
-    finally { setIsLoadingMore(false); setIsInitialLoading(false); }
+    } catch (e: any) { 
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因:', e.message || e);
+      }
+    } finally { 
+      setIsLoadingMore(false); 
+      setIsInitialLoading(false); 
+    }
   };
 
   const handleStart = async () => {
     if (!input.trim() || isSubmitting) return;
     setIsSubmitting(true);
-    setError(null); // 每次点击前清空历史错误
+    setError(null);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🟢 [模块_发起] -> 动作/参数: 提交长文解析');
+    }
+
     try {
       const res = await fetch('/api/v1/ingest', {
         method: 'POST',
@@ -59,21 +74,26 @@ export default function HomePage() {
         },
         body: JSON.stringify({ rawContent: input })
       });
+
       const json = await res.json();
       
       // 🚀 核心判定：只在 100% 确认拿到 ID 时跳转
       if (json.success && json.data?.signalId) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 [模块_成功] -> 产物:', json.data.signalId);
+        }
         setInput('');
         router.push(`/decode/${json.data.signalId}`);
       } else { 
-        // 否则必定抛出给 Catch 块
-        throw new Error(json.error || '引擎拒绝入库 (发生未知错误)'); 
+        throw new Error(json.error || '引擎拒绝入库 (发生未知错误)');
       }
     } catch (err: any) { 
-      console.error("提交被拦截:", err.message);
-      setError(err.message); // 把错误信息挂载到界面上
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因:', err.message);
+      }
+      setError(err.message);
     } finally {
-      setIsSubmitting(false); // 必须重置按钮状态
+      setIsSubmitting(false);
     }
   };
 
@@ -89,15 +109,22 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.0 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.6 SECURE_GATE</p>
               </div>
+            </div>
+            
+            {/* 🚀 全局双语切换拨片 */}
+            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
+              <Globe className="text-zinc-600 w-4 h-4 ml-2" />
+              <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
+              <button onClick={() => setLang('en')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'en' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>EN</button>
             </div>
           </header>
 
           <section className="bg-zinc-950 border border-zinc-900 p-8 rounded-sm relative overflow-hidden group min-h-[600px] flex flex-col">
             <textarea 
               className="flex-1 w-full bg-black/30 border border-zinc-900 p-8 text-lg font-serif outline-none focus:border-red-900/50 transition-all resize-none mb-8 placeholder:text-zinc-800"
-              placeholder="请在此粘贴长篇大论的官方通稿..."
+              placeholder={lang === 'cn' ? "请在此粘贴长篇大论的官方通稿..." : "Paste the official narrative here..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isSubmitting}
@@ -111,10 +138,10 @@ export default function HomePage() {
               }`}
             >
               {isSubmitting ? <Loader2 className="animate-spin" /> : <Sparkles />}
-              {isSubmitting ? 'Securing Intelligence...' : '载入去伪存真引擎'}
+              {isSubmitting ? 'Securing Intelligence...' : (lang === 'cn' ? '载入去伪存真引擎' : 'INITIALIZE ENGINE')}
             </button>
 
-            {/* 🚨 故障监控屏 (本次修复核心) */}
+            {/* 🚨 故障监控屏 */}
             <AnimatePresence>
               {error && (
                 <motion.div 
@@ -147,7 +174,10 @@ export default function HomePage() {
                   className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]"
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
-                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">“{item.verdict}”</p>
+                  {/* 🛡️ 核心防线：双语断层兜底渲染 */}
+                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
+                    “{item.metadata?.bilingual?.[lang] || item.verdict}”
+                  </p>
                 </motion.div>
               ))}
             </AnimatePresence>
