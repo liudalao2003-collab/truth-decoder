@@ -16,20 +16,29 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ error: 'Unauthorized: Clearance Level Too Low' }), { status: 401 });
     }
 
-    // 2. 载荷解析与 TS 类型断言
+    // 2. 载荷解析与 TS 类型断言 (新增 lang 参数)
     const body = await request.json();
-    const { rawContent } = body as { rawContent: string };
+    const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
 
     if (!rawContent || typeof rawContent !== 'string') {
       logger.crash('暗影卷宗网关 - 缺少有效的情报文本');
       return new Response(JSON.stringify({ error: '缺少有效的情报文本' }), { status: 400 });
     }
 
-    // 3. 注入系统级护栏指令 (生成麦肯锡级别的商业情报备忘录)
-    // 业务说明：要求大模型直接吐出排版精美的 Markdown，坚决不走 JSON 格式，规避 Zod 解析炸弹。
+    // 3. 动态注入系统级护栏指令 (根据语种切换)
+    const isEnglish = lang === 'en';
     const systemGuardrail: TerminalMessage = {
       role: 'system',
-      content: `你现在是 TruthDecoder PRO 的首席暗影情报官。
+      content: isEnglish
+        ? `You are the Chief Shadow Intelligence Officer of TruthDecoder PRO.
+Task: Based on the provided commercial press release, generate a coherent, highly penetrating "Shadow Dossier" memo.
+Requirements:
+1. Must be a coherent deep-dive analysis, not just bullet points.
+2. Strip away official PR fluff and directly expose capital movements, power transitions, or covered-up crises.
+3. Include at least 3 hard data/facts as support, integrated naturally into the narrative.
+4. Tone: Cold, professional, piercing (like an internal memo from a top-tier short-selling firm).
+5. NO JSON! Output a well-formatted Markdown article. MUST BE IN NATIVE ENGLISH (NO CHINESE).`
+        : `你现在是 TruthDecoder PRO 的首席暗影情报官。
 任务：基于用户提供的商业通稿，生成一份连贯的、极具穿透力的【暗影卷宗 (Shadow Dossier)】长文报告。
 要求：
 1. 必须是一篇连贯的深度分析文章，而非简单的要点罗列。
@@ -41,12 +50,14 @@ export async function POST(request: Request) {
 
     const userMessage: TerminalMessage = {
       role: 'user',
-      content: `请对以下通稿进行深度暗影破译：\n\n${rawContent}`
+      content: isEnglish
+        ? `Please conduct a deep shadow decryption of the following narrative:\n\n${rawContent}`
+        : `请对以下通稿进行深度暗影破译：\n\n${rawContent}`
     };
 
     const messages: TerminalMessage[] = [systemGuardrail, userMessage];
 
-    logger.async('呼叫底层大模型流式引擎');
+    logger.async(`呼叫底层大模型流式引擎 (Target Language: ${lang || 'cn'})`);
 
     // 4. 呼叫流式引擎 (复用已有的可靠管道)
     const streamResponse = await createDeepSeekStream(messages);
@@ -61,6 +72,7 @@ export async function POST(request: Request) {
         'Connection': 'keep-alive',
       },
     });
+
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '暗影卷宗流式网关级联失效';
     logger.crash(errMsg);

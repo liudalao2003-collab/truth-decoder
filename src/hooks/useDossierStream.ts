@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { SignalRecord } from '@/types/database';
 
-export function useDossierStream(signal: SignalRecord | null) {
+export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en') {
   const [dossierContent, setDossierContent] = useState<string>('');
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
 
@@ -12,7 +12,7 @@ export function useDossierStream(signal: SignalRecord | null) {
     setDossierContent('');
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('🟢 [模块_发起] -> 动作/参数: 激活暗影卷宗流式生成');
+      console.log(`🟢 [模块_发起] -> 动作/参数: 激活暗影卷宗流式生成 (Lang: ${lang})`);
     }
 
     try {
@@ -20,9 +20,9 @@ export function useDossierStream(signal: SignalRecord | null) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
         },
-        body: JSON.stringify({ rawContent: signal.raw_content })
+        body: JSON.stringify({ rawContent: signal.raw_content, lang }) // 🚀 核心修复：携带语种标识
       });
 
       if (!res.ok || !res.body) throw new Error('流式通道建立失败');

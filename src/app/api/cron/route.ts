@@ -6,12 +6,11 @@ export const maxDuration = 60;
 
 const openai = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: '[https://api.deepseek.com](https://api.deepseek.com)',
+  baseURL: 'https://api.deepseek.com',
 });
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
-
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -29,13 +28,12 @@ export async function GET(req: Request) {
     }
 
     const frequencyMinutes = configMap.scrape_frequency?.interval_minutes || 60;
-    const lastRunTimeStr = configMap.cron_last_run?.time; 
-    
+    const lastRunTimeStr = configMap.cron_last_run?.time;
+
     if (lastRunTimeStr) {
       const lastRun = new Date(lastRunTimeStr).getTime();
       const now = new Date().getTime();
       const minutesPassed = (now - lastRun) / (1000 * 60);
-
       if (minutesPassed < (frequencyMinutes - 1)) {
         return NextResponse.json({ success: true, message: 'Clutch engaged' });
       }
@@ -49,7 +47,8 @@ export async function GET(req: Request) {
 
     const rawIntensity = configMap.scrape_intensity?.limit || 1;
     const intensity = Math.min(rawIntensity, 3); 
-    const targetUrl = '[https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664](https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664)';
+    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+
     const rssRes = await fetch(targetUrl, { 
       cache: 'no-store',
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome/122.0.0.0 Safari/537.36' }
@@ -79,12 +78,12 @@ export async function GET(req: Request) {
         fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
 
         if (fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack') || fullText.includes('Too many domains')) {
-            continue; 
+            continue;
         }
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": []}, "fluff": {"cn": ["隐秘动机1"], "en": []}, "verdict": {"cn": "一句话点评", "en": ""}}`;
+        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": ["Fact 1 (PURE ENGLISH ONLY)"]}, "fluff": {"cn": ["隐秘动机1"], "en": ["Fluff 1 (PURE ENGLISH ONLY)"]}, "verdict": {"cn": "一句话点评", "en": "Single sentence verdict (PURE ENGLISH ONLY)"}}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
@@ -96,6 +95,7 @@ export async function GET(req: Request) {
         let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
         const firstBrace = cleanedJsonString.indexOf('{');
         const lastBrace = cleanedJsonString.lastIndexOf('}');
+
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
             cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
         }
@@ -110,7 +110,7 @@ export async function GET(req: Request) {
           hard_facts: intel.facts || { cn: [], en: [] },
           verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
           view_count: 0,
-          metadata: { source_url: link } 
+          metadata: { source_url: link, bilingual: intel.verdict || {} } 
         }]);
 
         if (dbError) throw new Error(`DB Write Denied: ${dbError.message}`);

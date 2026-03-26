@@ -13,14 +13,14 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const { id } = use(params);
   const router = useRouter();
   
-  const { lang, setLang } = useGlobalLang(); // 🟢 接入全局语种
+  const { lang, setLang } = useGlobalLang();
   const [signal, setSignal] = useState<SignalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
-  // 🟢 剥离 SSE 巨石逻辑
-  const { dossierContent, setDossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal);
+  // 🟢 将当前的 lang 传入流式管道钩子
+  const { dossierContent, setDossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => {
     const fetchSignal = async () => {
@@ -44,10 +44,8 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     fetchSignal();
   }, [id, setDossierContent]);
 
-  // 🚀 监听全局 lang 变化，动态重构高亮词典
   useEffect(() => {
     if (signal) {
-      // 兼容旧版 array 或新版 bilingual object
       const fluffs = Array.isArray(signal.fluff_words) 
         ? signal.fluff_words 
         : (signal.fluff_words as any)?.[lang] || [];
@@ -107,7 +105,6 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500 w-8 h-8" /></div>;
   if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
 
-  // 🛡️ 核心防线：双语断层兜底渲染
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
 
   return (

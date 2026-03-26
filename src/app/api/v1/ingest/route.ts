@@ -49,15 +49,15 @@ export async function POST(req: Request) {
 {
   "facts": {
     "cn": ["骨干事实1 (必须提取3-5条剥离修饰语的冰冷数据或核心政策底牌)", "骨干事实2", "骨干事实3"],
-    "en": []
+    "en": ["Hard fact 1 (MUST BE 100% PURE NATIVE ENGLISH, NO CHINESE)", "Hard fact 2", "Hard fact 3"]
   },
   "fluff": {
-    "cn": ["隐秘动机1 (必须深度剖析3-5条！【禁止摘抄原文】请直接一针见血地指出：文章在掩盖什么风险？想诱导大众相信什么？例如：用'历史耐心'来掩盖'短期内无法产生经济回报'的事实)", "隐秘动机2", "隐秘动机3"],
-    "en": []
+    "cn": ["隐秘动机1 (必须深度剖析3-5条！【禁止摘抄原文】请直接一针见血地指出：文章在掩盖什么风险？想诱导大众相信什么？)", "隐秘动机2", "隐秘动机3"],
+    "en": ["Hidden motive 1 (MUST BE 100% PURE NATIVE ENGLISH, DIRECTLY EXPOSE THE HIDDEN AGENDA/RISK)", "Hidden motive 2", "Hidden motive 3"]
   },
   "verdict": {
     "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话（不超过50字），直接点破这篇通稿背后真正的利益导向、资本运作逻辑或政治意图。",
-    "en": ""
+    "en": "A ruthless, single-sentence verdict pointing out the true underlying agenda. (PURE ENGLISH ONLY)"
   }
 }`
         },
@@ -75,6 +75,7 @@ export async function POST(req: Request) {
     // 2. 物理级剪裁：强制锁定 { 和 } 之间的核心内容，切除大模型可能生成的开头结尾废话
     const firstBrace = cleanedJsonString.indexOf('{');
     const lastBrace = cleanedJsonString.lastIndexOf('}');
+
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
       cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
     }

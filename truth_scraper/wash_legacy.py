@@ -1,17 +1,19 @@
 import requests
 import time
 import urllib.parse
+import os
 
 # --- ⚙️ 核心配置 ---
 API_FEED = "http://localhost:3000/api/feed"
 API_WASH = "http://localhost:3000/api/v1/wash"
+# 🚨 必须替换为你 .env 中的真实 Token！
 TOKEN = "ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ="
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - UNSTOPPABLE WASH V5.1       ")
-    print("      [+] 正在执行全量资产红利重铸协议...         ")
-    print("      [!] 警告：此操作将消耗大量 DeepSeek Token   ")
+    print("      TRUTH DECODER - UNSTOPPABLE WASH V5.6       ")
+    print("      [+] 正在执行全量资产红利重铸协议 (双语防污染版)...")
+    print("      [!] 警告：此操作将消耗 DeepSeek Token           ")
     print("==================================================")
     
     cursor = ""
@@ -31,7 +33,7 @@ def main():
                 print("🏁 [终点] 数据库已全部扫荡完毕。没有更多资产需要清洗。")
                 break
 
-            print(f"🔎 发现 {len(batch_data)} 条资产，准备注入“暗黑做空”灵魂...")
+            print(f"🔎 发现 {len(batch_data)} 条资产，准备注入“双语纯血”灵魂...")
 
             # 2. 逐条进行“心脏搭桥”手术
             for s in batch_data:
@@ -50,10 +52,10 @@ def main():
                     )
                     
                     if resp.status_code == 200:
-                        print("✅ 已觉醒")
+                        print("✅ 已觉醒 (双语重铸完成)")
                         total_washed += 1
                     else:
-                        print(f"❌ 失败 ({resp.status_code})")
+                        print(f"❌ 失败 ({resp.status_code}) - {resp.text}")
                 except Exception as e:
                     print(f"❌ 链路超时 ({str(e)})")
                 

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 2. 挂载 V5 版本最新暗黑投行 Prompt 进行重铸
+    // 2. 挂载 V5.6 最新暗黑投行 Prompt 进行重铸 (增强英文约束)
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
@@ -29,9 +29,9 @@ export async function POST(req: Request) {
           
           输出结构严格如下：
           {
-            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only", "..."] },
-            "fluff": { "cn": ["分析对方刻意隐瞒的风险/隐秘动机/资本意图"], "en": ["Hidden agenda/Covered-up risks"] },
-            "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict." }
+            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only (MUST BE 100% PURE NATIVE ENGLISH, NO CHINESE)", "..."] },
+            "fluff": { "cn": ["分析对方刻意隐瞒的风险/隐秘动机/资本意图"], "en": ["Hidden agenda/Covered-up risks (PURE ENGLISH ONLY)"] },
+            "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)" }
           }`
         },
         { role: "user", content: rawContent }
