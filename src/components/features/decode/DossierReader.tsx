@@ -61,12 +61,14 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     const parts = [];
     let lastIndex = 0;
     let match;
+    let chunkCounter = 0; // 🚨 架构师防线：引入块级切片自增 ID，确保 Spread 展平后 React Key 的绝对物理唯一性
 
     // 第一层：解析大模型特供的 [[词汇::深度注脚]] 语法
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) {
         const beforeText = text.slice(lastIndex, match.index);
-        parts.push(...parseBoldAndDict(beforeText));
+        // 挂载 chunk ID
+        parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`));
       }
       // 渲染高密度专属气泡
       parts.push(
@@ -87,20 +89,20 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     }
 
     if (lastIndex < text.length) {
-      parts.push(...parseBoldAndDict(text.slice(lastIndex)));
+      parts.push(...parseBoldAndDict(text.slice(lastIndex), `chunk-${chunkCounter++}`));
     }
     return parts;
   };
 
-  // 第二层：常规加粗和全局词典探测
-  const parseBoldAndDict = (text: string) => {
+  // 第二层：常规加粗和全局词典探测，强制接收 prefixKey
+  const parseBoldAndDict = (text: string, prefixKey: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         const cleanText = part.slice(2, -2);
-        return <strong key={`bold-${i}`} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
+        return <strong key={`${prefixKey}-bold-${i}`} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
       }
-      return <DecodedText key={`text-${i}`} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
+      return <DecodedText key={`${prefixKey}-text-${i}`} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
     });
   };
 
@@ -115,7 +117,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
       if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {
         const titleText = trimmed.replace(/^#+\s*/, '');
         return (
-          <h3 key={index} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 to-transparent py-2 block">
+          <h3 key={`heading-${index}`} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 to-transparent py-2 block">
             {parseInlineFormat(titleText)}
           </h3>
         );
@@ -124,7 +126,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const cleanItem = trimmed.replace(/^[-*]\s*/, '');
         return (
-          <div key={index} className="flex items-start gap-4 my-3 pl-4">
+          <div key={`list-${index}`} className="flex items-start gap-4 my-3 pl-4">
             <span className="text-red-700 mt-1.5 shrink-0">✦</span>
             <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">
               {parseInlineFormat(cleanItem)}
@@ -134,7 +136,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
       }
 
       return (
-        <p key={index} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">
+        <p key={`p-${index}`} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">
           {parseInlineFormat(trimmed)}
         </p>
       );
