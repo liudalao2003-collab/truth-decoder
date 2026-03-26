@@ -80,7 +80,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000> with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
@@ -97,7 +97,9 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template\&filter=next.js\&utm_source=create-next-app\&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+<br />
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
@@ -867,129 +869,138 @@ export async function POST(req: Request) {
 ============================================================
 File: .\src\app\api\admin\trigger\route.ts
 ============================================================
-import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { cookies } from 'next/headers';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com',
-});
-
-async function verifyCommander() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('truth_admin_token');
-  return token?.value === 'ACCESS_GRANTED_2026';
-}
-
-export async function POST() {
-  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  try {
-    console.log("-----------------------------------------");
-    console.log("🚀 [云端引擎] 战术迂回：全面切入 CNBC 国际金融流...");
-    
-    const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
-    const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
-
-    if (configMap.master_switch?.status === 'OFF') {
-      return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
-    }
-
-    const rawIntensity = configMap.scrape_intensity?.limit || 1;
-    const intensity = Math.min(rawIntensity, 3); // 强行限制为 3 条，防 Vercel 超时
-    const aiDepth = configMap.ai_depth?.mode || 'deep';
-
-    // 🎯 战术转移：CNBC 的 RSS 极度稳定，绝对不会 403
-    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
-    console.log("📡 [1/4] 正在无阻碍接入 CNBC RSS...");
-    
-    const rssRes = await fetch(targetUrl, { 
-      cache: 'no-store',
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' }
-    });
-
-    if (!rssRes.ok) throw new Error(`CNBC 接入失败: ${rssRes.status}`);
-    const rssText = await rssRes.text();
-    
-    const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity);
-    if (items.length === 0) throw new Error("未能提取到有效新闻链接");
-
-    let processedCount = 0;
-
-    for (const item of items) {
-      try {
-        const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
-        const link = item[2].trim();
-        
-        console.log(`🕵️‍♂️ [2/4] 正在潜入 CNBC 原文: ${title.substring(0, 30)}...`);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const articleRes = await fetch(`https://r.jina.ai/${link}`, {
-          headers: { 'X-Return-Format': 'markdown' },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        let fullText = await articleRes.text();
-
-        console.log("🧹 [3/4] 绞肉机启动：抹除 CNBC 导航垃圾...");
-        // 🚀 核心过滤：彻底粉碎 Jina 解析出来的网页杂质
-        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, ''); // 抹除超链接
-        fullText = fullText.replace(/!\[.*?\]/g, '');       // 抹除图片
-        fullText = fullText.replace(/#+/g, '');             // 抹除 Markdown 标题符号
-        fullText = fullText.replace(/\s+/g, ' ').substring(0, 3500); // 压缩空格，截取精华
-
-        if (fullText.length < 200) {
-          console.warn("⚠️ 提纯后情报量过低 (可能是视频新闻)，跳过该目标。");
-          continue;
-        }
-
-        console.log(`🧠 [4/4] 已获得完美纯净生肉 (${fullText.length}字)，移交 AI 深度审判...`);
-
-        const depthPrompt = aiDepth === 'quick' 
-          ? "提取核心 facts 和一句 verdict，双语 JSON。"
-          : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\", \"事实2\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }";
-
-        const completion = await openai.chat.completions.create({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: depthPrompt },
-            { role: "user", content: `标题：${title}\n内容：${fullText}` }
-          ],
-          response_format: { type: 'json_object' }
-        });
-
-        const intel = JSON.parse(completion.choices[0].message.content || '{}');
-
-        await supabaseAdmin.from('signals').insert([{
-          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
-          fluff_words: intel.fluff || { cn: [], en: [] }, 
-          hard_facts: intel.facts || { cn: [], en: [] },
-          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
-          metadata: { source_url: link } 
-        }]);
-
-        processedCount++;
-        console.log("✅ 纯净审判完成，已落盘。");
-
-      } catch (innerError: any) {
-        console.error(`⚠️ 单条情报处理失败 (${innerError.name}):`, innerError.message);
-        continue; 
-      }
-    }
-
-    return NextResponse.json({ success: true, processedCount });
-
-  } catch (error: any) {
-    console.error("❌ [云端引擎] 核心逻辑崩溃:", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-}
+ import { NextResponse } from 'next/server'; 
+ import { supabaseAdmin } from '@/lib/supabase'; 
+ import { cookies } from 'next/headers'; 
+ import OpenAI from 'openai'; 
+  
+ export const maxDuration = 60; 
+  
+ const openai = new OpenAI({ 
+   apiKey: process.env.DEEPSEEK_API_KEY, 
+   baseURL: 'https://api.deepseek.com', 
+ }); 
+  
+ async function verifyCommander() { 
+   const cookieStore = await cookies(); 
+   const token = cookieStore.get('truth_admin_token'); 
+   return token?.value === 'ACCESS_GRANTED_2026'; 
+ } 
+  
+ export async function POST() { 
+   if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); 
+  
+   try { 
+     const { data: configs } = await supabaseAdmin.from('system_configs').select('*'); 
+     const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {}; 
+  
+     if (configMap.master_switch?.status === 'OFF') { 
+       return NextResponse.json({ success: false, message: 'Master Switch is OFF' }); 
+     } 
+  
+     const rawIntensity = configMap.scrape_intensity?.limit || 1; 
+     const intensity = Math.min(rawIntensity, 3); 
+     const aiDepth = configMap.ai_depth?.mode || 'deep'; 
+  
+     const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664'; 
+      
+     const rssRes = await fetch(targetUrl, {  
+       cache: 'no-store', 
+       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' } 
+     }); 
+  
+     if (!rssRes.ok) throw new Error(`CNBC 接入失败: ${rssRes.status}`); 
+     const rssText = await rssRes.text(); 
+      
+     const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity); 
+  
+     if (items.length === 0) throw new Error("未能提取到有效新闻链接"); 
+  
+     let processedCount = 0; 
+  
+     for (const item of items) { 
+       try { 
+         const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, ''); 
+         const link = item[2].trim(); 
+          
+         // 🚨 护盾 1：查重拦截。如果标题已经在库里，直接跳过，不浪费大模型算力 
+         const { data: existing } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `%${title.substring(0, 20)}%`).limit(1); 
+         if (existing && existing.length > 0) { 
+             console.log(`⚠️ 发现重复情报，跳过: ${title.substring(0, 30)}`); 
+             continue; 
+         } 
+  
+         const controller = new AbortController(); 
+         const timeoutId = setTimeout(() => controller.abort(), 20000); 
+  
+         const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
+           headers: { 'X-Return-Format': 'markdown' }, 
+           signal: controller.signal 
+         }); 
+         clearTimeout(timeoutId); 
+  
+         let fullText = await articleRes.text(); 
+         fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500); 
+  
+         if (fullText.length < 200) { 
+           console.log(`⚠️ 提纯后文本过短，抛弃: ${title.substring(0, 30)}`); 
+           continue; 
+         } 
+  
+         const depthPrompt = aiDepth === 'quick'  
+           ? "提取核心 facts 和一句 verdict，双语 JSON。" 
+           : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\", \"事实2\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }"; 
+  
+         const completion = await openai.chat.completions.create({ 
+           model: "deepseek-chat", 
+           messages: [ 
+             { role: "system", content: depthPrompt }, 
+             { role: "user", content: `标题：${title}\n内容：${fullText}` } 
+           ], 
+           response_format: { type: 'json_object' } 
+         }); 
+  
+         const rawAiOutput = completion.choices[0].message.content || ''; 
+         let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim(); 
+         const firstBrace = cleanedJsonString.indexOf('{'); 
+         const lastBrace = cleanedJsonString.lastIndexOf('}'); 
+         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
+             cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1); 
+         } 
+          
+         const intel = JSON.parse(cleanedJsonString); 
+  
+         // 🚨 护盾 2 & 3：强制接收 error 并补充 view_count 兜底 
+         const { error: dbError } = await supabaseAdmin.from('signals').insert([{ 
+           id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 
+           raw_content: `【标题】${title}\n\n【正文】\n${fullText}`, 
+           fluff_words: intel.fluff || { cn: [], en: [] },  
+           hard_facts: intel.facts || { cn: [], en: [] }, 
+           verdict: intel.verdict?.cn || (intel.verdict || "解析失败"), 
+           view_count: 0, 
+           metadata: { source_url: link }  
+         }]); 
+  
+         if (dbError) { 
+            throw new Error(`数据库写入被拒: ${dbError.message} (代码: ${dbError.code})`); 
+         } 
+  
+         processedCount++; 
+         console.log(`✅ 成功落盘: ${title.substring(0, 30)}`); 
+  
+       } catch (innerError: any) { 
+         console.error(`🔴 单条处理异常:`, innerError.message); 
+         continue;  
+       } 
+     } 
+  
+     return NextResponse.json({ success: true, processedCount }); 
+  
+   } catch (error: any) { 
+     console.error(`🔴 云端引擎核心崩溃:`, error.message); 
+     return NextResponse.json({ success: false, error: error.message }, { status: 500 }); 
+   } 
+ }
 
 ============================================================
 File: .\src\app\api\auth\route.ts
@@ -1032,33 +1043,33 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import OpenAI from 'openai';
 
-// 🚀 加上这一行：强行将 Vercel 无服务器函数的存活时间提升至 60 秒极限！
 export const maxDuration = 60;
 
 const openai = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com',
+  baseURL: '[https://api.deepseek.com](https://api.deepseek.com)',
 });
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
+
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
-    console.log("-----------------------------------------");
-    console.log("⏰ [自动巡航] Vercel 送报员准点敲门...");
+    if (process.env.NODE_ENV === 'development') {
+        console.log("🟢 [模块_发起] -> 自动巡航送报员敲门...");
+    }
     
     const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
     const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
 
     if (configMap.master_switch?.status === 'OFF') {
-      console.log("🛑 [自动巡航] 总开关关闭，拒绝开门。");
       return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
     }
 
-    const frequencyMinutes = configMap.scrape_frequency?.interval_minutes || 60; 
+    const frequencyMinutes = configMap.scrape_frequency?.interval_minutes || 60;
     const lastRunTimeStr = configMap.cron_last_run?.time; 
     
     if (lastRunTimeStr) {
@@ -1067,12 +1078,9 @@ export async function GET(req: Request) {
       const minutesPassed = (now - lastRun) / (1000 * 60);
 
       if (minutesPassed < (frequencyMinutes - 1)) {
-        console.log(`💤 [自动巡航] 离合器介入：距离上次执行仅过去 ${Math.round(minutesPassed)} 分钟，未达设定的 ${frequencyMinutes} 分钟。继续休眠。`);
         return NextResponse.json({ success: true, message: 'Clutch engaged' });
       }
     }
-
-    console.log(`🔥 [自动巡航] 离合器放行！面板设定: 每 ${frequencyMinutes} 分钟。开始执行打击！`);
 
     await supabaseAdmin.from('system_configs').upsert({ 
       id: 'cron_last_run', 
@@ -1082,9 +1090,7 @@ export async function GET(req: Request) {
 
     const rawIntensity = configMap.scrape_intensity?.limit || 1;
     const intensity = Math.min(rawIntensity, 3); 
-    const aiDepth = configMap.ai_depth?.mode || 'deep';
-
-    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+    const targetUrl = '[https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664](https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664)';
     const rssRes = await fetch(targetUrl, { 
       cache: 'no-store',
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome/122.0.0.0 Safari/537.36' }
@@ -1102,7 +1108,8 @@ export async function GET(req: Request) {
         const link = item[2].trim();
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+
         const articleRes = await fetch(`https://r.jina.ai/${link}`, {
           headers: { 'X-Return-Format': 'markdown' },
           signal: controller.signal
@@ -1112,30 +1119,13 @@ export async function GET(req: Request) {
         let fullText = await articleRes.text();
         fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
 
-        // 🧹 毒饵拦截：如果 Jina 被墙，立刻丢弃本篇
         if (fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack') || fullText.includes('Too many domains')) {
-            console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
-            continue; // 如果是手动投喂的独立文件，这里用 return 报错
+            continue; 
         }
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
-请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
-{
-  "facts": {
-    "cn": ["骨干事实1 (必须提取3-5条剥离修饰语的冰冷数据或核心政策底牌)", "骨干事实2", "骨干事实3"],
-    "en": []
-  },
-  "fluff": {
-    "cn": ["隐秘动机1 (必须深度剖析3-5条！【禁止摘抄原文】请直接一针见血地指出：文章在掩盖什么风险？想诱导大众相信什么？例如：用'历史耐心'来掩盖'短期内无法产生经济回报'的事实)", "隐秘动机2", "隐秘动机3"],
-    "en": []
-  },
-  "verdict": {
-    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话（不超过50字），直接点破这篇通稿背后真正的利益导向、资本运作逻辑或政治意图。",
-    "en": ""
-  }
-}`;
+        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": []}, "fluff": {"cn": ["隐秘动机1"], "en": []}, "verdict": {"cn": "一句话点评", "en": ""}}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
@@ -1143,31 +1133,44 @@ export async function GET(req: Request) {
           response_format: { type: 'json_object' }
         });
 
-        // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
-        const rawAiOutput = completion.choices[0].message.content || ''
-        const cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const rawAiOutput = completion.choices[0].message.content || '';
+        let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const firstBrace = cleanedJsonString.indexOf('{');
+        const lastBrace = cleanedJsonString.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+            cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+        }
+
         const intel = JSON.parse(cleanedJsonString);
 
-        await supabaseAdmin.from('signals').insert([{
+        // 🚨 核心修复：强制捕获并抛出数据库错误，补充 view_count 兜底
+        const { error: dbError } = await supabaseAdmin.from('signals').insert([{
           id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
           raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
           fluff_words: intel.fluff || { cn: [], en: [] }, 
           hard_facts: intel.facts || { cn: [], en: [] },
           verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
+          view_count: 0,
           metadata: { source_url: link } 
         }]);
 
+        if (dbError) throw new Error(`DB Write Denied: ${dbError.message}`);
+
         processedCount++;
-      } catch (e) {
+      } catch (e: any) {
+        if (process.env.NODE_ENV === 'development') {
+           console.log(`🔴 [模块_崩溃] -> 定时抓取单条失败:`, e.message);
+        }
         continue;
       }
     }
 
-    console.log(`✅ [自动巡航] 本次轰炸完毕！新增 ${processedCount} 篇情报。`);
     return NextResponse.json({ success: true, processedCount });
 
   } catch (error: any) {
-    console.error("❌ [自动巡航] 核心崩溃:", error.message);
+    if (process.env.NODE_ENV === 'development') {
+       console.log(`🔴 [模块_崩溃] -> 定时引擎核心崩溃:`, error.message);
+    }
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -1474,6 +1477,79 @@ export async function DELETE(request: Request) {
 }
 
 ============================================================
+File: .\src\app\api\v1\dossier\route.ts
+============================================================
+import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { TerminalMessage } from '@/types';
+import { logger } from '@/utils/logger';
+
+// 🚀 强制使用 Edge Runtime，避免 Node.js 阻塞，免疫 Vercel 60秒无服务器超时熔断
+export const runtime = 'edge';
+
+export async function POST(request: Request) {
+  try {
+    logger.start('接收到暗影卷宗 (Shadow Dossier) 流式生成请求');
+
+    // 1. 物理级鉴权防线 (复用系统的 INGEST_TOKEN 保护核心资产)
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      logger.crash('暗影卷宗网关 - 越权访问尝试已被拦截');
+      return new Response(JSON.stringify({ error: 'Unauthorized: Clearance Level Too Low' }), { status: 401 });
+    }
+
+    // 2. 载荷解析与 TS 类型断言
+    const body = await request.json();
+    const { rawContent } = body as { rawContent: string };
+
+    if (!rawContent || typeof rawContent !== 'string') {
+      logger.crash('暗影卷宗网关 - 缺少有效的情报文本');
+      return new Response(JSON.stringify({ error: '缺少有效的情报文本' }), { status: 400 });
+    }
+
+    // 3. 注入系统级护栏指令 (生成麦肯锡级别的商业情报备忘录)
+    // 业务说明：要求大模型直接吐出排版精美的 Markdown，坚决不走 JSON 格式，规避 Zod 解析炸弹。
+    const systemGuardrail: TerminalMessage = {
+      role: 'system',
+      content: `你现在是 TruthDecoder PRO 的首席暗影情报官。
+任务：基于用户提供的商业通稿，生成一份连贯的、极具穿透力的【暗影卷宗 (Shadow Dossier)】长文报告。
+要求：
+1. 必须是一篇连贯的深度分析文章，而非简单的要点罗列。
+2. 扒光官方话术的伪装，直接揭露资本动向、权力交接或掩盖的危机。
+3. 必须包含至少3条硬核数据/事实作为支撑，并将它们自然地融入叙事中。
+4. 语言风格：冷酷、专业、一针见血（类似顶级做空机构的内部备忘录）。
+5. 严禁输出 JSON！必须直接输出富含逻辑层次的 Markdown 格式排版长文。`
+    };
+
+    const userMessage: TerminalMessage = {
+      role: 'user',
+      content: `请对以下通稿进行深度暗影破译：\n\n${rawContent}`
+    };
+
+    const messages: TerminalMessage[] = [systemGuardrail, userMessage];
+
+    logger.async('呼叫底层大模型流式引擎');
+
+    // 4. 呼叫流式引擎 (复用已有的可靠管道)
+    const streamResponse = await createDeepSeekStream(messages);
+
+    logger.success('暗影卷宗流式管道已连接，开始向客户端泵入字节流');
+
+    // 5. 原生流透传 (打通前端 SSE 链路)
+    return new Response(streamResponse.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : '暗影卷宗流式网关级联失效';
+    logger.crash(errMsg);
+    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
+  }
+}
+
+============================================================
 File: .\src\app\api\v1\ingest\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
@@ -1520,8 +1596,8 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
-        { 
-          role: "system", 
+        {
+          role: "system",
           content: `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
 请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
 {
@@ -1544,14 +1620,27 @@ export async function POST(req: Request) {
       response_format: { type: 'json_object' }
     });
 
-    // 🛡️ 强制剥离大模型可能附带的 Markdown 代码块残留
-    const rawAiOutput = completion.choices[0].message.content || ''
-    const cleanedJsonString = rawAiOutput.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+    // 🛡️ 工业级 JSON 护盾：暴力清洗大模型可能的幻觉输出
+    const rawAiOutput = completion.choices[0].message.content || '';
+
+    // 1. 消除大小写不敏感的 markdown 标识 (追加 /i 标志，防备 ```JSON 或 ```Json 漏网)
+    let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // 2. 物理级剪裁：强制锁定 { 和 } 之间的核心内容，切除大模型可能生成的开头结尾废话
+    const firstBrace = cleanedJsonString.indexOf('{');
+    const lastBrace = cleanedJsonString.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+      cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+    }
+
     let intel;
     try {
       intel = JSON.parse(cleanedJsonString);
     } catch (parseError) {
+      // 3. 绝境探针：如果 JSON.parse 依然失败，在后台抛出原生的畸形结构，便于排查
+      if (process.env.NODE_ENV === 'development') {
+         console.log("🔴 [模块_崩溃] -> 大模型吐出的畸形数据:", rawAiOutput);
+      }
       throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
     }
 
@@ -1560,23 +1649,22 @@ export async function POST(req: Request) {
       .insert([{
         id: signalId,
         raw_content: rawContent,
-        fluff_words: intel.fluff || { cn: [], en: [] }, 
+        fluff_words: intel.fluff || { cn: [], en: [] },
         hard_facts: intel.facts || { cn: [], en: [] },
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict || {} } 
+        metadata: { bilingual: intel.verdict || {} }
       }]);
 
     // 🛡️ 底层兜底：万一并发导致预检穿透，被底层物理规则弹回
     if (dbError) {
       if (dbError.code === '23505') {
-        // 顺势查出现有 ID 并返回，优雅地化解崩溃
         const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
         if (retry && retry.length > 0) {
             return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
         }
         return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
       }
-      throw dbError; 
+      throw dbError;
     }
 
     return NextResponse.json({ success: true, data: { signalId } });
@@ -1586,6 +1674,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 
 ============================================================
 File: .\src\app\api\v1\wash\route.ts
@@ -1714,37 +1803,40 @@ File: .\src\app\decode\[id]\page.tsx
 "use client";
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, AlertCircle, Target, Skull, Database, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Database, Trash2, Zap, ShieldAlert } from 'lucide-react';
 import RawNarrative from '@/components/features/decode/RawNarrative';
+import DossierReader from '@/components/features/decode/DossierReader';
+import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import { SignalRecord } from '@/types/database';
 
 export default function DecodePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  
   const [signal, setSignal] = useState<SignalRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDeleting, setIsDeleting] = useState(false); // 🚀 抹杀状态
+  const [isDeleting, setIsDeleting] = useState(false);
   const [lang, setLang] = useState<'cn' | 'en'>('cn');
+
+  const [dossierContent, setDossierContent] = useState<string>('');
+  const [isStreamingDossier, setIsStreamingDossier] = useState(false);
+  const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchSignal = async () => {
       try {
         const res = await fetch(`/api/decode?id=${id}`);
-
-        // 🛡️ 柔性拦截：如果查不到数据（404），不要抛出 Error 炸毁前端，而是静默退出
-        if (!res.ok) {
-          setSignal(null);
-          return;
-        }
+        if (!res.ok) { setSignal(null); return; }
 
         const json = await res.json();
         if (json.success) {
           setSignal(json.data);
+          if (json.data.dossier_content) setDossierContent(json.data.dossier_content);
+          buildDictionary(json.data.fluff_words?.cn || [], json.data.raw_content || '');
         } else {
           setSignal(null);
         }
       } catch (e) {
-        console.error("链路切断:", e);
         setSignal(null);
       } finally {
         setLoading(false);
@@ -1753,135 +1845,320 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     fetchSignal();
   }, [id]);
 
-  // 🔪 核心逻辑：执行物理抹杀
-  const handlePurge = async () => {
-    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n\n此操作将从数据库中物理销毁该情报，永久不可逆转。\n\n确认抹杀？");
-    if (!confirmPurge) return;
+  /**
+   * 🚀 强化雷达：除了识别引号，即使没有引号也能强行抓取关键字
+   */
+  const buildDictionary = (fluffs: string[], rawText: string) => {
+    const dict: Record<string, string> = {};
+    const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
+    
+    fluffs.forEach(sentence => {
+      let match;
+      let found = false;
+      
+      // 1. 优先尝试提取引号内的词汇
+      while ((match = quoteRegex.exec(sentence)) !== null) {
+        const keyword = match[1].trim();
+        if (keyword.length >= 2 && rawText.includes(keyword)) {
+          dict[keyword] = sentence;
+          found = true;
+        }
+      }
+      
+      // 2. 暴力降级提取：如果大模型死活不加引号，尝试通过关键动词截断
+      if (!found) {
+        const markers = ["暗示", "掩盖", "意味着", "说明", "意图"];
+        for (const marker of markers) {
+          if (sentence.includes(marker)) {
+            const prefix = sentence.split(marker)[0];
+            // 提取动词前面最靠后的2-8个汉字作为词组去原文撞库
+            const potentialWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-6);
+            if (potentialWord.length >= 2 && rawText.includes(potentialWord)) {
+              dict[potentialWord] = sentence;
+              break;
+            }
+          }
+        }
+      }
+    });
+    setDictionary(dict);
+  };
 
+  const startDossierStream = async () => {
+    if (!signal?.raw_content || isStreamingDossier) return;
+    setIsStreamingDossier(true);
+    setDossierContent('');
+    
+    try {
+      const res = await fetch('/api/v1/dossier', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+        },
+        body: JSON.stringify({ rawContent: signal.raw_content })
+      });
+
+      if (!res.ok || !res.body) throw new Error('流式通道建立失败');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      let buffer = '';
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          // 🚨 核心修复：单斜杠的精确换行匹配
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(trimmedLine.slice(6));
+                const delta = data.choices[0]?.delta?.content || '';
+                if (delta) {
+                  setDossierContent((prev) => prev + delta);
+                }
+              } catch (e) { /* 忽略流碎片 */ }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      alert("流式通道被截断，请检查网络。");
+    } finally {
+      setIsStreamingDossier(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\\n\\n物理销毁该情报，不可逆转。确认抹杀？");
+    if (!confirmPurge) return;
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/v1/delete?id=${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` // 使用你的最高权限 Token
-        }
+        headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` }
       });
       const json = await res.json();
-      
-      if (json.success) {
-        // 抹杀成功，无缝撤退回首页
-        router.push('/');
-      } else {
-        alert(`抹杀失败: ${json.error}`);
-      }
-    } catch (e) {
-      alert("终端通信切断，无法执行抹杀指令。");
-    } finally {
-      setIsDeleting(false);
-    }
+      if (json.success) { router.push('/'); } else { alert(`抹杀失败: ${json.error}`); }
+    } catch (e) { alert("通信切断，无法执行抹杀。"); } finally { setIsDeleting(false); }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-      <Loader2 className="animate-spin text-zinc-500 w-8 h-8" />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500 w-8 h-8" /></div>;
+  if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
 
-  if (!signal) return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
-      <AlertCircle className="text-red-600 w-12 h-12 mb-4" />
-      <h2 className="text-zinc-400 font-mono uppercase tracking-widest text-sm">Asset Neutralized / 资产已被销毁</h2>
-      <button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 font-mono text-xs hover:bg-white hover:text-black transition-all">Back to Index</button>
-    </div>
-  );
-
-  const getBilingualField = (field: any) => (Array.isArray(field) ? field : field?.[lang] || []);
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
-      <div className="max-w-5xl mx-auto px-6">
+      <div className="max-w-[1600px] mx-auto px-6">
         
-        {/* 顶部导航 */}
-        <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-12">
-          <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all">
-            <ArrowLeft size={16} />
-            <span className="text-xs font-mono uppercase tracking-widest">Index</span>
-          </button>
-          
+        <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-8">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all"><ArrowLeft size={16} /><span className="text-xs font-mono uppercase tracking-widest">Index</span></button>
           <div className="flex items-center gap-4">
             <div className="flex bg-black border border-zinc-800 rounded-sm overflow-hidden">
               <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
               <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
             </div>
-            
-            {/* 🔪 抹杀按钮 */}
-            <button 
-              onClick={handlePurge}
-              disabled={isDeleting}
-              className="group flex items-center justify-center w-8 h-8 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"
-              title="物理抹杀该资产"
-            >
-              {isDeleting ? <Loader2 size={14} className="animate-spin text-red-600" /> : <Trash2 size={14} className="text-red-900 group-hover:text-red-500" />}
-            </button>
+            <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-8 h-8 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"><Trash2 size={14} className="text-red-900 group-hover:text-red-500" /></button>
           </div>
         </header>
 
-        {/* 致命裁决 */}
-        <section className="mb-16">
-          <div className="flex items-center gap-3 mb-6">
-             <div className="w-2 h-2 bg-red-600" />
-             <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Final Verdict</span>
+        <section className="mb-10"><VerdictPanel verdict={getBilingualVerdict()} isErased={true} /></section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-5 sticky top-8">
+             <RawNarrative rawContent={signal.raw_content} fluffWords={signal.fluff_words} lang={lang} dictionary={dictionary} />
           </div>
-          <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-[1.2]">
-            {getBilingualVerdict()}
-          </h2>
-        </section>
-
-        {/* 核心数据网格 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
-           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm">
-              <h4 className="flex items-center gap-3 text-zinc-400 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-zinc-800 pb-4">
-                 <Target size={14} /> Hard Facts / 骨干事实
-              </h4>
-              <div className="space-y-6">
-                 {getBilingualField(signal.hard_facts).map((fact: string, i: number) => (
-                   <div key={i} className="flex gap-4 items-start">
-                      <span className="font-mono text-[10px] text-zinc-600 mt-1 shrink-0">{(i+1).toString().padStart(2,'0')}</span>
-                      <p className="text-zinc-300 font-serif leading-relaxed text-sm md:text-base">{fact}</p>
-                   </div>
-                 ))}
+          <div className="lg:col-span-7">
+            {!dossierContent && !isStreamingDossier ? (
+              <div className="bg-zinc-950 border border-zinc-900 p-12 md:p-20 flex flex-col items-center justify-center text-center rounded-sm shadow-2xl h-[600px]">
+                <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
+                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3>
+                <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed">深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。</p>
+                <button onClick={startDossierStream} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
+                  <Zap size={18} className="group-hover:animate-pulse" /><span className="relative z-10">激活暗影卷宗 (Generate Dossier)</span>
+                </button>
               </div>
-           </div>
-           
-           <div className="bg-red-950/10 border border-red-900/30 p-8 rounded-sm relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-red-900/10 rounded-full blur-3xl" />
-              <h4 className="flex items-center gap-3 text-red-500 font-mono text-xs uppercase tracking-[0.2em] mb-8 border-b border-red-900/30 pb-4 relative z-10">
-                 <Skull size={14} /> Hidden Agenda / 隐秘动机
-              </h4>
-              <div className="space-y-6 relative z-10">
-                 {getBilingualField(signal.fluff_words).map((fluff: string, i: number) => (
-                   <div key={i} className="flex gap-4 items-start">
-                      <span className="font-mono text-[10px] text-red-900 mt-1 shrink-0">⚠</span>
-                      <p className="text-red-200/90 font-serif leading-relaxed text-sm md:text-base">{fluff}</p>
-                   </div>
-                 ))}
-              </div>
-           </div>
-        </div>
-
-        {/* 原始数据库 */}
-        <div>
-           <h4 className="flex items-center gap-3 text-zinc-600 font-mono text-xs uppercase tracking-[0.2em] mb-6">
-              <Database size={14} /> Raw Intercept / 原始截获数据
-           </h4>
-           <div className="bg-[#111] border border-zinc-900 p-8 rounded-sm font-serif text-sm leading-relaxed text-zinc-500 text-justify">
-              {signal.raw_content}
-           </div>
+            ) : (
+              <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} />
+            )}
+          </div>
         </div>
 
       </div>
     </main>
+  );
+}
+
+============================================================
+File: .\src\components\features\decode\DossierReader.tsx
+============================================================
+"use client";
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
+
+interface DossierReaderProps {
+  content: string; 
+  isStreaming?: boolean; 
+  dictionary?: Record<string, string>; 
+}
+
+// 修改子组件：通过 props 接收 setHover 方法
+const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => {
+  if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>;
+  const keys = Object.keys(dictionary).filter(k => k.trim() !== '');
+  if (keys.length === 0) return <>{text}</>;
+
+  try {
+    const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})`, 'g');
+    const parts = text.split(regex);
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (dictionary[part]) {
+            return (
+              <span 
+                key={i} 
+                onMouseEnter={(e) => {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
+                  setHover({ text: dictionary[part], x: safeX, y: rect.top });
+                }}
+                onMouseLeave={() => setHover(null)}
+                className="text-red-400 border-b border-red-500/50 bg-red-950/20 hover:bg-red-900/50 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help"
+              >
+                {part}
+              </span>
+            );
+          }
+          return <span key={i}>{part}</span>;
+        })}
+      </>
+    );
+  } catch (e) {
+    return <>{text}</>;
+  }
+};
+
+export default function DossierReader({ content, isStreaming = false, dictionary = {} }: DossierReaderProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
+
+  useEffect(() => {
+    if (isStreaming && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [content, isStreaming]);
+
+  const parseInlineFormat = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const cleanText = part.slice(2, -2);
+        return <strong key={i} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
+      }
+      return <DecodedText key={i} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
+    });
+  };
+
+  const renderBlocks = () => {
+    if (!content) return null;
+    
+    const blocks = content.split(/\n+/);
+
+    return blocks.map((block, index) => {
+      const trimmed = block.trim();
+      if (!trimmed) return null;
+
+      if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {
+        const titleText = trimmed.replace(/^#+\s*/, '');
+        return (
+          <h3 key={index} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 to-transparent py-2 block">
+            {parseInlineFormat(titleText)}
+          </h3>
+        );
+      }
+
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const cleanItem = trimmed.replace(/^[-*]\s*/, '');
+        return (
+          <div key={index} className="flex items-start gap-4 my-3 pl-4">
+            <span className="text-red-700 mt-1.5 shrink-0">✦</span>
+            <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">
+              {parseInlineFormat(cleanItem)}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <p key={index} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">
+          {parseInlineFormat(trimmed)}
+        </p>
+      );
+    });
+  };
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+        <div className="bg-zinc-950/80 px-8 py-5 border-b border-zinc-900 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
+          <div className="flex items-center gap-4">
+            <BookOpen className="text-red-700" size={20} />
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
+              <p className="text-[10px] font-mono text-zinc-600 mt-1 tracking-widest">TOP SECRET // EXECUTIVE SUMMARY</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {isStreaming ? (
+              <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase tracking-widest bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                <ShieldAlert size={12} className="text-zinc-500" />Decoded & Locked
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent relative">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
+            <ShieldAlert className="w-[500px] h-[500px] text-white" />
+          </div>
+
+          <div className="relative z-10 max-w-4xl mx-auto">
+            {renderBlocks()}
+            {isStreaming && (
+              <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 🚀 逃逸渲染层：脱离 Overflow 裁剪的全局固定气泡 */}
+      {hoverInfo && (
+        <div
+          className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed text-left font-sans transition-all duration-75"
+          style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}
+        >
+          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2">
+            <Zap size={12} /> 真相破译
+          </span>
+          {hoverInfo.text}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2033,70 +2310,124 @@ export default function LoadingSkeleton() {
 ============================================================
 File: .\src\components\features\decode\RawNarrative.tsx
 ============================================================
-"use client";
-import React from 'react';
-import { FileText, Cpu } from 'lucide-react';
 
-interface RawNarrativeProps {
-  rawContent: string;
-  fluffWords: any;
-  lang?: 'cn' | 'en';
-}
+"use client"; 
+import React, { useState } from 'react'; 
+import { FileText, Zap } from 'lucide-react'; 
 
-export default function RawNarrative({ rawContent, fluffWords, lang = 'cn' }: RawNarrativeProps) {
-  const renderRawText = () => {
-    if (!rawContent) return null;
-    let activeWords: string[] = Array.isArray(fluffWords) ? fluffWords : (fluffWords?.[lang] || []);
-    if (activeWords.length === 0) return rawContent;
+interface RawNarrativeProps { 
+  rawContent: string; 
+  fluffWords: any; 
+  lang?: 'cn' | 'en'; 
+  dictionary?: Record<string, string>; 
+} 
 
-    try {
-      const safeWords = activeWords
-        .filter(w => typeof w === 'string' && w.length > 0)
-        .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-      
-      const regex = new RegExp(`(${safeWords.join('|')})`, 'g');
-      const parts = rawContent.split(regex);
+export default function RawNarrative({ rawContent, fluffWords, lang = 'cn', dictionary = {} }: RawNarrativeProps) { 
+  
+  // 🚀 核心新增：全局逃逸坐标系状态 
+  const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null); 
 
-      return parts.map((part, i) => {
-        const isMatch = activeWords.includes(part);
-        return isMatch ? (
-          <mark key={i} className="bg-red-600/10 text-red-500 px-0.5 border-b border-red-500/50 transition-all hover:bg-red-600/30 cursor-crosshair">
-            {part}
-          </mark>
-        ) : <span key={i} className="opacity-80">{part}</span>;
-      });
-    } catch (e) { return rawContent; }
-  };
+  const handleMouseEnter = (e: React.MouseEvent, text: string) => { 
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
+    // 算法：获取元素屏幕坐标，并增加安全边界 (确保气泡不会被挤出浏览器左右边界) 
+    const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)); 
+    setHoverInfo({ text, x: safeX, y: rect.top }); 
+  }; 
 
-  return (
-    <div className="bg-black border border-zinc-900 rounded-sm overflow-hidden shadow-2xl">
-      <div className="bg-zinc-900/30 px-6 py-3 border-b border-zinc-900 flex items-center justify-between">
-         <div className="flex items-center gap-3">
-            <FileText size={14} className="text-zinc-500" />
-            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Evidence_File_Raw.txt</span>
-         </div>
-         <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-            <span className="text-[9px] font-mono text-red-900">DECODED_VIEW</span>
-         </div>
-      </div>
-      
-      <div className="p-10 md:p-16 relative">
-        {/* 背景装饰 */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]" />
+  const renderRawText = () => { 
+    if (!rawContent) return null; 
+
+    const keys = Object.keys(dictionary).filter(k => k.trim() !== ''); 
+    
+    // 降级匹配逻辑 (针对历史无词典数据) 
+    if (keys.length === 0) { 
+      let activeWords: string[] = Array.isArray(fluffWords) ? fluffWords : (fluffWords?.[lang] || []); 
+      if (activeWords.length === 0) return rawContent; 
+      try { 
+        const safeWords = activeWords 
+          .filter(w => typeof w === 'string' && w.length > 0) 
+          .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); 
+        const regex = new RegExp(`(${safeWords.join('|')})`, 'g'); 
+        const parts = rawContent.split(regex); 
+        return parts.map((part, i) => { 
+          const isMatch = activeWords.includes(part); 
+          return isMatch ? ( 
+            <mark key={i} className="bg-red-600/10 text-red-500 px-0.5 border-b border-red-500/50 transition-all hover:bg-red-600/30 cursor-crosshair"> 
+              {part} 
+            </mark> 
+          ) : <span key={i} className="opacity-80">{part}</span>; 
+        }); 
+      } catch (e) { return rawContent; } 
+    } 
+
+    // 🚀 高阶渲染：彻底剥离内嵌 Tooltip，改为触发 Hover 坐标 
+    try { 
+      const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g'); 
+      const parts = rawContent.split(regex); 
+
+      return parts.map((part, i) => { 
+        if (dictionary[part]) { 
+          return ( 
+            <mark 
+              key={i} 
+              onMouseEnter={(e) => handleMouseEnter(e, dictionary[part])} 
+              onMouseLeave={() => setHoverInfo(null)} 
+              className="bg-red-600/20 text-red-500 px-1 rounded-sm border-b border-red-500/50 transition-all hover:bg-red-600/40 cursor-help" 
+            > 
+              {part} 
+            </mark> 
+          ); 
+        } 
+        return <span key={i} className="opacity-80">{part}</span>; 
+      }); 
+    } catch (e) { 
+      return <span className="opacity-80">{rawContent}</span>; 
+    } 
+  }; 
+
+  return ( 
+    <> 
+      <div className="bg-black border border-zinc-900 rounded-sm overflow-hidden shadow-2xl h-full flex flex-col relative"> 
+        <div className="bg-zinc-900/30 px-6 py-3 border-b border-zinc-900 flex items-center justify-between shrink-0"> 
+           <div className="flex items-center gap-3"> 
+              <FileText size={14} className="text-zinc-500" /> 
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Evidence_File_Raw.txt</span> 
+           </div> 
+           <div className="flex items-center gap-2"> 
+              <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" /> 
+              <span className="text-[9px] font-mono text-red-900">INTERCEPTED</span> 
+           </div> 
+        </div> 
         
-        <div className="relative z-20 font-serif text-lg leading-[1.8] text-zinc-500 tracking-wide text-justify">
-          {renderRawText()}
-        </div>
-      </div>
+        <div className="p-8 md:p-12 relative flex-1 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"> 
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]"></div> 
+          <div className="relative z-20 font-serif text-base leading-[2] text-zinc-400 tracking-wide text-justify"> 
+            {renderRawText()} 
+          </div> 
+        </div> 
 
-      <div className="bg-zinc-900/10 px-6 py-4 border-t border-zinc-900 flex justify-between items-center font-mono text-[8px] text-zinc-700">
-         <span>SHA-256: 8f92b...d3e1</span>
-         <span>SECURITY LEVEL: CLASSIFIED</span>
-      </div>
-    </div>
-  );
+        <div className="bg-zinc-900/10 px-6 py-4 border-t border-zinc-900 flex justify-between items-center font-mono text-[8px] text-zinc-700 shrink-0"> 
+           <span>SHA-256: 8f92b...d3e1</span> 
+           <span>SECURITY LEVEL: CLASSIFIED</span> 
+        </div> 
+      </div> 
+
+      {/* 🚀 逃逸渲染层：脱离 Overflow 裁剪的全局固定气泡 */} 
+      {hoverInfo && ( 
+        <div 
+          className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed text-left font-sans transition-all duration-75" 
+          style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }} 
+        > 
+          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2"> 
+            <Zap size={12} /> 真相破译 
+          </span> 
+          {hoverInfo.text} 
+        </div> 
+      )} 
+    </> 
+  ); 
 }
+
 
 ============================================================
 File: .\src\components\features\decode\VerdictPanel.tsx
@@ -2601,36 +2932,38 @@ export async function analyzeTextWithDeepSeek(content: string): Promise<DecodeRe
 ============================================================
 File: .\src\types\database.ts
 ============================================================
-export interface SignalRecord {
-  id: string;
-  created_at: string;
-  raw_content: string;
-  verdict: string;
-  hard_facts: any; // 兼容旧数组和新版双语对象
-  fluff_words: any; // 兼容旧数组和新版双语对象
-  view_count: number;
-  
-  // 🚀 核心修复：注入 metadata 基因
-  metadata?: {
-    bilingual?: {
-      cn?: string;
-      en?: string;
-    };
-    washed?: boolean;
-    [key: string]: any; // 允许未来扩展其他元数据
-  };
+export interface SignalRecord { 
+  id: string; 
+  created_at: string; 
+  raw_content: string; 
+  verdict: string; 
+  hard_facts: any; // 兼容旧数组和新版双语对象 
+  fluff_words: any; // 兼容旧数组和新版双语对象 
+  view_count: number; 
+  // 🚀 核心新增：暗影卷宗完整流式长文载体 (零破坏原则：允许为 undefined 以兼容旧数据) 
+  dossier_content?: string; 
+  metadata?: { 
+    bilingual?: { 
+      cn?: string; 
+      en?: string; 
+    }; 
+    washed?: boolean; 
+    [key: string]: any; // 允许未来扩展其他元数据 
+  }; 
 }
 
 ============================================================
 File: .\src\types\index.ts
 ============================================================
-// 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版)
+// 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版 + 暗影卷宗版)
 export interface DecodeResult {
   // 适配新版 { cn: string[], en: string[] } 或旧版 string[]
-  fluffWords: any; 
+  fluffWords: any;
   hardFacts: any;
   // verdict 现在也可能包含 metadata 里的双语对象
   verdict: any; 
+  // 🚀 核心新增：暗影卷宗的长文承载字段
+  dossierContent?: string;
 }
 
 // 统一的 API 响应契约
