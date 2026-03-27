@@ -6,9 +6,14 @@ import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe } from 'lucide-rea
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 
+/**
+ * 核心业务说明：
+ * TruthDecoder 首页总线。
+ * 集成了“流式 JSON 解析”与“闪电入库”技术，专为 Vercel Hobby 版超时红线定制。
+ */
 export default function HomePage() {
   const router = useRouter();
-  const { lang, setLang } = useGlobalLang(); // 🟢 接入全局语种状态
+  const { lang, setLang } = useGlobalLang();
   
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,9 +51,10 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e: any) { 
+    } catch (e: unknown) { 
+      const errMsg = e instanceof Error ? e.message : String(e);
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', e.message || e);
+        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
     } finally { 
       setIsLoadingMore(false); 
@@ -61,11 +67,12 @@ export default function HomePage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🟢 [模块_发起] -> 动作/参数: 提交长文解析');
-    }
-
     try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
+      }
+
+      // 1. 发起流式请求，瞬间穿透 Vercel 10s 物理防线
       const res = await fetch('/api/v1/ingest', {
         method: 'POST',
         headers: { 
@@ -75,23 +82,80 @@ export default function HomePage() {
         body: JSON.stringify({ rawContent: input })
       });
 
-      const json = await res.json();
+      if (!res.ok || !res.body) throw new Error('流式引擎连接被拒');
+
+      // 2. 内存静默组装：拦截并缝合 JSON 碎片
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      let buffer = '';
+      let rawJsonString = '';
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(trimmedLine.slice(6));
+                const delta = data.choices[0]?.delta?.content || '';
+                if (delta) {
+                  rawJsonString += delta;
+                }
+              } catch (e) { /* 忽略流碎片 */ }
+            }
+          }
+        }
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动格式化');
+      }
+
+      // 3. 剥离 Markdown 干扰符
+      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const firstBrace = cleanedJsonString.indexOf('{');
+      const lastBrace = cleanedJsonString.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+        cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+      }
       
-      // 🚀 核心判定：只在 100% 确认拿到 ID 时跳转
-      if (json.success && json.data?.signalId) {
+      const intel = JSON.parse(cleanedJsonString);
+
+      // 4. 闪电瞬时入库 (绕过所有超时检测)
+      const saveRes = await fetch('/api/v1/ingest/save', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
+        },
+        body: JSON.stringify({ rawContent: input, intel })
+      });
+
+      const saveJson = await saveRes.json();
+
+      if (saveJson.success && saveJson.data?.signalId) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 [模块_成功] -> 产物:', json.data.signalId);
+          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
         }
         setInput('');
-        router.push(`/decode/${json.data.signalId}`);
-      } else { 
-        throw new Error(json.error || '引擎拒绝入库 (发生未知错误)');
+        router.push(`/decode/${saveJson.data.signalId}`);
+      } else {
+        throw new Error(saveJson.error || '瞬时写入网关异常');
       }
-    } catch (err: any) { 
+
+    } catch (err: unknown) { 
+      const errMsg = err instanceof Error ? err.message : 'JSON 流破译失败';
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', err.message);
+        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
-      setError(err.message);
+      setError(errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -113,7 +177,6 @@ export default function HomePage() {
               </div>
             </div>
             
-            {/* 🚀 全局双语切换拨片 */}
             <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
               <Globe className="text-zinc-600 w-4 h-4 ml-2" />
               <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
@@ -141,7 +204,6 @@ export default function HomePage() {
               {isSubmitting ? 'Securing Intelligence...' : (lang === 'cn' ? '载入去伪存真引擎' : 'INITIALIZE ENGINE')}
             </button>
 
-            {/* 🚨 故障监控屏 */}
             <AnimatePresence>
               {error && (
                 <motion.div 
@@ -158,7 +220,6 @@ export default function HomePage() {
                 </motion.div>
               )}
             </AnimatePresence>
-
           </section>
         </div>
 
@@ -174,7 +235,6 @@ export default function HomePage() {
                   className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]"
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
-                  {/* 🛡️ 核心防线：双语断层兜底渲染 */}
                   <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
                     “{item.metadata?.bilingual?.[lang] || item.verdict}”
                   </p>
