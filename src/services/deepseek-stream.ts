@@ -27,8 +27,10 @@ export async function createDeepSeekStream(messages: TerminalMessage[]): Promise
     body: JSON.stringify({
       model: 'deepseek-chat',
       messages: messages,
-      stream: true, // 开启流式输出核心开关
-      temperature: 0.3, // 终端问答需要多一点推演能力，但必须维持冷峻基调
+      stream: true, 
+      temperature: 0.3, 
+      // 🚀 核心扩容：强行拉满单次输出 Token 上限，防止宏大叙事被腰斩
+      max_tokens: 8192 
     }),
   });
 
