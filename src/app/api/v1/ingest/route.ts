@@ -18,7 +18,6 @@ export async function POST(req: Request) {
     if (!rawContent) throw new Error('Empty content');
 
     if (rawContent.includes('SecurityCompromiseError') || rawContent.includes('DDoS attack') || rawContent.includes('Too many domains')) {
-        console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
         return NextResponse.json({ success: false, error: 'Content is blocked by WAF.' }, { status: 423 });
     }
 
@@ -30,37 +29,39 @@ export async function POST(req: Request) {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      console.log(`[前置拦截] 资产已存在，引导至: ${existing[0].id}`);
       return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
     }
 
     const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
+    // 🚨 语言纯洁性最高指令注入 JSON 契约
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
         {
           role: "system",
-          content: `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
-请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
+          content: `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
+你是一个让华尔街战栗的顶级做空分析师。请扒开官方通稿的画皮。
+请严格输出中英双语 JSON，【绝对禁止中英夹杂】：
 {
   "facts": {
-    "cn": ["骨干事实1", "骨干事实2", "骨干事实3"],
-    "en": ["Hard fact 1", "Hard fact 2", "Hard fact 3"]
+    "cn": ["纯中文事实，绝不夹带英文单词。"],
+    "en": ["PURE ENGLISH facts ONLY. NO Chinese characters."]
   },
   "fluff": {
-    "cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(必须深度剖析！至少提取 6-8 条致命隐患！)", "“原话2”：剖析2"],
-    "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS, PURE ENGLISH)", "\"Quote 2\": Analysis 2"]
+    "cn": ["“原文诱导词(中文)”：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨必须是纯正中文！严禁在句中夹杂英文或使用括号保留原词！50-100字微观剖析，15-20条)"],
+    "en": ["\"Translated Quote\": [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! NO CHINESE CHARACTERS ALLOWED! 50-100 words micro-analysis, 15-20 items)"]
   },
   "verdict": {
-    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话，点破背后的利益导向。",
-    "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)"
+    "cn": "一句极具张力的纯中文判决。",
+    "en": "A ruthless, single-sentence pure English verdict."
   }
 }`
         },
         { role: "user", content: rawContent }
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      temperature: 0.6
     });
 
     const rawAiOutput = completion.choices[0].message.content || '';
@@ -76,9 +77,6 @@ export async function POST(req: Request) {
     try {
       intel = JSON.parse(cleanedJsonString);
     } catch (parseError) {
-      if (process.env.NODE_ENV === 'development') {
-         console.log("🔴 [模块_崩溃] -> 大模型吐出的畸形数据:", rawAiOutput);
-      }
       throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
     }
 
@@ -96,18 +94,14 @@ export async function POST(req: Request) {
     if (dbError) {
       if (dbError.code === '23505') {
         const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
-        if (retry && retry.length > 0) {
-            return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
-        }
-        return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
+        if (retry && retry.length > 0) return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
+        return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在。' });
       }
       throw dbError;
     }
 
     return NextResponse.json({ success: true, data: { signalId } });
-
   } catch (error: any) {
-    console.error("[INGEST_API_ERROR]", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

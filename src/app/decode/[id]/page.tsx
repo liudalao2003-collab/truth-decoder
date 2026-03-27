@@ -21,27 +21,31 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
 
   const { dossierContent, setDossierContent, isStreamingDossier, isTranslating, startDossierStream } = useDossierStream(signal, lang);
 
-  useEffect(() => {
-    const fetchSignal = async () => {
-      try {
-        const res = await fetch(`/api/decode?id=${id}`);
-        if (!res.ok) { setSignal(null); return; }
-
-        const json = await res.json();
-        if (json.success) {
-          setSignal(json.data);
-          if (json.data.dossier_content) setDossierContent(json.data.dossier_content);
-        } else {
-          setSignal(null);
-        }
-      } catch (e) {
-        setSignal(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSignal();
-  }, [id, setDossierContent]);
+  useEffect(() => { 
+     const fetchSignal = async () => { 
+       try { 
+         const res = await fetch(`/api/decode?id=${id}`); 
+         if (!res.ok) { setSignal(null); return; } 
+ 
+         const json = await res.json(); 
+         if (json.success) { 
+           // 🚀 核心修复：只保留全局信号下发，彻底斩断失效的 setDossierContent 调用 
+           setSignal(json.data); 
+         } else { 
+           setSignal(null); 
+         } 
+       } catch (e) { 
+         // 🚨 架构师防线：在控制台暴露真实的 JS 崩溃日志，拒绝黑盒 
+         if (process.env.NODE_ENV === 'development') { 
+            console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e); 
+         } 
+         setSignal(null); 
+       } finally { 
+         setLoading(false); 
+       } 
+     }; 
+     fetchSignal(); 
+   }, [id]); // 🚨 依赖数组中也要同步移除 setDossierContent
 
   // 🚀 核心修复：全天候双语并发雷达 (Dual-Radar Scanning)
   useEffect(() => {

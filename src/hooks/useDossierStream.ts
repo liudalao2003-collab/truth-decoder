@@ -98,7 +98,11 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         body: JSON.stringify({ rawContent: signal.raw_content, lang }) 
       });
 
-      if (!res.ok || !res.body) throw new Error('流式通道建立失败');
+      // 🚨 架构师防线：强行撕开黑盒，将后端的真实崩溃日志透传到前端控制台 
+       if (!res.ok || !res.body) { 
+         const errData = await res.json().catch(() => ({})); 
+         throw new Error(errData.error || `网关物理阻断: HTTP ${res.status}`); 
+       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');

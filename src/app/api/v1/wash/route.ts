@@ -22,22 +22,22 @@ export async function POST(req: Request) {
       messages: [
         { 
           role: "system", 
-          content: `你是一个冷酷、极度敏锐的华尔街做空机构分析师。你的任务是撕开新闻稿的伪装，直击资本底牌。
-          请将输入的商业通稿解码为中英双语的 JSON。
-          
-          输出结构严格如下：
-          {
-            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only", "..."] },
-            "fluff": { 
-              "cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(必须深度剖析！至少提取 6-8 条致命隐患！)"], 
-              "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS, PURE ENGLISH)"] 
-            },
-            "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)" }
-          }`
+          content: `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
+你是一个让华尔街战栗的顶级做空分析师。
+请将输入的商业通稿解码为中英双语的 JSON，【绝对禁止中英夹杂】：
+{
+  "facts": { "cn": ["纯中文事实，绝不夹杂英文"], "en": ["PURE ENGLISH facts ONLY"] },
+  "fluff": { 
+    "cn": ["“原文具体诱导词”：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨必须是纯正中文！严禁在句中夹杂英文或用括号保留原词！50-100字，15-20条)"], 
+    "en": ["\"Translated Quote\": [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! NO CHINESE CHARACTERS! 50-100 words, 15-20 items)"] 
+  },
+  "verdict": { "cn": "一句纯中文的犀利判决。", "en": "A ruthless, single-sentence pure English verdict." }
+}`
         },
         { role: "user", content: rawContent }
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      temperature: 0.6
     });
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       .eq('id', id);
 
     if (dbError) throw dbError;
+
     return NextResponse.json({ success: true, message: `Signal ${id} Washed` });
 
   } catch (error: any) {
