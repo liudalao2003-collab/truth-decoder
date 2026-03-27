@@ -1,15 +1,88 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SignalRecord } from '@/types/database';
 
 export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en') {
-  const [dossierContent, setDossierContent] = useState<string>('');
+  // 🚀 核心防线 1：双轨闭包缓存，绝不污染全局状态
+  const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
 
+  // 🛡️ 状态初始化：从底层契约提取双语卷宗并注入本地缓存
+  useEffect(() => {
+    if (signal?.dossier_content) {
+      if (typeof signal.dossier_content === 'string') {
+        setCache(prev => ({ ...prev, cn: signal.dossier_content as string }));
+      } else {
+        setCache({
+          cn: signal.dossier_content.cn || '',
+          en: signal.dossier_content.en || ''
+        });
+      }
+    }
+  }, [signal?.dossier_content]);
+
+  // 🚀 核心防线 2：懒翻译与静默回写守护进程
+  useEffect(() => {
+    const triggerTranslation = async () => {
+      if (!signal?.id || isStreamingDossier || isTranslating) return;
+
+      const currentText = cache[lang];
+      const sourceLang = lang === 'cn' ? 'en' : 'cn';
+      const sourceText = cache[sourceLang];
+
+      // 判定逻辑：当前语种为空，但源语种存在 -> 触发暗影翻译
+      if (!currentText && sourceText) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🟡 [模块_异步] -> 目标: 探测到 [${lang}] 缓存击穿，启动懒翻译补全协议`);
+        }
+        setIsTranslating(true);
+        try {
+          const res = await fetch('/api/v1/translate', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+            },
+            body: JSON.stringify({ content: sourceText, targetLang: lang })
+          });
+          
+          const json = await res.json();
+          if (json.success && json.data) {
+            const translatedText = json.data;
+            const updatedCache = { ...cache, [lang]: translatedText };
+            
+            // 1. 瞬间更新前端闭包缓存
+            setCache(updatedCache);
+            
+            // 2. 异步发射脱壳请求，静默回写至 Supabase 进行双规持久化
+            fetch('/api/v1/dossier/sync', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              },
+              body: JSON.stringify({ id: signal.id, dossier_content: updatedCache })
+            }).catch(e => {
+               if (process.env.NODE_ENV === 'development') console.log('🔴 [同步失败] ->', e);
+            });
+          }
+        } catch (err: unknown) {
+           if (process.env.NODE_ENV === 'development') console.log('🔴 [翻译崩塌] ->', err);
+        } finally {
+          setIsTranslating(false);
+        }
+      }
+    };
+
+    triggerTranslation();
+  }, [lang, cache, signal?.id, isTranslating, isStreamingDossier]);
+
+  // 🚀 初次生成流式引擎
   const startDossierStream = async () => {
     if (!signal?.raw_content || isStreamingDossier) return;
     setIsStreamingDossier(true);
-    setDossierContent('');
+    setCache(prev => ({ ...prev, [lang]: '' }));
 
     if (process.env.NODE_ENV === 'development') {
       console.log(`🟢 [模块_发起] -> 动作/参数: 激活暗影卷宗流式生成 (Lang: ${lang})`);
@@ -22,7 +95,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
           'Content-Type': 'application/json',
           'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
         },
-        body: JSON.stringify({ rawContent: signal.raw_content, lang }) // 🚀 核心修复：携带语种标识
+        body: JSON.stringify({ rawContent: signal.raw_content, lang }) 
       });
 
       if (!res.ok || !res.body) throw new Error('流式通道建立失败');
@@ -47,25 +120,35 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
                 if (delta) {
-                  setDossierContent((prev) => prev + delta);
+                  // 精准泵入当前语种的缓存管道
+                  setCache((prev) => ({ ...prev, [lang]: prev[lang] + delta }));
                 }
               } catch (e) { /* 忽略流碎片 */ }
             }
           }
         }
       }
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔵 [模块_成功] -> 产物: 暗影卷宗生成完毕');
-      }
-    } catch (err: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', err.message || err);
-      }
-      alert("流式通道被截断，请检查网络。");
+      
+      // 🚀 流式生成结束后，立刻执行第一次双规持久化
+      setCache(finalCache => {
+        fetch('/api/v1/dossier/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+            },
+            body: JSON.stringify({ id: signal.id, dossier_content: finalCache })
+        }).catch(() => {});
+        return finalCache;
+      });
+
+    } catch (err: unknown) {
+       if (process.env.NODE_ENV === 'development') console.log('🔴 [流式中断] ->', err);
     } finally {
       setIsStreamingDossier(false);
     }
   };
 
-  return { dossierContent, setDossierContent, isStreamingDossier, startDossierStream };
+  // 抛出当前语种指向的精确缓存文本
+  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, startDossierStream };
 }

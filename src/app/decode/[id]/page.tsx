@@ -19,7 +19,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
-  const { dossierContent, setDossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
+  const { dossierContent, setDossierContent, isStreamingDossier, isTranslating, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => {
     const fetchSignal = async () => {
@@ -181,20 +181,32 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
              <RawNarrative rawContent={signal.raw_content} fluffWords={signal.fluff_words} lang={lang} dictionary={dictionary} />
           </div>
           <div className="lg:col-span-7">
-            {!dossierContent && !isStreamingDossier ? (
-              <div className="bg-zinc-950 border border-zinc-900 p-12 md:p-20 flex flex-col items-center justify-center text-center rounded-sm shadow-2xl h-[600px]">
-                <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
-                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3>
-                <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed">
-                  {lang === 'cn' ? "深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。" : "Deep intelligence engine ready. Initialize streaming protocol to generate a McKinsey-grade Shadow Dossier."}
-                </p>
-                <button onClick={startDossierStream} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
-                  <Zap size={18} className="group-hover:animate-pulse" /><span className="relative z-10">{lang === 'cn' ? '激活暗影卷宗 (Generate Dossier)' : 'GENERATE DOSSIER'}</span>
-                </button>
-              </div>
-            ) : (
-              <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} />
-            )}
+            {isTranslating ? ( 
+              // 🚨 专属的高维度懒加载骨架屏 
+              <div className="bg-zinc-950 border border-zinc-900 p-12 md:p-20 flex flex-col items-center justify-center text-center rounded-sm shadow-2xl h-[600px] relative overflow-hidden"> 
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-900 to-transparent animate-[scanline_2s_linear_infinite]" /> 
+                <Loader2 className="animate-spin text-red-700 w-12 h-12 mb-6" /> 
+                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-2 animate-pulse"> 
+                  Decryption in Progress 
+                </h3> 
+                <p className="text-zinc-600 font-mono text-xs tracking-widest uppercase"> 
+                  {lang === 'cn' ? '正在执行暗影双规编译...' : 'Compiling Shadow Matrix...'} 
+                </p> 
+              </div> 
+            ) : !dossierContent && !isStreamingDossier ? ( 
+              <div className="bg-zinc-950 border border-zinc-900 p-12 md:p-20 flex flex-col items-center justify-center text-center rounded-sm shadow-2xl h-[600px]"> 
+                <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" /> 
+                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3> 
+                <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed"> 
+                  {lang === 'cn' ? "深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。" : "Deep intelligence engine ready. Initialize streaming protocol to generate a McKinsey-grade Shadow Dossier."} 
+                </p> 
+                <button onClick={startDossierStream} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]"> 
+                  <Zap size={18} className="group-hover:animate-pulse" /><span className="relative z-10">{lang === 'cn' ? '激活暗影卷宗 (Generate Dossier)' : 'GENERATE DOSSIER'}</span> 
+                </button> 
+              </div> 
+            ) : ( 
+              <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> 
+            )} 
           </div>
         </div>
 
