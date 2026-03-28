@@ -11,6 +11,7 @@ const openai = new OpenAI({
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
+
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
       const lastRun = new Date(lastRunTimeStr).getTime();
       const now = new Date().getTime();
       const minutesPassed = (now - lastRun) / (1000 * 60);
+
       if (minutesPassed < (frequencyMinutes - 1)) {
         return NextResponse.json({ success: true, message: 'Clutch engaged' });
       }
@@ -72,6 +74,7 @@ export async function GET(req: Request) {
           headers: { 'X-Return-Format': 'markdown' },
           signal: controller.signal
         });
+
         clearTimeout(timeoutId);
 
         let fullText = await articleRes.text();
@@ -83,12 +86,29 @@ export async function GET(req: Request) {
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": ["Fact 1"]}, "fluff": {"cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(至少提取 6-8 条致命隐患！)"], "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS)"]}, "verdict": {"cn": "一句话点评", "en": "Single sentence verdict"}}`;
+        // 🚀 核心升维：注入与 ingest 相同的极限要求
+        const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
+你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
+【绝对生存与格式法则】：
+1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
+2. 【物理级精准复刻】：fluff 数组中提取的诱导词，必须是原文中【连续且一字不差】的字符串！绝对禁止概括或改写！
+3. 【终极语言阉割】：'cn' 字段必须 100% 纯中文，严禁夹带任何英文字母，绝对禁止用括号标注英文原词！'en' 字段必须 100% 纯英文！
+4. 【致命结构】：fluff 数组内的解析必须是单行纯文本！严禁换行！每条必须严格包含三个维度的显式前缀：【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
+
+{
+  "verdict": { "cn": "一句极具张力的纯中文判决。", "en": "A ruthless, single-sentence pure English verdict." },
+  "facts": { "cn": ["纯中文事实，提炼变更。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "fluff": {
+    "cn": ["“原文一字不差的原话”：【表层叙事】全中文...；【底层机制】全中文...；【收割代价】全中文...。(🚨绝对单行纯文本！15-20条)"],
+    "en": ["\"Exact substring\": [Surface Narrative] Pure English...; [Hidden Mechanism] Pure English...; [Harvesting Fallout] Pure English.... (🚨SINGLE LINE TEXT ONLY! 15-20 items)"]
+  }
+}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
           messages: [{ role: "system", content: depthPrompt }, { role: "user", content: `标题：${title}\n内容：${fullText}` }],
-          response_format: { type: 'json_object' }
+          response_format: { type: 'json_object' },
+          temperature: 0.3
         });
 
         const rawAiOutput = completion.choices[0].message.content || '';
