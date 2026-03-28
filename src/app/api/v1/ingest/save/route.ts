@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 /**
  * 核心业务说明：
  * 闪电入库网关。剥离了所有 AI 算力等待，纯粹执行 200ms 级别的数据持久化。
- * [注入了最高级空指针防御与全量数据库契约]
+ * [已注入 23505 查重力场防御与优雅降级跳转]
  */
 export async function POST(req: Request) {
   try {
@@ -15,25 +15,46 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const rawContent = body?.rawContent || "内容流失兜底";
-    // 🛡️ 架构师防线：如果前端传来的 intel 是畸形的，强行赋默认值，阻断 TypeError
     const intel = body?.intel || {}; 
 
+    // 🛡️ 架构师防线 1：前置查重。截取前 100 个字符探测，若命中，直接签发旧签证
+    const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
+    const { data: existing } = await supabaseAdmin
+      .from('signals')
+      .select('id')
+      .ilike('raw_content', `${safeSnippet}%`)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔵 [命中缓存] -> 查重力场生效，直接导向已有资产:', existing[0].id);
+      }
+      return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
+    }
+
+    // 若无重复，执行常规入库
     const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-    // 🔪 极限界数据契约：补齐 view_count，所有链条挂载 ?. 防御
     const { error: dbError } = await supabaseAdmin.from('signals').insert([{
       id: signalId,
       raw_content: rawContent,
       fluff_words: intel?.fluff || { cn: [], en: [] },
       hard_facts: intel?.facts || { cn: [], en: [] },
       verdict: intel?.verdict?.cn || (typeof intel?.verdict === 'string' ? intel.verdict : "资产解析降级"),
-      view_count: 0, // 🚀 核心补全：满足 Supabase 可能的 NOT NULL 数据库底层约束
+      view_count: 0, 
       metadata: { bilingual: intel?.verdict || {} }
     }]);
 
     if (dbError) {
-        console.error("🔴 Supabase 数据库拒绝入库:", dbError);
-        throw new Error(`数据库写入失败: ${dbError.message} (代码: ${dbError.code})`);
+      // 🛡️ 架构师防线 2：高并发穿透拦截 (23505)
+      if (dbError.code === '23505') {
+        const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
+        if (retry && retry.length > 0) {
+            return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
+        }
+      }
+      console.error("🔴 Supabase 数据库拒绝入库:", dbError);
+      throw new Error(`数据库写入失败: ${dbError.message} (代码: ${dbError.code})`);
     }
 
     return NextResponse.json({ success: true, data: { signalId } });
