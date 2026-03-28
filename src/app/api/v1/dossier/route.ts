@@ -13,23 +13,28 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
+    // 🚀 天花板级战略引擎：强制三维板块结构与跨学科推演
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO Ultimate Macro-Strategist]
-Task: Generate a MASSIVE, multi-chapter 'Shadow Dossier' (Markdown). NO JSON.
+Task: Generate a MASSIVE 'Shadow Dossier' (Markdown). NO JSON.
 Directives:
-1. EXTREME LENGTH: Must be a highly exhaustive report. Minimum 1500 words.
-2. Cross-Disciplinary Synthesis: Heavily integrate models (Nash Equilibrium, Entropy, etc.) into the narrative.
-3. High-Dimensional Forecasting: Weave in [T+3 Months] and [T+12 Months] deductions.
-4. FORCED FOOTNOTE DENSITY: Inject exactly 15 to 20 footnotes using EXACT syntax: [[Surface Word::[Surface Narrative]... [Hidden Mechanism]... [Harvesting Fallout]...]].
-5. [TOTAL LANGUAGE PURITY - CRITICAL]: Write in 100% PURE NATIVE ENGLISH. Absolutely NO Chinese characters anywhere in the text or the footnotes. DO NOT put original Chinese terms in parentheses. Destroy any non-English characters. Tone: God-tier analytical superiority.`
+1. [FORCED STRUCTURE]: You MUST write a highly structured, professional intelligence briefing. It MUST contain exactly these sections:
+   - I. Power Structure & Will Anatomy
+   - II. Capital Flow & Leverage Maze
+   - III. Hidden Contracts & Cross-Disciplinary Deduction (Must integrate at least 2 hardcore models like Game Theory, Entropy, or Cellular Apoptosis to explain the event).
+   - IV. High-Dimensional Forecasting: Precise timeline predictions for [T+3 Months] (Tactical response) and [T+12 Months] (Strategic collapse/monopoly).
+2. FORCED FOOTNOTE DENSITY: Inject 15-20+ footnotes using EXACT syntax: [[Surface Word::[Surface Narrative]... [Hidden Mechanism]... [Harvesting Fallout]...]].
+3. [TOTAL LANGUAGE PURITY]: 100% PURE NATIVE ENGLISH. Absolutely NO Chinese characters anywhere. Tone: God-tier analytical superiority.`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎】
-任务：生成一份篇幅极大、细节极度丰满的 Markdown 长篇《暗影卷宗》。不输出 JSON。
+任务：生成一份天花板级别的 Markdown 商业/情报简报《暗影卷宗》。不输出 JSON。
 核心法则：
-1. 【强制长文底线】：必须是一篇至少 1500 字的详尽研报，绝不敷衍！
-2. 跨学科降维打击：在行文中深度融合至少两个硬核模型。
-3. 高维时间轴推演：自然推演【T+3 个月】与【T+12 个月】。
-4. 【强制注脚密度】：必须疯狂注入至少 15 到 20 次注脚！格式严格为：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。
-5. 【极限纯中文】：100% 纯正中文！禁止夹带任何英文字母或用括号标注英文原词。基调：上帝视角的智力碾压。`;
+1. 【强制研报结构】：废除平庸散文，必须严格包含以下四大硬核板块：
+   - Ⅰ. 权力构架与意志解剖 (深挖人事、派系、政治动机)
+   - Ⅱ. 资产流动与杠杆迷局 (深挖资金链、债务转嫁、成本掩盖)
+   - Ⅲ. 隐藏契约与跨学科推演 (必须深度融合至少两个硬核模型，如纳什均衡、热力学耗散结构、明斯基时刻，对商业行为进行降维打击)
+   - Ⅳ. 高维时间轴预测：给出【T+3 个月】（战术应激反应）与【T+12 个月】（战略期崩盘或重组）的精准推演。
+2. 【强制注脚密度】：必须疯狂注入至少 15 到 20 次注脚！格式严格为：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。
+3. 【极限纯中文】：100% 纯正中文！禁止夹带任何英文字母或用括号标注英文原词。基调：上帝视角的智力碾压。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
