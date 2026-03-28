@@ -17,19 +17,19 @@ export async function POST(request: Request) {
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO Ultimate Macro-Strategist]
 Task: Generate a MASSIVE, multi-chapter 'Shadow Dossier' (Markdown). NO JSON.
 Directives:
-1. EXTREME LENGTH: This MUST be a highly exhaustive report. Minimum length is 1500 words. Do not cut corners.
+1. EXTREME LENGTH: Must be a highly exhaustive report. Minimum 1500 words.
 2. Cross-Disciplinary Synthesis: Heavily integrate models (Nash Equilibrium, Entropy, etc.) into the narrative.
 3. High-Dimensional Forecasting: Weave in [T+3 Months] and [T+12 Months] deductions.
-4. FORCED FOOTNOTE DENSITY [CRITICAL]: You MUST inject exactly 15 to 20 footnotes using the EXACT syntax: [[Surface Word::[Surface Narrative]... [Hidden Mechanism]... [Harvesting Fallout]...]]. Do NOT output fewer than 15 footnotes!
-5. PURE ENGLISH ONLY: Absolutely NO Chinese characters. Tone: God-tier analytical superiority.`
+4. FORCED FOOTNOTE DENSITY: Inject exactly 15 to 20 footnotes using EXACT syntax: [[Surface Word::[Surface Narrative]... [Hidden Mechanism]... [Harvesting Fallout]...]].
+5. [TOTAL LANGUAGE PURITY - CRITICAL]: Write in 100% PURE NATIVE ENGLISH. Absolutely NO Chinese characters anywhere in the text or the footnotes. DO NOT put original Chinese terms in parentheses. Destroy any non-English characters. Tone: God-tier analytical superiority.`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎】
 任务：生成一份篇幅极大、细节极度丰满的 Markdown 长篇《暗影卷宗》。不输出 JSON。
 核心法则：
 1. 【强制长文底线】：必须是一篇至少 1500 字的详尽研报，绝不敷衍！
-2. 跨学科降维打击：在行文中深度融合至少两个硬核模型（如博弈论、热力学熵增）。
+2. 跨学科降维打击：在行文中深度融合至少两个硬核模型。
 3. 高维时间轴推演：自然推演【T+3 个月】与【T+12 个月】。
-4. 【强制注脚密度】：必须在正文中疯狂注入至少 15 到 20 次注脚！格式严格为：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。少于 15 个注脚即为任务失败！
-5. 【极限纯中文】：100% 纯正中文！禁止夹带任何英文字母。基调：上帝视角的智力碾压。`;
+4. 【强制注脚密度】：必须疯狂注入至少 15 到 20 次注脚！格式严格为：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。
+5. 【极限纯中文】：100% 纯正中文！禁止夹带任何英文字母或用括号标注英文原词。基调：上帝视角的智力碾压。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
