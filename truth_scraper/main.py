@@ -3,24 +3,29 @@ import urllib3
 import time
 import os
 import re
+import json # 🟢 新增：用于解析流媒体碎片
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
-from extractors import EXTRACTORS # 🟢 核心：接入提取器生态网关
+from extractors import EXTRACTORS 
+from dotenv import load_dotenv
 
+load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 🚀 全局雷达配置 ---
-API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
-# 🚨 部署预警：必须确保系统环境变量中注入 INGEST_TOKEN
+# 🚨 架构师加固：支持通过 .env 配置生产环境的 Vercel 域名
+BASE_URL = os.getenv("NEXT_PUBLIC_BASE_URL", "http://localhost:3000").rstrip('/')
+API_INGEST = f"{BASE_URL}/api/v1/ingest"
+API_SAVE = f"{BASE_URL}/api/v1/ingest/save"
+
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "[CENSORED_BY_ARCHITECT]")
 HISTORY_FILE = "seen_urls.txt"
 
-# 🟢 核心重构：合法注入 Reuters, WSJ 与 Bloomberg 的官方 RSS/新闻入口
 TARGET_FEEDS = [
     "https://finance.yahoo.com/news/",
-    "https://www.reutersagency.com/feed/",                 # Reuters 官方 RSS
-    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",       # WSJ 官方 RSS
-    "https://feeds.bloomberg.com/markets/news.rss"         # Bloomberg 官方 RSS
+    "https://www.reutersagency.com/feed/",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "https://feeds.bloomberg.com/markets/news.rss"
 ]
 
 def load_seen_urls():
@@ -47,18 +52,13 @@ def fetch_html(url):
         resp.raise_for_status()
         return resp.text
     except Exception as e:
-        print(f"🔴 [模块_崩溃] -> 原因: 猎犬请求 {url} 失败 - {str(e)[:50]}")
+        print(f"🔴 [模块_崩溃] -> 原因: 猎犬请求 {url} 失败")
         return None
 
 def extract_article_links(html, base_url):
-    """
-    核心业务说明：
-    兼容 HTML <a> 标签与 XML(RSS) <item><link> 的双轨探测器。
-    """
     soup = BeautifulSoup(html, 'html.parser')
     links = set()
     
-    # 策略 1：尝试提取标准 RSS 的 link
     items = soup.find_all('item')
     if items:
         for item in items:
@@ -67,72 +67,53 @@ def extract_article_links(html, base_url):
                 links.add(link_tag.text.strip())
         return links
 
-    # 策略 2：降级为 HTML 链接提取
     for a in soup.find_all('a', href=True):
-        href = a['href']
+        href = a.get('href', '')
         if '/news/' in href or '/m/' in href or '/articles/' in href:
             full_url = href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/')
             links.add(full_url)
     return links
 
-def is_high_value_intel(content): 
-     """ 
-     核心业务说明： 
-     工业级断头台算法 V5.8 (多源深度加固版)。 
-     已全面注入 Reuters、Bloomberg、WSJ 的专属正则黑名单，物理级阻断大模型无效 Token 燃烧。 
-     """ 
-     if not content: 
-         return False, "载荷真空" 
- 
-     content_lower = content.lower() 
- 
-     # 1. 跨平台通用致命词汇 (防引流、防订阅墙拦截) 
-     FATAL_KEYWORDS = [ 
-         "flagship newsletter", "inboxes every morning", "subscribe to", 
-         "sign up for", "download the app", "click here to read", 
-         "all rights reserved", "terms of service", "to read the full article" 
-     ] 
-     for word in FATAL_KEYWORDS: 
-         if word in content_lower: 
-             return False, f"触碰通用致命词汇 [{word}]" 
- 
-     # 2. 国际巨头媒体专属高维正则黑名单 
-     # 🚨 Bloomberg 拦截矩阵：阻断播客引流、电视节目预告与短篇免责声明 
-     if re.search(r'(listen to.*podcast|bloomberg radio|watch live on bloomberg tv)', content_lower): 
-         return False, "触发 Bloomberg 音视频引流拦截机制" 
-     if "bloomberg l.p." in content_lower and len(content) < 1000: 
-         return False, "触发 Bloomberg 极短免责声明拦截机制" 
- 
-     # 🚨 Reuters 拦截矩阵：阻断编辑部尾注、记者署名与路透社信任原则声明 
-     if re.search(r'(thomson reuters trust principles|compiled by|editing by|our standards:)', content_lower): 
-         return False, "触发 Reuters 编辑部尾注/声明拦截机制" 
- 
-     # 🚨 WSJ 拦截矩阵：阻断专栏推广墙与系列播客 
-     if re.search(r'(wsj pro|what to read next|listen to the full episode|heard on the street:)', content_lower): 
-         return False, "触发 WSJ 专栏/播客引流拦截机制" 
- 
-     # 3. 物理长度防线 
-     if len(content) < 800: 
-         return False, f"篇幅过短 ({len(content)} 字符)" 
- 
-     # 4. 核心商业数据密度扫描 (利益流转的底层基石) 
-     numbers = re.findall(r'\d+', content) 
-     has_financial_symbols = '%' in content or '$' in content or 'billion' in content_lower or 'million' in content_lower 
-     
-     if len(numbers) < 3 and not has_financial_symbols: 
-         return False, "数据密度归零 (完全缺乏核心金融数据与金额支撑)" 
- 
-     return True, "高维资产鉴别通过"
+def is_high_value_intel(content):
+    if not content:
+        return False, "载荷真空"
+
+    content_lower = content.lower()
+
+    FATAL_KEYWORDS = [
+        "flagship newsletter", "inboxes every morning", "subscribe to",
+        "sign up for", "download the app", "click here to read",
+        "all rights reserved", "terms of service", "to read the full article"
+    ]
+    for word in FATAL_KEYWORDS:
+        if word in content_lower:
+            return False, f"触碰通用致命词汇 [{word}]"
+
+    if re.search(r'(listen to.*podcast|bloomberg radio|watch live on bloomberg tv)', content_lower):
+        return False, "触发 Bloomberg 引流拦截机制"
+    if "bloomberg l.p." in content_lower and len(content) < 1000:
+        return False, "触发 Bloomberg 极短免责声明拦截机制"
+    if re.search(r'(thomson reuters trust principles|compiled by|editing by|our standards:)', content_lower):
+        return False, "触发 Reuters 声明拦截机制"
+    if re.search(r'(wsj pro|what to read next|listen to the full episode|heard on the street:)', content_lower):
+        return False, "触发 WSJ 引流拦截机制"
+
+    if len(content) < 800:
+        return False, f"篇幅过短 ({len(content)} 字符)"
+
+    numbers = re.findall(r'\d+', content)
+    has_financial_symbols = '%' in content or '$' in content or 'billion' in content_lower or 'million' in content_lower
+    
+    if len(numbers) < 3 and not has_financial_symbols:
+        return False, "数据密度归零"
+
+    return True, "高维资产鉴别通过"
 
 def route_and_extract(url, html):
-    """
-    核心业务说明：智能调度网关。遍历生态圈寻找匹配的解析器。
-    """
     for extractor in EXTRACTORS:
         if extractor.match(url):
             return extractor.extract(html)
             
-    # 如果没有任何专属提取器认领，走通用降级策略
     print("🟡 [模块_异步] -> 目标: 未命中专属契约，执行通用兜底 DOM 撕裂")
     soup = BeautifulSoup(html, 'html.parser')
     for element in soup(["script", "style", "nav", "footer", "aside"]):
@@ -141,14 +122,13 @@ def route_and_extract(url, html):
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - CORE ENGINE V5.7 OVERHAUL   ")
-    print("      [+] 启用全链路提取器生态与双轨探针...       ")
+    print("      TRUTH DECODER - CORE ENGINE V5.9 SYNC       ")
+    print("      [+] 启用流式 JSON 缝合与闪电入库网关...     ")
     print("==================================================")
     
     seen_urls = load_seen_urls()
     all_targets = set()
 
-    # 1. 雷达全频段扫描
     for feed in TARGET_FEEDS:
         print(f"🟢 [模块_发起] -> 动作/参数: 阵地扫描 {feed}")
         html = fetch_html(feed)
@@ -162,50 +142,91 @@ def main():
     print(f"\n🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索\n")
 
     success_count = 0
-    # 2. 单兵突击
     for url in fresh_targets:
         print(f"🟡 [模块_异步] -> 目标: {url[:60]}...")
         html = fetch_html(url)
         if not html: 
             continue
 
-        # 🚨 异常托底：绝不允许单一 DOM 崩溃拖垮主线程
         try:
             raw_content = route_and_extract(url, html)
         except Exception as e:
             print(f"   🔴 [模块_崩溃] -> 原因: DOM 物理切片异常 ({str(e)})")
             continue
 
-        # 🚨 断头台铡刀落下
         is_valuable, reject_reason = is_high_value_intel(raw_content)
         if not is_valuable:
             print(f"   🚫 [物理拦截] {reject_reason}")
             save_seen_url(url)
             continue
 
+        # ==========================================
+        # 🚀 核心修复区：流式接收 -> 缝合 -> 闪电入库
+        # ==========================================
         try:
-            print("   🟢 [模块_发起] -> 动作/参数: 密度达标，提交大模型网关破译")
+            print("   🟢 [模块_发起] -> 动作/参数: 呼叫 AI 流式破译引擎...")
             resp = requests.post(
-                API_ENDPOINT, 
+                API_INGEST, 
                 json={"rawContent": raw_content}, 
                 headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                stream=True, # 强制以流模式接收
                 timeout=60
             )
-            if resp.status_code == 200:
-                print("   🔵 [模块_成功] -> 产物: 致命裁决已生成入库！")
+            
+            if resp.status_code != 200:
+                print(f"   🔴 [网关拦截] 状态码 {resp.status_code}")
+                continue
+
+            print("   🟡 [模块_异步] -> 目标: 正在静默缝合 JSON 碎片...")
+            raw_json_string = ""
+            for line in resp.iter_lines():
+                if line:
+                    decoded = line.decode('utf-8').strip()
+                    if decoded.startswith('data: ') and not decoded.endswith('[DONE]'):
+                        try:
+                            data = json.loads(decoded[6:])
+                            delta = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                            raw_json_string += delta
+                        except:
+                            pass
+
+            # 剥离 Markdown 干扰符
+            cleaned_json = raw_json_string.replace('```json', '').replace('```', '').strip()
+            first_brace = cleaned_json.find('{')
+            last_brace = cleaned_json.rfind('}')
+            if first_brace != -1 and last_brace != -1:
+                cleaned_json = cleaned_json[first_brace:last_brace+1]
+
+            intel = json.loads(cleaned_json)
+
+            print("   🟢 [模块_发起] -> 动作/参数: 破译完成，请求闪电入库网关...")
+            save_resp = requests.post(
+                API_SAVE,
+                json={"rawContent": raw_content, "intel": intel},
+                headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                timeout=15
+            )
+
+            save_data = save_resp.json()
+            if save_resp.status_code == 200 and save_data.get('success'):
+                signal_id = save_data.get('data', {}).get('signalId', 'UNKNOWN')
+                print(f"   🔵 [模块_成功] -> 产物: 致命裁决已落盘！(ID: {signal_id})")
                 save_seen_url(url)
                 success_count += 1
             else:
-                print(f"   🔴 [模块_崩溃] -> 原因: 网关拒绝接收 状态码 {resp.status_code}")
+                print(f"   🔴 [入库崩溃] -> 原因: {save_data.get('error', '未知错误')}")
+
+        except json.JSONDecodeError:
+            print(f"   🔴 [破译崩溃] -> 原因: AI 输出结构严重畸形，抛弃资产")
         except requests.exceptions.Timeout:
-            print(f"   🔴 [模块_崩溃] -> 原因: 神经引擎思考超时")
+            print(f"   🔴 [模块_崩溃] -> 原因: 神经引擎思考/网络传输超时")
         except Exception as e:
             print(f"   🔴 [模块_崩溃] -> 原因: 链路未知阻断 {str(e)[:30]}")
         
         time.sleep(2)
 
     print("\n==================================================")
-    print(f"      🎉 引擎休眠！本次战役成功斩获 {success_count} 条高维资产。")
+    print(f"      🎉 引擎休眠！本次战役成功斩获并入库 {success_count} 条高维资产。")
     print("==================================================")
 
 if __name__ == "__main__":
