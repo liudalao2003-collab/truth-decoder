@@ -9,41 +9,42 @@ interface DossierReaderProps {
   dictionary?: Record<string, string>;
 }
 
-const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => {
-  if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>;
-  const keys = Object.keys(dictionary).filter(k => k.trim() !== '');
-  if (keys.length === 0) return <>{text}</>;
-
-  try {
-    const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
-    const parts = text.split(regex);
-    return (
-      <>
-        {parts.map((part, i) => {
-          if (dictionary[part]) {
-            return (
-              <span 
-                key={i} 
-                onMouseEnter={(e) => {
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
-                  setHover({ text: dictionary[part], x: safeX, y: rect.top });
-                }}
-                onMouseLeave={() => setHover(null)}
-                className="text-red-400 border-b border-red-500/50 bg-red-950/20 hover:bg-red-900/50 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help"
-              >
-                {part}
-              </span>
-            );
-          }
-          return <span key={i}>{part}</span>;
-        })}
-      </>
-    );
-  } catch (e) {
-    return <>{text}</>;
-  }
-};
+const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => { 
+   if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>; 
+   const keys = Object.keys(dictionary).filter(k => k.trim() !== ''); 
+   if (keys.length === 0) return <>{text}</>; 
+   
+   let mappedParts: React.ReactNode[] = []; 
+   try { 
+     const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g'); 
+     const parts = text.split(regex); 
+     
+     // 🚀 架构师修复：将 JSX 映射计算完毕后，再进行 return，杜绝 try/catch 污染 React 渲染流 
+     mappedParts = parts.map((part, i) => { 
+       if (dictionary[part]) { 
+         return ( 
+           <span 
+             key={i} 
+             onMouseEnter={(e) => { 
+               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
+               const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)); 
+               setHover({ text: dictionary[part], x: safeX, y: rect.top }); 
+             }} 
+             onMouseLeave={() => setHover(null)} 
+             className="text-red-400 border-b border-red-500/50 bg-red-950/20 hover:bg-red-900/50 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help" 
+           > 
+             {part} 
+           </span> 
+         ); 
+       } 
+       return <span key={i}>{part}</span>; 
+     }); 
+   } catch (e) { 
+     return <>{text}</>; 
+   } 
+   
+   return <>{mappedParts}</>; 
+ };
 
 export default function DossierReader({ content, isStreaming = false, dictionary = {} }: DossierReaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);

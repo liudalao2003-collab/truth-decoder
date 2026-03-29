@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
     // 1. 获取系统配置
     const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
-    const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
+    const configMap = configs?.reduce((acc: Record<string, unknown>, row: Record<string, unknown>) => ({ ...acc, [row.id]: row.value }), {}) || {};
 
     // 2. 检查总开关
     if (configMap.master_switch?.status === 'OFF') {

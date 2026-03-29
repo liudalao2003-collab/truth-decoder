@@ -21,9 +21,9 @@ export async function GET() {
       throw error;
     }
     console.log("✅ [API-GET] 从 Supabase 成功拉取配置条数:", data?.length);
-    const configMap = data.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {});
+    const configMap = data.reduce((acc: Record<string, unknown>, row: Record<string, unknown>) => ({ ...acc, [row.id]: row.value }), {});
     return NextResponse.json({ success: true, data: configMap });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     }
     console.log("✅ [API-POST] 写入 Supabase 成功！");
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ [API-POST] 致命错误:", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

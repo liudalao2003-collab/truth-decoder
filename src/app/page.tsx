@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe } from 'lucide-react';
+import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon } from 'lucide-react';
+import AuthModal from '@/components/features/auth/AuthModal'; 
+import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 
@@ -14,6 +16,17 @@ import { useGlobalLang } from '@/hooks/useGlobalLang';
 export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); 
+  const [user, setUser] = useState<any>(null); 
+  const supabase = createClient(); 
+ 
+  useEffect(() => { 
+    const getUser = async () => { 
+      const { data: { user } } = await supabase.auth.getUser(); 
+      setUser(user); 
+    }; 
+    getUser(); 
+  }, []); 
   
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -163,6 +176,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-black text-white p-4 md:p-8 relative selection:bg-red-950">
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <div className="scanline" />
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -177,10 +191,25 @@ export default function HomePage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
-              <Globe className="text-zinc-600 w-4 h-4 ml-2" />
-              <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
-              <button onClick={() => setLang('en')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'en' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>EN</button>
+            <div className="flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-2 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase">Commander_Active</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="flex items-center gap-2 px-3 py-1 border border-red-900/50 rounded-sm bg-red-950/20 text-red-500 hover:bg-red-900 hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  <UserIcon size={12} /> Login
+                </button>
+              )}
+              <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
+                <Globe className="text-zinc-600 w-4 h-4 ml-2" />
+                <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
+                <button onClick={() => setLang('en')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'en' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>EN</button>
+              </div>
             </div>
           </header>
 

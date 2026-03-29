@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, data: { signalId } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errMsg = error?.message || '未知的入库物理崩塌';
     console.error('🔴 [闪电入库崩溃] ->', errMsg);
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });

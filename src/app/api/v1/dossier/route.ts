@@ -50,7 +50,7 @@ You are FORBIDDEN to summarize. You MUST expand every single logical point into 
     return new Response(streamResponse.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

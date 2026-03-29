@@ -46,8 +46,8 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     if (signal) {
-      const cnFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as any)?.['cn'] || [];
-      const enFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as any)?.['en'] || [];
+      const cnFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as Record<string, string[]>)?.['cn'] || [];
+      const enFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as Record<string, string[]>)?.['en'] || [];
       const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
       buildDictionary(cnFluffs, enFluffs, targetFluffs, signal.raw_content || '');
     }
@@ -96,7 +96,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
 
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
-  const currentHardFacts = Array.isArray(signal.hard_facts) ? signal.hard_facts : ((signal.hard_facts as any)?.[lang] || []);
+  const currentHardFacts = Array.isArray(signal.hard_facts) ? signal.hard_facts : ((signal.hard_facts as Record<string, string[]>)?.[lang] || []);
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">

@@ -17,7 +17,7 @@ export async function createDeepSeekStream(messages: TerminalMessage[], isJson: 
     throw new Error('上下文记忆链超出阈值，已强制阻断。');
   }
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     model: 'deepseek-chat',
     messages: messages,
     stream: true, 

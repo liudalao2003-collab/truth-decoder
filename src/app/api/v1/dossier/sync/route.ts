@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 🚨 架构师防线：彻底撕裂黑盒。无视 JS 类型，强行序列化未知错误对象
     const errorDetails = err?.message || err?.details || JSON.stringify(err);
     
