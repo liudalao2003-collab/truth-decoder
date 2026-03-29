@@ -32,10 +32,16 @@ export async function POST() {
     const aiDepth = configMap.ai_depth?.mode || 'deep'; 
 
     const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+    
+    // 🚨 物理铡刀 0：RSS 获取死线 (5s)
+    const rssController = new AbortController();
+    const rssTimeout = setTimeout(() => rssController.abort(), 5000);
     const rssRes = await fetch(targetUrl, {  
       cache: 'no-store', 
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' } 
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' },
+      signal: rssController.signal
     });
+    clearTimeout(rssTimeout);
 
     if (!rssRes.ok) throw new Error(`CNBC 接入失败: ${rssRes.status}`); 
     const rssText = await rssRes.text(); 
@@ -75,18 +81,17 @@ export async function POST() {
         return; 
       } 
 
-      // 🚨 护盾 1：Jina AI 强行熔断 (压缩至 10 秒)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+      // 🚨 物理铡刀 1：Jina AI 死线 (8s)
+      const jinaController = new AbortController();
+      const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000); 
 
       const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
         headers: { 'X-Return-Format': 'markdown' }, 
-        signal: controller.signal 
+        signal: jinaController.signal 
       });
-      clearTimeout(timeoutId); 
+      clearTimeout(jinaTimeoutId); 
 
       let fullText = await articleRes.text(); 
-      // 🚨 护盾 2：物理截断 (3500 -> 2500)，降低算力消耗，提速出块
       fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 2500);
 
       if (fullText.length < 200) { 
@@ -94,7 +99,10 @@ export async function POST() {
         return; 
       } 
 
-      // 🚨 护盾 3：向 DeepSeek 注入 35 秒绝对死线
+      // 🚨 物理铡刀 2：DeepSeek 绝对死线 (25s) 强行拔网线
+      const dsController = new AbortController();
+      const dsTimeoutId = setTimeout(() => dsController.abort(), 25000);
+
       const completion = await openai.chat.completions.create({ 
         model: "deepseek-chat", 
         messages: [ 
@@ -103,8 +111,9 @@ export async function POST() {
         ], 
         response_format: { type: 'json_object' } 
       }, {
-        timeout: 35000 // OpenAI SDK 原生级超时拦截
+        signal: dsController.signal as any // 强行注入底层的 AbortSignal
       }); 
+      clearTimeout(dsTimeoutId);
 
       const rawAiOutput = completion.choices[0].message.content || ''; 
       let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -132,6 +141,7 @@ export async function POST() {
       console.log(`✅ 成功落盘: ${title.substring(0, 30)}`);
     });
 
+    // 无论内部如何厮杀与超时被斩，主线程都会在此兜底，并正常向前端返回 200 OK
     await Promise.allSettled(scrapePromises);
 
     return NextResponse.json({ success: true, processedCount });
