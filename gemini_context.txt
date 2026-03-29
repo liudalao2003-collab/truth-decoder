@@ -958,192 +958,56 @@ export async function POST(req: Request) {
 File: .\src\app\api\admin\trigger\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase'; 
-import { cookies } from 'next/headers'; 
-import OpenAI from 'openai';
+import { supabaseAdmin } from '@/lib/supabase';
+import { cookies } from 'next/headers';
+import { logger } from '@/utils/logger';
 
-export const maxDuration = 60; 
-
-const openai = new OpenAI({ 
-  apiKey: process.env.DEEPSEEK_API_KEY, 
-  baseURL: 'https://api.deepseek.com', 
-});
-
-async function verifyCommander() { 
-  const cookieStore = await cookies(); 
-  const token = cookieStore.get('truth_admin_token'); 
+/**
+ * 核心业务说明：
+ * 远程指令触发网关 (信号版)。
+ * 彻底切断与 DeepSeek 和 Jina AI 的直连，防止 Vercel 504 崩溃。
+ * 现在的逻辑是：当 CEO 在后台点击“立即执行”时，在数据库插下一枚“待执行”旗帜，
+ * 由本地守护进程 (Python) 侦测并执行真实的狩猎任务。
+ */
+async function verifyCommander() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('truth_admin_token');
   return token?.value === 'ACCESS_GRANTED_2026';
-} 
+}
 
-export async function POST() { 
-  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  try { 
-    const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
-    const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
-
-    if (configMap.master_switch?.status === 'OFF') { 
-      return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
-    } 
-
-    const rawIntensity = configMap.scrape_intensity?.limit || 1; 
-    const intensity = Math.min(rawIntensity, 3);
-    const aiDepth = configMap.ai_depth?.mode || 'deep'; 
-
-    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
-    
-    const rssController = new AbortController();
-    const rssTimeout = setTimeout(() => rssController.abort(), 5000);
-    const rssRes = await fetch(targetUrl, {  
-      cache: 'no-store', 
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' },
-      signal: rssController.signal
-    });
-    clearTimeout(rssTimeout);
-
-    if (!rssRes.ok) throw new Error(`CNBC 接入失败: ${rssRes.status}`); 
-    const rssText = await rssRes.text(); 
-      
-    const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity);
-    if (items.length === 0) throw new Error("未能提取到有效新闻链接"); 
-
-    let processedCount = 0;
-
-    const depthPrompt = aiDepth === 'quick'  
-      ? "提取核心 facts 和一句 verdict，双语 JSON。" 
-      : `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
-你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
-【绝对生存与格式法则】：
-1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
-2. 【JSON 绝对安全结构】：fluff 数组必须是纯字符串数组！提取的原话【必须】用中文直角引号「 」包裹！
-3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！
-4. 【核级语言净化】：'cn' 字段 100% 纯中文，'en' 字段解析部分 100% 纯英文。
-5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
-
-{
-  "verdict": { "cn": "...", "en": "..." },
-  "facts": { "cn": ["事实1"], "en": ["Fact1"] },
-  "fluff": {
-    "cn": ["「原文原话」【表层叙事】...【底层机制】...【收割代价】..."],
-    "en": ["「Exact Quote」[Surface]... [Hidden]... [Fallout]..."]
+export async function POST() {
+  if (!(await verifyCommander())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-}`;
 
-    const scrapePromises = items.map(async (item) => {
-      const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
-      const link = item[2].trim(); 
-      
-      // 🚨 架构师加固：给单兵线程套上独立监控黑匣子
-      try {
-        const { data: existing } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `%${title.substring(0, 20)}%`).limit(1);
-        if (existing && existing.length > 0) { 
-          console.log(`⚠️ 重复情报跳过: ${title.substring(0, 30)}`);
-          return; 
-        } 
+  try {
+    logger.start("接收到 CEO 手动触发指令");
 
-        let fullText = "";
-        try {
-          const jinaController = new AbortController();
-          const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000); 
-
-          const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
-            headers: { 'X-Return-Format': 'markdown' }, 
-            signal: jinaController.signal 
-          });
-          clearTimeout(jinaTimeoutId); 
-          fullText = await articleRes.text(); 
-        } catch (e) {
-          console.log(`⚠️ Jina 主引擎通信中断`);
-        }
-
-        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ');
-
-        if (fullText.length < 200 || fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack')) {
-          console.log(`⚠️ Jina 遭拦截，启动原生直连降落伞...`);
-          try {
-            const fallbackController = new AbortController();
-            const fallbackTimeout = setTimeout(() => fallbackController.abort(), 6000);
-            const fallbackRes = await fetch(link, {
-               headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' },
-               signal: fallbackController.signal
-            });
-            clearTimeout(fallbackTimeout);
-            const rawHtml = await fallbackRes.text();
-
-            fullText = rawHtml
-                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-          } catch (fallbackErr) {
-            console.log(`❌ 备用引擎失效`);
-            return; 
-          }
-        }
-
-        fullText = fullText.substring(0, 2500);
-
-        if (fullText.length < 200) { 
-          console.log(`⚠️ 强洗后依然过短，物理抛弃: ${title.substring(0, 30)}`);
-          return; 
-        } 
-
-        const dsController = new AbortController();
-       // 🚀 架构师微调：在并发安全区内，将大模型思考死线放宽至 40 秒，大幅降低误杀率
-const dsTimeoutId = setTimeout(() => dsController.abort(), 40000);
-
-        const completion = await openai.chat.completions.create({ 
-          model: "deepseek-chat", 
-          messages: [ 
-            { role: "system", content: depthPrompt }, 
-            { role: "user", content: `标题：${title}\n内容：${fullText}` } 
-          ], 
-          response_format: { type: 'json_object' } 
-        }, {
-          signal: dsController.signal as any 
-        }); 
-        clearTimeout(dsTimeoutId);
-
-        const rawAiOutput = completion.choices[0].message.content || ''; 
-        let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const firstBrace = cleanedJsonString.indexOf('{'); 
-        const lastBrace = cleanedJsonString.lastIndexOf('}'); 
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
-            cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
-        } 
-          
-        const intel = JSON.parse(cleanedJsonString);
-
-        const { error: dbError } = await supabaseAdmin.from('signals').insert([{ 
-          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 
-          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`, 
-          fluff_words: intel.fluff || { cn: [], en: [] },  
-          hard_facts: intel.facts || { cn: [], en: [] }, 
-          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"), 
-          view_count: 0, 
-          metadata: { source_url: link, bilingual: intel.verdict || {} }  
-        }]);
-
-        if (dbError) throw new Error(`DB写入拒接: ${dbError.message}`);
-
-        processedCount++; 
-        console.log(`✅ 成功落盘: ${title.substring(0, 30)}`);
-
-      } catch (innerError: any) {
-        // 🚀 核心修复：捕获被 25 秒铡刀切断抛出的 AbortError 或 JSON 解析失败
-        console.log(`🔴 [单兵线程阵亡] 标题: ${title.substring(0, 15)}... 死因: ${innerError.message || innerError.name}`);
-      }
+    // 1. 在数据库中写入触发信号
+    const { error } = await supabaseAdmin.from('system_configs').upsert({
+      id: 'manual_trigger_signal',
+      value: { 
+        status: 'PENDING', 
+        requested_at: new Date().toISOString(),
+        commander: 'CEO'
+      },
+      updated_at: new Date().toISOString()
     });
 
-    await Promise.allSettled(scrapePromises);
+    if (error) throw error;
 
-    return NextResponse.json({ success: true, processedCount });
+    logger.success("手动触发信号已离岸，等待 Python 猎犬响应");
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: '指令已下达。请确保本地 Python 守护进程已启动，它将在 60 秒内感知并执行任务。' 
+    });
 
-  } catch (error: any) { 
-    console.error(`🔴 云端引擎核心崩溃:`, error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 }); 
-  } 
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Trigger Gateway Failure';
+    logger.crash(errMsg);
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+  }
 }
 
 ============================================================
@@ -1189,154 +1053,50 @@ File: .\src\app\api\cron\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import OpenAI from 'openai';
+import { logger } from '@/utils/logger';
 
-export const maxDuration = 60;
+// 🚨 架构师排雷：将超时时间重置为默认，不再强行续命，因为此处已无耗时逻辑
+export const runtime = 'edge';
 
-const openai = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com',
-});
-
+/**
+ * 核心业务说明：
+ * 自动化巡航送报员 (心跳版)。
+ * 已切除所有爬虫与 AI 逻辑，目前仅作为系统的“脉搏”存在。
+ * 它的作用是定期检查系统总开关状态，并记录最后一次心跳时间。
+ */
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
-
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
-    if (process.env.NODE_ENV === 'development') {
-        console.log("🟢 [模块_发起] -> 自动巡航送报员敲门...");
-    }
-    
+    logger.start("云端心跳检查开始");
+
+    // 1. 获取系统配置
     const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
     const configMap = configs?.reduce((acc: any, row: any) => ({ ...acc, [row.id]: row.value }), {}) || {};
 
+    // 2. 检查总开关
     if (configMap.master_switch?.status === 'OFF') {
-      return NextResponse.json({ success: false, message: 'Master Switch is OFF' });
+      logger.async("系统总开关已关闭，跳过心跳记录");
+      return NextResponse.json({ success: true, message: 'System Sleeping' });
     }
 
-    const frequencyMinutes = configMap.scrape_frequency?.interval_minutes || 60;
-    const lastRunTimeStr = configMap.cron_last_run?.time;
-
-    if (lastRunTimeStr) {
-      const lastRun = new Date(lastRunTimeStr).getTime();
-      const now = new Date().getTime();
-      const minutesPassed = (now - lastRun) / (1000 * 60);
-
-      if (minutesPassed < (frequencyMinutes - 1)) {
-        return NextResponse.json({ success: true, message: 'Clutch engaged' });
-      }
-    }
-
+    // 3. 仅更新心跳时间，不进行任何抓取
     await supabaseAdmin.from('system_configs').upsert({ 
-      id: 'cron_last_run', 
+      id: 'cron_last_heartbeat', 
       value: { time: new Date().toISOString() },
       updated_at: new Date().toISOString() 
     });
 
-    const rawIntensity = configMap.scrape_intensity?.limit || 1;
-    const intensity = Math.min(rawIntensity, 3); 
-    const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
+    logger.success("云端心跳记录完成，负载已安全卸载至 Python 端");
+    return NextResponse.json({ success: true, message: 'Heartbeat recorded' });
 
-    const rssRes = await fetch(targetUrl, { 
-      cache: 'no-store',
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome/122.0.0.0 Safari/537.36' }
-    });
-
-    if (!rssRes.ok) throw new Error("RSS 接入失败");
-    const rssText = await rssRes.text();
-    const items = [...rssText.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>/gi)].slice(0, intensity);
-    
-    let processedCount = 0;
-
-    for (const item of items) {
-      try {
-        const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
-        const link = item[2].trim();
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
-
-        const articleRes = await fetch(`https://r.jina.ai/${link}`, {
-          headers: { 'X-Return-Format': 'markdown' },
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        let fullText = await articleRes.text();
-        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
-
-        if (fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack') || fullText.includes('Too many domains')) {
-            continue;
-        }
-
-        if (fullText.length < 200) continue;
-
-        // 🚀 架构师修复：确保定时任务抓取的情报也能激活前端红字气泡 
- const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】 
- 你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。 
- 【绝对生存与格式法则】： 
- 1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！ 
- 2. 【JSON 绝对安全结构】：fluff 数组必须是纯字符串数组！提取的原话【必须】用中文直角引号「 」包裹！ 
- 3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！ 
- 4. 【核级语言净化】：'cn' 字段 100% 纯中文，'en' 字段解析部分 100% 纯英文。 
- 5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！ 
- 
- { 
-   "verdict": { "cn": "...", "en": "..." }, 
-   "facts": { "cn": ["事实1"], "en": ["Fact1"] }, 
-   "fluff": { 
-     "cn": ["「原文原话」【表层叙事】...【底层机制】...【收割代价】..."], 
-     "en": ["「Exact Quote」[Surface]... [Hidden]... [Fallout]..."] 
-   } 
- }`; 
- 
- const completion = await openai.chat.completions.create({ 
-   model: "deepseek-chat", 
-   messages: [ 
-     { role: "system", content: depthPrompt }, 
-     { role: "user", content: `标题：${title}\n内容：${fullText}` } 
-   ], 
-   response_format: { type: 'json_object' }, 
-   temperature: 0.3 
- });
-
-        const rawAiOutput = completion.choices[0].message.content || '';
-        let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const firstBrace = cleanedJsonString.indexOf('{');
-        const lastBrace = cleanedJsonString.lastIndexOf('}');
-
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
-            cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
-        }
-
-        const intel = JSON.parse(cleanedJsonString);
-
-        const { error: dbError } = await supabaseAdmin.from('signals').insert([{
-          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`,
-          fluff_words: intel.fluff || { cn: [], en: [] }, 
-          hard_facts: intel.facts || { cn: [], en: [] },
-          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"),
-          view_count: 0,
-          metadata: { source_url: link, bilingual: intel.verdict || {} } 
-        }]);
-
-        if (dbError) throw new Error(`DB Write Denied: ${dbError.message}`);
-
-        processedCount++;
-      } catch (e: any) {
-        continue;
-      }
-    }
-
-    return NextResponse.json({ success: true, processedCount });
-
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown Heartbeat Error';
+    logger.crash(errMsg);
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -3658,43 +3418,95 @@ import schedule
 import time
 import subprocess
 import os
+import requests
+from dotenv import load_dotenv
 
-# 核心业务说明：这是 TruthDecoder 的自动化总控台（守护进程）。
-# 它永远不会退出，只会在你设定的时间点，默默拉起 main.py 去外网“进货”。
+# 🚨 核心注入：物理级读取项目根目录的 .env 文件
+load_dotenv()
+
+# 🚨 核心配置：载入 Supabase 环境变量，用于轮询指令旗帜
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+def check_manual_trigger():
+    """
+    核心业务说明：
+    异步指令侦测雷达。
+    以极低消耗轮询 Supabase 数据库，检测 CEO 是否在中控台按下了“立即执行”按钮。
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # 1. 探针：查询是否存在 PENDING 状态的物理旗帜
+        url = f"{SUPABASE_URL}/rest/v1/system_configs?id=eq.manual_trigger_signal&select=value"
+        resp = requests.get(url, headers=headers, timeout=5)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and len(data) > 0:
+                val = data[0].get("value", {})
+                if val.get("status") == "PENDING":
+                    print("\n🚨 [总控台] -> 侦测到 CEO 手动触发信号 (Manual Trigger)！即刻执行越权打击！")
+                    
+                    # 2. 擦除：将旗帜状态改为 COMPLETED，防止重复触发
+                    patch_url = f"{SUPABASE_URL}/rest/v1/system_configs?id=eq.manual_trigger_signal"
+                    requests.patch(patch_url, headers=headers, json={"value": {"status": "COMPLETED"}})
+                    
+                    # 3. 猎杀：物理拉起主程序
+                    run_hunter_killer()
+    except requests.exceptions.RequestException:
+        pass # 保持静默，不污染日志面板
 
 def run_hunter_killer():
     """唤醒底层爬虫引擎"""
     print("\n" + "="*50)
-    print("      TRUTH DECODER - SYSTEM WAKEUP [AUTO]        ")
-    print("      [+] 定时巡航已触发，释放猎犬...             ")
+    print("      TRUTH DECODER - SYSTEM WAKEUP               ")
+    print("      [+] 引擎轰鸣，释放猎犬...                   ")
     print("==================================================")
     
-    # 物理级拉起子进程执行 main.py
-    # cwd 确保在项目的根目录下执行，防止路径错乱
     subprocess.run(["python", "truth_scraper/main.py"], cwd=os.getcwd())
     
-    print("\n🟢 [总控台] -> 状态: 本次巡航任务结束。系统进入深度休眠，等待下一次唤醒...\n")
+    print("\n🟢 [总控台] -> 状态: 本次任务结束。系统进入深度休眠，等待下一次指令...\n")
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - AUTO PILOT ENGAGED          ")
-    print("      [+] 本地守护进程已就绪，保持窗口开启...     ")
+    print("      TRUTH DECODER - AUTO PILOT ENGAGED V5.8     ")
+    print("      [+] 守护进程已就绪，雷达持续扫描中...       ")
     print("==================================================")
 
-    # 测试期间，每 60 秒扫射一次全网
-    schedule.every(1).minutes.do(run_hunter_killer)
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("🔴 [致命崩溃] 未检测到 Supabase 凭证！请检查根目录 .env 文件是否配置正确！")
 
-    # 物理级死循环：永远保持心脏跳动 (1秒检查一次到没到时间)
+    schedule.every(60).minutes.do(run_hunter_killer)
+
+    # 🚨 架构师微操：在进入死循环前，强行先拉起一次猎犬！
+    print("🟢 [总控台] -> 初始点火：启动首次全网扫荡...")
+    run_hunter_killer()
+
+    # 物理级死循环
     while True:
         try:
+            # 1. 检查是否到达定时巡航时间
             schedule.run_pending()
+            
+            # 2. 检查是否有 CEO 的手动触发指令
+            check_manual_trigger()
+            
+            # 心跳间隔 1 秒
             time.sleep(1)
         except KeyboardInterrupt:
             print("\n🔴 [总控台] -> 状态: 接收到物理阻断信号 (Ctrl+C)，守护进程已终止。")
             break
         except Exception as e:
             print(f"\n🔴 [总控台] -> 严重错误: 守护进程崩溃 - {str(e)}")
-            time.sleep(60) # 如果崩溃，强行休眠一分钟再试，防止 CPU 爆炸
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
@@ -3707,21 +3519,32 @@ import urllib3
 import time
 import os
 import re
+import json # 🟢 新增：用于解析流媒体碎片
+import warnings 
+from bs4 import XMLParsedAsHTMLWarning 
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
+from extractors import EXTRACTORS 
+from dotenv import load_dotenv
 
+load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 🚀 全局雷达配置 ---
-API_ENDPOINT = "http://localhost:3000/api/v1/ingest" 
-INGEST_TOKEN = "[CENSORED_BY_ARCHITECT]"
+# 🚨 架构师加固：支持通过 .env 配置生产环境的 Vercel 域名
+BASE_URL = os.getenv("NEXT_PUBLIC_BASE_URL", "http://localhost:3000").rstrip('/')
+API_INGEST = f"{BASE_URL}/api/v1/ingest"
+API_SAVE = f"{BASE_URL}/api/v1/ingest/save"
+
+INGEST_TOKEN = os.getenv("INGEST_TOKEN", "[CENSORED_BY_ARCHITECT]")
 HISTORY_FILE = "seen_urls.txt"
 
 TARGET_FEEDS = [
     "https://finance.yahoo.com/news/",
-    "https://finance.yahoo.com/topic/stock-market-news/",
-    "https://finance.yahoo.com/topic/economic-news/",
-    "https://finance.yahoo.com/section/tech/"
+    "https://www.reutersagency.com/feed/",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "https://feeds.bloomberg.com/markets/news.rss"
 ]
 
 def load_seen_urls():
@@ -3734,122 +3557,210 @@ def save_seen_url(url):
     with open(HISTORY_FILE, "a") as f:
         f.write(url + "\n")
 
-def fetch_html(url):
-    session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Connection": "keep-alive",
-    }
-    try:
-        adapter = HTTPAdapter(max_retries=3)
-        session.mount("https://", adapter)
-        resp = session.get(url, headers=headers, verify=False, timeout=15)
-        resp.raise_for_status()
-        return resp.text
-    except:
-        return None
+def fetch_html(url): 
+     session = requests.Session() 
+     # 🚨 注入深度浏览器伪装指纹，绕过 Yahoo/Reuters 的初级反爬墙 
+     headers = { 
+         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
+         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", 
+         "Accept-Language": "en-US,en;q=0.5", 
+         "Upgrade-Insecure-Requests": "1", 
+         "Connection": "keep-alive", 
+     } 
+     
+     try: 
+         adapter = HTTPAdapter(max_retries=3) 
+         session.mount("https://", adapter) 
+         resp = session.get(url, headers=headers, verify=False, timeout=20) 
+         resp.raise_for_status() 
+         return resp.text 
+     except requests.exceptions.HTTPError as e: 
+         print(f"🔴 [模块_崩溃] -> 原因: 遭遇媒体防爬墙阻击 (HTTP {e.response.status_code})") 
+         return None 
+     except Exception as e: 
+         # 撕裂黑盒，暴露真实的物理死因（如 Timeout, ProxyError） 
+         print(f"🔴 [模块_崩溃] -> 原因: 物理网络连接断裂 ({type(e).__name__}: {str(e)[:50]})" ) 
+         return None 
 
-def extract_article_links(html, base_url="https://finance.yahoo.com"):
-    soup = BeautifulSoup(html, 'html.parser')
-    links = set()
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if '/news/' in href or '/m/' in href:
-            full_url = href if href.startswith('http') else base_url + href
-            links.add(full_url)
-    return links
+def extract_article_links(html, base_url): 
+     """ 
+     核心业务说明： 
+     兼容 HTML <a> 标签与 XML(RSS) <item><link> 的双轨探测器。 
+     继续使用内置 html.parser，但已在上层静默了烦人的警告。 
+     """ 
+     soup = BeautifulSoup(html, 'html.parser') 
+     links = set() 
+     
+     # 策略 1：尝试提取标准 RSS 的 link (针对 WSJ / Bloomberg) 
+     items = soup.find_all('item') 
+     if items: 
+         for item in items: 
+             link_tag = item.find('link') 
+             if link_tag and link_tag.text: 
+                 links.add(link_tag.text.strip()) 
+         return links 
+ 
+     # 策略 2：降级为 HTML 链接提取 (针对 Yahoo) 
+     for a in soup.find_all('a', href=True): 
+         href = a.get('href', '') 
+         if '/news/' in href or '/m/' in href or '/articles/' in href: 
+             full_url = href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/') 
+             links.add(full_url) 
+     return links
 
-# 🛡️ V5.6 工业级断头台算法
 def is_high_value_intel(content):
+    if not content:
+        return False, "载荷真空"
+
     content_lower = content.lower()
 
-    # 1. 致命词汇一击必杀 (只要出现一次，立刻拉黑)
     FATAL_KEYWORDS = [
         "flagship newsletter", "inboxes every morning", "subscribe to",
-        "sign up for yahoo", "download the app", "click here to read",
-        "morning brief is yahoo"
+        "sign up for", "download the app", "click here to read",
+        "all rights reserved", "terms of service", "to read the full article"
     ]
     for word in FATAL_KEYWORDS:
         if word in content_lower:
-            return False, f"触碰致命广告词 [{word}]"
+            return False, f"触碰通用致命词汇 [{word}]"
 
-    # 2. 长度底线
+    if re.search(r'(listen to.*podcast|bloomberg radio|watch live on bloomberg tv)', content_lower):
+        return False, "触发 Bloomberg 引流拦截机制"
+    if "bloomberg l.p." in content_lower and len(content) < 1000:
+        return False, "触发 Bloomberg 极短免责声明拦截机制"
+    if re.search(r'(thomson reuters trust principles|compiled by|editing by|our standards:)', content_lower):
+        return False, "触发 Reuters 声明拦截机制"
+    if re.search(r'(wsj pro|what to read next|listen to the full episode|heard on the street:)', content_lower):
+        return False, "触发 WSJ 引流拦截机制"
+
     if len(content) < 800:
         return False, f"篇幅过短 ({len(content)} 字符)"
 
-    # 3. 🚀 商业数据密度检测 (真正的商业新闻必然包含数据)
-    # 提取所有数字
     numbers = re.findall(r'\d+', content)
     has_financial_symbols = '%' in content or '$' in content or 'billion' in content_lower or 'million' in content_lower
     
-    # 如果一篇文章里数字少于 3 个，且没有任何金融符号，100% 是空洞的软文或散文
     if len(numbers) < 3 and not has_financial_symbols:
-        return False, "情报密度极低 (缺乏商业数据和金额支撑)"
+        return False, "数据密度归零"
 
-    return True, "通过高净值甄别"
+    return True, "高维资产鉴别通过"
+
+def route_and_extract(url, html):
+    for extractor in EXTRACTORS:
+        if extractor.match(url):
+            return extractor.extract(html)
+            
+    print("🟡 [模块_异步] -> 目标: 未命中专属契约，执行通用兜底 DOM 撕裂")
+    soup = BeautifulSoup(html, 'html.parser')
+    for element in soup(["script", "style", "nav", "footer", "aside"]):
+        element.decompose()
+    return "\n".join([p.get_text(strip=True) for p in soup.find_all('p') if len(p.get_text(strip=True)) > 50])
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - OPERATION: GUILLOTINE V5.6  ")
-    print("      [+] 搭载商业数据密度扫描仪，全量斩杀软文      ")
+    print("      TRUTH DECODER - CORE ENGINE V5.9 SYNC       ")
+    print("      [+] 启用流式 JSON 缝合与闪电入库网关...     ")
     print("==================================================")
     
     seen_urls = load_seen_urls()
     all_targets = set()
 
     for feed in TARGET_FEEDS:
-        print(f"🟢 [雷达扫描] 侦测阵地: {feed}")
+        print(f"🟢 [模块_发起] -> 动作/参数: 阵地扫描 {feed}")
         html = fetch_html(feed)
         if html:
-            all_targets.update(extract_article_links(html))
+            base_parts = feed.split("/")
+            base_url = f"{base_parts[0]}//{base_parts[2]}"
+            all_targets.update(extract_article_links(html, base_url))
         time.sleep(1)
 
     fresh_targets = [url for url in all_targets if url not in seen_urls]
-    print(f"\n🔵 [初筛] 锁定 {len(fresh_targets)} 条线索，进入断头台甄别舱...\n")
+    print(f"\n🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索\n")
 
     success_count = 0
     for url in fresh_targets:
-        print(f"🟡 [分析] 目标: {url[:50]}...")
+        print(f"🟡 [模块_异步] -> 目标: {url[:60]}...")
         html = fetch_html(url)
         if not html: 
             continue
 
-        soup = BeautifulSoup(html, 'html.parser')
-        paragraphs = soup.find_all('p')
-        raw_content = "\n".join([p.get_text() for p in paragraphs if len(p.get_text()) > 60])
-
-        # 🚨 断头台铡刀落下
-        is_valuable, reject_reason = is_high_value_intel(raw_content)
-        if not is_valuable:
-            print(f"   🚫 [物理拦截] {reject_reason}，已销毁。")
-            save_seen_url(url) # 记入黑名单，不再碰它
+        try:
+            raw_content = route_and_extract(url, html)
+        except Exception as e:
+            print(f"   🔴 [模块_崩溃] -> 原因: DOM 物理切片异常 ({str(e)})")
             continue
 
+        is_valuable, reject_reason = is_high_value_intel(raw_content)
+        if not is_valuable:
+            print(f"   🚫 [物理拦截] {reject_reason}")
+            save_seen_url(url)
+            continue
+
+        # ==========================================
+        # 🚀 核心修复区：流式接收 -> 缝合 -> 闪电入库
+        # ==========================================
         try:
-            print("   🟢 [密度达标] 确认包含核心商业数据，正在提交 AI 破译...")
+            print("   🟢 [模块_发起] -> 动作/参数: 呼叫 AI 流式破译引擎...")
             resp = requests.post(
-                API_ENDPOINT, 
+                API_INGEST, 
                 json={"rawContent": raw_content}, 
                 headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                stream=True, # 强制以流模式接收
                 timeout=60
             )
-            if resp.status_code == 200:
-                print("   ✅ [入库成功] 致命裁决已生成！")
+            
+            if resp.status_code != 200:
+                print(f"   🔴 [网关拦截] 状态码 {resp.status_code}")
+                continue
+
+            print("   🟡 [模块_异步] -> 目标: 正在静默缝合 JSON 碎片...")
+            raw_json_string = ""
+            for line in resp.iter_lines():
+                if line:
+                    decoded = line.decode('utf-8').strip()
+                    if decoded.startswith('data: ') and not decoded.endswith('[DONE]'):
+                        try:
+                            data = json.loads(decoded[6:])
+                            delta = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                            raw_json_string += delta
+                        except:
+                            pass
+
+            # 剥离 Markdown 干扰符
+            cleaned_json = raw_json_string.replace('```json', '').replace('```', '').strip()
+            first_brace = cleaned_json.find('{')
+            last_brace = cleaned_json.rfind('}')
+            if first_brace != -1 and last_brace != -1:
+                cleaned_json = cleaned_json[first_brace:last_brace+1]
+
+            intel = json.loads(cleaned_json)
+
+            print("   🟢 [模块_发起] -> 动作/参数: 破译完成，请求闪电入库网关...")
+            save_resp = requests.post(
+                API_SAVE,
+                json={"rawContent": raw_content, "intel": intel},
+                headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                timeout=15
+            )
+
+            save_data = save_resp.json()
+            if save_resp.status_code == 200 and save_data.get('success'):
+                signal_id = save_data.get('data', {}).get('signalId', 'UNKNOWN')
+                print(f"   🔵 [模块_成功] -> 产物: 致命裁决已落盘！(ID: {signal_id})")
                 save_seen_url(url)
                 success_count += 1
             else:
-                print(f"   ❌ [被后端拦截] 状态码: {resp.status_code} (可能是重复通稿)")
+                print(f"   🔴 [入库崩溃] -> 原因: {save_data.get('error', '未知错误')}")
+
+        except json.JSONDecodeError:
+            print(f"   🔴 [破译崩溃] -> 原因: AI 输出结构严重畸形，抛弃资产")
         except requests.exceptions.Timeout:
-            print(f"   ❌ [链路中断] DeepSeek 思考超时，跳过。")
+            print(f"   🔴 [模块_崩溃] -> 原因: 神经引擎思考/网络传输超时")
         except Exception as e:
-            print(f"   ❌ [未知异常] {str(e)[:30]}")
+            print(f"   🔴 [模块_崩溃] -> 原因: 链路未知阻断 {str(e)[:30]}")
         
         time.sleep(2)
 
     print("\n==================================================")
-    print(f"      🎉 猎杀结束！成功斩获 {success_count} 条纯粹的高密度商业资产。")
+    print(f"      🎉 引擎休眠！本次战役成功斩获并入库 {success_count} 条高维资产。")
     print("==================================================")
 
 if __name__ == "__main__":
@@ -4068,6 +3979,38 @@ class BaseExtractor(ABC):
             element.decompose()
 
 ============================================================
+File: .\truth_scraper\extractors\bloomberg.py
+============================================================
+from bs4 import BeautifulSoup
+from .base import BaseExtractor
+
+class BloombergExtractor(BaseExtractor):
+    """
+    核心业务说明：
+    Bloomberg 专属 RSS 降级解析器。
+    鉴于其高强度的反爬物理护城河，我们彻底放弃直连 HTML，
+    专攻其 RSS feed 返回的纯净 XML description / content 字段。
+    """
+    def match(self, url: str) -> bool:
+        return "bloomberg.com" in url
+
+    def extract(self, html: str) -> str:
+        print("🟡 [模块_异步] -> 目标: 挂载 Bloomberg (RSS 降级) 专属解析策略")
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # 物理切割不需要的杂质
+        self.clean_soup(soup)
+
+        # RSS 中的正文通常包裹在 CDATA 或段落中，直接提取全量净文本
+        paragraphs = soup.find_all('p')
+        if paragraphs:
+            text = "\n".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20])
+        else:
+            text = soup.get_text(separator='\n', strip=True)
+            
+        return text
+
+============================================================
 File: .\truth_scraper\extractors\reuters.py
 ============================================================
 from bs4 import BeautifulSoup
@@ -4159,10 +4102,13 @@ File: .\truth_scraper\extractors\__init__.py
 from .reuters import ReutersExtractor
 from .wsj import WSJExtractor
 from .yahoo_finance import YahooFinanceExtractor
+from .bloomberg import BloombergExtractor
 
-# 架构师防线：所有新增的媒体源，必须在此处注册进阵列，主程序将自动遍历匹配
+# 架构师防线：所有新增的媒体源，必须在此处强制注册进阵列。
+# 主程序将按顺序遍历该阵列进行路由匹配。
 EXTRACTORS = [
     ReutersExtractor(),
     WSJExtractor(),
-    YahooFinanceExtractor() # 🟢 新增：挂载雅虎财经策略
+    YahooFinanceExtractor(),
+    BloombergExtractor() # 🟢 新增：挂载 Bloomberg RSS 降级策略
 ]
