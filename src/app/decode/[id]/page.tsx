@@ -57,10 +57,9 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     }
   }, [signal, lang]);
 
-  /** 
+   /** 
     * 核心业务说明： 
-    * 字典构建引擎 V2.0 - 具备语言提纯能力。 
-    * 它在整个业务线中的作用是：扫描原文与 AI 解析出的粉饰词，建立关键词与真相描述的映射。 
+    * 字典构建引擎 V2.1 - 修复直角引号失明症与双字误杀 Bug。 
     */ 
    const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => { 
      const dict: Record<string, string> = {}; 
@@ -70,13 +69,10 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
        const cnSentence = cnFluffs[i] || ""; 
        const enSentence = enFluffs[i] || ""; 
        
-       // 🚀 架构师修复：获取原始 hover 文本 
        let hoverText = targetFluffs[i] || cnSentence || enSentence; 
  
-       // 🚨 核心防御系统：若当前为英文模式，物理阉割残留的中文前缀「」或【】 
-       // 确保展示给全球用户的是纯净的英语逻辑 
+       // 物理阉割残留的中文前缀「」或【】(英文模式下) 
        if (lang === 'en' && hoverText) { 
-         // 利用正则捕获组，跳过开头可能存在的「」或【】及其后的空格 
          const match = hoverText.match(/(?:「.*?」|【.*?】)?\s*(.*)/); 
          if (match && match[1]) { 
            hoverText = match[1].trim(); 
@@ -85,15 +81,15 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
  
        let found = false; 
        
-       // 内部辅助：执行引号匹配嗅探 
        const searchQuotes = (sentence: string) => { 
          let localFound = false; 
-         const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g; 
+         // 🚨 架构师排雷 1：补全正则阵列，强制捕获防 JSON 崩溃专用的直角引号「」 
+         const quoteRegex = /['"‘“【\[「](.*?)['"’”】\]」]/g; 
          let match; 
          while ((match = quoteRegex.exec(sentence)) !== null) { 
            const keyword = match[1].trim(); 
-           if (keyword.length >= 3 && rawText.includes(keyword)) { 
-             // 🛡️ 注入净化后的真相描述 
+           // 🚨 架构师排雷 2：将拦截下限从 3 降至 2。防止“优化”、“赋能”等双字中文黑话被系统物理误杀！ 
+           if (keyword.length >= 2 && rawText.includes(keyword)) { 
              dict[keyword] = hoverText; 
              localFound = true; 
            } 
@@ -104,7 +100,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
        if (searchQuotes(cnSentence)) found = true; 
        if (!found && searchQuotes(enSentence)) found = true; 
  
-       // 兜底策略：若无引号，尝试通过中文标志位嗅探 
+       // 兜底策略 
        if (!found) { 
          const cnMarkers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称", "掩饰"]; 
          for (const marker of cnMarkers) { 
@@ -119,7 +115,6 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
            } 
          } 
  
-         // 英文模式下的词根嗅探 
          if (!found) { 
            const enMarkers = ["implies", "covers up", "means", "indicates", "intends to", "tries to", "packages", "claims", "hides", "masks", "distracts"]; 
            for (const marker of enMarkers) { 
@@ -142,9 +137,8 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
        } 
      } 
  
-     // 结构化日志探头 
      if (process.env.NODE_ENV === 'development') { 
-       console.log(`🔵 [模块_成功] -> 产物: 字典提纯完毕，当前条数:`, Object.keys(dict).length); 
+       console.log(`🔵 [模块_成功] -> 产物: 字典提纯完毕，当前高亮锚点数:`, Object.keys(dict).length); 
      } 
      setDictionary(dict); 
    };
