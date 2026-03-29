@@ -57,70 +57,97 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     }
   }, [signal, lang]);
 
-  const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => {
-    const dict: Record<string, string> = {};
-    const maxLen = Math.max(cnFluffs.length, enFluffs.length);
-
-    for (let i = 0; i < maxLen; i++) {
-      const cnSentence = cnFluffs[i] || "";
-      const enSentence = enFluffs[i] || "";
-      const hoverText = targetFluffs[i] || cnSentence || enSentence;
-      let found = false;
-
-      const searchQuotes = (sentence: string) => {
-        let localFound = false;
-        const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
-        let match;
-        while ((match = quoteRegex.exec(sentence)) !== null) {
-          const keyword = match[1].trim();
-          if (keyword.length >= 3 && rawText.includes(keyword)) {
-            dict[keyword] = hoverText;
-            localFound = true;
-          }
-        }
-        return localFound;
-      };
-
-      if (searchQuotes(cnSentence)) found = true;
-      if (!found && searchQuotes(enSentence)) found = true;
-
-      if (!found) {
-        const cnMarkers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称", "掩饰"];
-        for (const marker of cnMarkers) {
-          if (cnSentence.includes(marker)) {
-            const prefix = cnSentence.split(marker)[0];
-            const potentialCnWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-8);
-            if (potentialCnWord.length >= 2 && rawText.includes(potentialCnWord)) {
-              dict[potentialCnWord] = hoverText;
-              found = true;
-              break;
-            }
-          }
-        }
-
-        if (!found) {
-          const enMarkers = ["implies", "covers up", "means", "indicates", "intends to", "tries to", "packages", "claims", "hides", "masks", "distracts"];
-          for (const marker of enMarkers) {
-            const lowerEn = enSentence.toLowerCase();
-            if (lowerEn.includes(marker)) {
-              const splitIdx = lowerEn.indexOf(marker);
-              const prefix = enSentence.substring(0, splitIdx).trim();
-              const words = prefix.split(/\s+/);
-              if (words.length > 0) {
-                const potentialEnWord = words.slice(-3).join(" ").replace(/[^\w\s-]/g, '');
-                if (potentialEnWord.length >= 4 && rawText.includes(potentialEnWord)) {
-                  dict[potentialEnWord] = hoverText;
-                  found = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    setDictionary(dict);
-  };
+  /** 
+    * 核心业务说明： 
+    * 字典构建引擎 V2.0 - 具备语言提纯能力。 
+    * 它在整个业务线中的作用是：扫描原文与 AI 解析出的粉饰词，建立关键词与真相描述的映射。 
+    */ 
+   const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => { 
+     const dict: Record<string, string> = {}; 
+     const maxLen = Math.max(cnFluffs.length, enFluffs.length); 
+ 
+     for (let i = 0; i < maxLen; i++) { 
+       const cnSentence = cnFluffs[i] || ""; 
+       const enSentence = enFluffs[i] || ""; 
+       
+       // 🚀 架构师修复：获取原始 hover 文本 
+       let hoverText = targetFluffs[i] || cnSentence || enSentence; 
+ 
+       // 🚨 核心防御系统：若当前为英文模式，物理阉割残留的中文前缀「」或【】 
+       // 确保展示给全球用户的是纯净的英语逻辑 
+       if (lang === 'en' && hoverText) { 
+         // 利用正则捕获组，跳过开头可能存在的「」或【】及其后的空格 
+         const match = hoverText.match(/(?:「.*?」|【.*?】)?\s*(.*)/); 
+         if (match && match[1]) { 
+           hoverText = match[1].trim(); 
+         } 
+       } 
+ 
+       let found = false; 
+       
+       // 内部辅助：执行引号匹配嗅探 
+       const searchQuotes = (sentence: string) => { 
+         let localFound = false; 
+         const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g; 
+         let match; 
+         while ((match = quoteRegex.exec(sentence)) !== null) { 
+           const keyword = match[1].trim(); 
+           if (keyword.length >= 3 && rawText.includes(keyword)) { 
+             // 🛡️ 注入净化后的真相描述 
+             dict[keyword] = hoverText; 
+             localFound = true; 
+           } 
+         } 
+         return localFound; 
+       }; 
+ 
+       if (searchQuotes(cnSentence)) found = true; 
+       if (!found && searchQuotes(enSentence)) found = true; 
+ 
+       // 兜底策略：若无引号，尝试通过中文标志位嗅探 
+       if (!found) { 
+         const cnMarkers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称", "掩饰"]; 
+         for (const marker of cnMarkers) { 
+           if (cnSentence.includes(marker)) { 
+             const prefix = cnSentence.split(marker)[0]; 
+             const potentialCnWord = prefix.replace(/[^\u4e00-\u9fa5]/g, '').slice(-8); 
+             if (potentialCnWord.length >= 2 && rawText.includes(potentialCnWord)) { 
+               dict[potentialCnWord] = hoverText; 
+               found = true; 
+               break; 
+             } 
+           } 
+         } 
+ 
+         // 英文模式下的词根嗅探 
+         if (!found) { 
+           const enMarkers = ["implies", "covers up", "means", "indicates", "intends to", "tries to", "packages", "claims", "hides", "masks", "distracts"]; 
+           for (const marker of enMarkers) { 
+             const lowerEn = enSentence.toLowerCase(); 
+             if (lowerEn.includes(marker)) { 
+               const splitIdx = lowerEn.indexOf(marker); 
+               const prefix = enSentence.substring(0, splitIdx).trim(); 
+               const words = prefix.split(/\s+/); 
+               if (words.length > 0) { 
+                 const potentialEnWord = words.slice(-3).join(" ").replace(/[^\w\s-]/g, ''); 
+                 if (potentialEnWord.length >= 4 && rawText.includes(potentialEnWord)) { 
+                   dict[potentialEnWord] = hoverText; 
+                   found = true; 
+                   break; 
+                 } 
+               } 
+             } 
+           } 
+         } 
+       } 
+     } 
+ 
+     // 结构化日志探头 
+     if (process.env.NODE_ENV === 'development') { 
+       console.log(`🔵 [模块_成功] -> 产物: 字典提纯完毕，当前条数:`, Object.keys(dict).length); 
+     } 
+     setDictionary(dict); 
+   };
 
   const handlePurge = async () => {
     const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n\n物理销毁该情报，不可逆转。确认抹杀？");

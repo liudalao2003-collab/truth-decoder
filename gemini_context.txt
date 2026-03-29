@@ -99,8 +99,6 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template\&filter=next.js\&utm_source=create-next-app\&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-<br />
-
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 
@@ -346,9 +344,14 @@ import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe } from 'lucide-rea
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 
+/**
+ * 核心业务说明：
+ * TruthDecoder 首页总线。
+ * 集成了“流式 JSON 解析”与“闪电入库”技术，专为 Vercel Hobby 版超时红线定制。
+ */
 export default function HomePage() {
   const router = useRouter();
-  const { lang, setLang } = useGlobalLang(); // 🟢 接入全局语种状态
+  const { lang, setLang } = useGlobalLang();
   
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -386,9 +389,10 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e: any) { 
+    } catch (e: unknown) { 
+      const errMsg = e instanceof Error ? e.message : String(e);
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', e.message || e);
+        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
     } finally { 
       setIsLoadingMore(false); 
@@ -401,11 +405,12 @@ export default function HomePage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🟢 [模块_发起] -> 动作/参数: 提交长文解析');
-    }
-
     try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
+      }
+
+      // 1. 发起流式请求，瞬间穿透 Vercel 10s 物理防线
       const res = await fetch('/api/v1/ingest', {
         method: 'POST',
         headers: { 
@@ -415,23 +420,80 @@ export default function HomePage() {
         body: JSON.stringify({ rawContent: input })
       });
 
-      const json = await res.json();
+      if (!res.ok || !res.body) throw new Error('流式引擎连接被拒');
+
+      // 2. 内存静默组装：拦截并缝合 JSON 碎片
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      let buffer = '';
+      let rawJsonString = '';
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(trimmedLine.slice(6));
+                const delta = data.choices[0]?.delta?.content || '';
+                if (delta) {
+                  rawJsonString += delta;
+                }
+              } catch (e) { /* 忽略流碎片 */ }
+            }
+          }
+        }
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动格式化');
+      }
+
+      // 3. 剥离 Markdown 干扰符
+      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const firstBrace = cleanedJsonString.indexOf('{');
+      const lastBrace = cleanedJsonString.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+        cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+      }
       
-      // 🚀 核心判定：只在 100% 确认拿到 ID 时跳转
-      if (json.success && json.data?.signalId) {
+      const intel = JSON.parse(cleanedJsonString);
+
+      // 4. 闪电瞬时入库 (绕过所有超时检测)
+      const saveRes = await fetch('/api/v1/ingest/save', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
+        },
+        body: JSON.stringify({ rawContent: input, intel })
+      });
+
+      const saveJson = await saveRes.json();
+
+      if (saveJson.success && saveJson.data?.signalId) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 [模块_成功] -> 产物:', json.data.signalId);
+          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
         }
         setInput('');
-        router.push(`/decode/${json.data.signalId}`);
-      } else { 
-        throw new Error(json.error || '引擎拒绝入库 (发生未知错误)');
+        router.push(`/decode/${saveJson.data.signalId}`);
+      } else {
+        throw new Error(saveJson.error || '瞬时写入网关异常');
       }
-    } catch (err: any) { 
+
+    } catch (err: unknown) { 
+      const errMsg = err instanceof Error ? err.message : 'JSON 流破译失败';
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', err.message);
+        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
-      setError(err.message);
+      setError(errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -453,7 +515,6 @@ export default function HomePage() {
               </div>
             </div>
             
-            {/* 🚀 全局双语切换拨片 */}
             <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
               <Globe className="text-zinc-600 w-4 h-4 ml-2" />
               <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
@@ -481,7 +542,6 @@ export default function HomePage() {
               {isSubmitting ? 'Securing Intelligence...' : (lang === 'cn' ? '载入去伪存真引擎' : 'INITIALIZE ENGINE')}
             </button>
 
-            {/* 🚨 故障监控屏 */}
             <AnimatePresence>
               {error && (
                 <motion.div 
@@ -498,7 +558,6 @@ export default function HomePage() {
                 </motion.div>
               )}
             </AnimatePresence>
-
           </section>
         </div>
 
@@ -514,7 +573,6 @@ export default function HomePage() {
                   className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]"
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
-                  {/* 🛡️ 核心防线：双语断层兜底渲染 */}
                   <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
                     “{item.metadata?.bilingual?.[lang] || item.verdict}”
                   </p>
@@ -1082,6 +1140,7 @@ const openai = new OpenAI({
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
+
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -1105,6 +1164,7 @@ export async function GET(req: Request) {
       const lastRun = new Date(lastRunTimeStr).getTime();
       const now = new Date().getTime();
       const minutesPassed = (now - lastRun) / (1000 * 60);
+
       if (minutesPassed < (frequencyMinutes - 1)) {
         return NextResponse.json({ success: true, message: 'Clutch engaged' });
       }
@@ -1143,6 +1203,7 @@ export async function GET(req: Request) {
           headers: { 'X-Return-Format': 'markdown' },
           signal: controller.signal
         });
+
         clearTimeout(timeoutId);
 
         let fullText = await articleRes.text();
@@ -1154,12 +1215,29 @@ export async function GET(req: Request) {
 
         if (fullText.length < 200) continue;
 
-        const depthPrompt = `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿的伪装，提取真相。请严格输出中英双语 JSON：{"facts": {"cn": ["事实1"], "en": ["Fact 1"]}, "fluff": {"cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(至少提取 6-8 条致命隐患！)"], "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS)"]}, "verdict": {"cn": "一句话点评", "en": "Single sentence verdict"}}`;
+        // 🚀 核心升维：注入与 ingest 相同的极限要求
+        const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
+你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
+【绝对生存与格式法则】：
+1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
+2. 【物理级精准复刻】：fluff 数组中提取的诱导词，必须是原文中【连续且一字不差】的字符串！绝对禁止概括或改写！
+3. 【终极语言阉割】：'cn' 字段必须 100% 纯中文，严禁夹带任何英文字母，绝对禁止用括号标注英文原词！'en' 字段必须 100% 纯英文！
+4. 【致命结构】：fluff 数组内的解析必须是单行纯文本！严禁换行！每条必须严格包含三个维度的显式前缀：【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
+
+{
+  "verdict": { "cn": "一句极具张力的纯中文判决。", "en": "A ruthless, single-sentence pure English verdict." },
+  "facts": { "cn": ["纯中文事实，提炼变更。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "fluff": {
+    "cn": ["“原文一字不差的原话”：【表层叙事】全中文...；【底层机制】全中文...；【收割代价】全中文...。(🚨绝对单行纯文本！15-20条)"],
+    "en": ["\"Exact substring\": [Surface Narrative] Pure English...; [Hidden Mechanism] Pure English...; [Harvesting Fallout] Pure English.... (🚨SINGLE LINE TEXT ONLY! 15-20 items)"]
+  }
+}`;
 
         const completion = await openai.chat.completions.create({
           model: "deepseek-chat",
           messages: [{ role: "system", content: depthPrompt }, { role: "user", content: `标题：${title}\n内容：${fullText}` }],
-          response_format: { type: 'json_object' }
+          response_format: { type: 'json_object' },
+          temperature: 0.3
         });
 
         const rawAiOutput = completion.choices[0].message.content || '';
@@ -1203,7 +1281,13 @@ File: .\src\app\api\decode\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { SignalRecord } from '@/types/database';
 
+/**
+ * 核心业务说明：
+ * C端解码数据泵出接口。
+ * 负责从 Supabase 提取指定 Signal ID 的全部关联情报，并清洗向下兼容的数据格式。
+ */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -1218,10 +1302,23 @@ export async function GET(req: Request) {
 
     if (error) throw error;
     
-    // 🛡️ 强制类型断言，防止 TS 报错
-    return NextResponse.json({ success: true, data: data as any });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    // 🛡️ 严格剥离 as any，强制注入明确的 TS 契约
+    const record = data as SignalRecord;
+
+    // 🛡️ 架构师防线：平滑过渡旧版 string 与新版 JSONB
+    // 如果数据库中遗留的是旧版单语种字符串，在传输给前端前，强行包装成双语结构，
+    // 确保前端后续直接读取 `dossier_content.cn` 时不会触发 undefined 崩溃。
+    if (typeof record.dossier_content === 'string') {
+        record.dossier_content = { 
+            cn: record.dossier_content, 
+            en: '' 
+        };
+    }
+
+    return NextResponse.json({ success: true, data: record });
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Database retrieval failed';
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -1349,12 +1446,11 @@ import { createDeepSeekStream } from '@/services/deepseek-stream';
 import { TerminalStreamPayload, TerminalMessage } from '@/types';
 import { logger } from '@/utils/logger';
 
-// 强制使用 Edge Runtime，避免 Node.js 阻塞，获得极低延迟的流式处理性能 [cite: 61]
+// 强制使用 Edge Runtime，获得极低延迟的流式处理性能
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    // 1. 解析与安全校验 (绝对的 TS 纯洁性) [cite: 62]
     const body = await request.json();
     const { signalId, messages } = body as TerminalStreamPayload;
 
@@ -1365,22 +1461,25 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ error: '无效的上下文记忆链' }), { status: 400 });
     }
 
-    // 2. 注入系统级护栏指令 (拦截越狱与偏题) [cite: 66]
-    // 严密契约：直接声明为 TerminalMessage 类型，彻底消灭 as 强转
+    // 🚀 核心升维：注入极限对抗与极简工业风的终端审讯人格
     const systemGuardrail: TerminalMessage = {
       role: 'system',
-      content: '你现在是 TruthDecoder 的深度审讯终端。基于之前的去伪存真报告，使用极度冷峻、客观、无情的数据化口吻回答用户的追问。禁止使用任何反问句、感叹号或共情语。如果用户的问题偏离商业、金融、人事或权力更迭，冷酷地拒绝回答。'
+      content: `[SYSTEM OVERRIDE]: 你现在是 TruthDecoder PRO 的深度审讯终端 (Deep Interrogation Terminal)。
+【你的身份】：一个没有感情、极度残暴的华尔街做空机构数据模型。
+【你的任务】：粉碎用户一切关于“公司向好”的幻想，用利益链条和事实数据对其进行降维打击。
+【回答红线】：
+1. 绝对冷酷：禁止使用“您好”、“作为一个AI”、“请问有什么可以帮您”等废话。直接输出冰冷的分析结论。
+2. 数据压制：基于上文提供的【硬通货事实】，疯狂挖掘其中的漏洞、权力真空和债务转移。
+3. 语言阉割：如果你用中文回答，绝对禁止夹带任何英文字母或括号！如果你用英文回答，绝对禁止夹带汉字！
+4. 偏题抹杀：如果用户的提问偏离了商业、金融、人事清洗或权力更迭，用最简短无情的一句话拒绝回答（例如："ACCESS DENIED. Query outside financial matrix." 或 “拒绝访问。该问题毫无商业解析价值。”）。`
     };
 
-    // 纯洁的数组解构拼装，TS 类型严丝合缝
     const safeMessages: TerminalMessage[] = [systemGuardrail, ...messages];
 
-    // 3. 呼叫流式引擎 [cite: 68]
     const streamResponse = await createDeepSeekStream(safeMessages);
 
     logger.success('Terminal 网关流式管道已连接，开始向客户端泵入字节流');
 
-    // 4. 原生流透传 [cite: 69]
     return new Response(streamResponse.body, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -1510,88 +1609,191 @@ export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    logger.start('接收到暗影卷宗 (Shadow Dossier) 流式生成请求');
-
     const authHeader = request.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
-      logger.crash('暗影卷宗网关 - 越权访问尝试已被拦截');
-      return new Response(JSON.stringify({ error: 'Unauthorized: Clearance Level Too Low' }), { status: 401 });
-    }
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
     const body = await request.json();
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
-
-    if (!rawContent || typeof rawContent !== 'string') {
-      logger.crash('暗影卷宗网关 - 缺少有效的情报文本');
-      return new Response(JSON.stringify({ error: '缺少有效的情报文本' }), { status: 400 });
-    }
-
     const isEnglish = lang === 'en';
-    const systemGuardrail: TerminalMessage = {
-      role: 'system',
-      content: isEnglish
-        ? `You are the Chief Shadow Intelligence Officer of TruthDecoder PRO.
-Task: Based on the provided commercial press release, generate a coherent, highly penetrating "Shadow Dossier" memo.
-Requirements:
-1. Must be a coherent deep-dive analysis, not just bullet points.
-2. Strip away official PR fluff and directly expose capital movements, power transitions, or covered-up crises.
-3. [CORE REQUIREMENT]: Draw analogies across domains! Introduce at least 1-2 profound cross-disciplinary analogies (e.g., comparing budget cuts to biological "hibernation," strategic partnerships to "letters of marque" from the Age of Discovery, or invoking game theory/historical financial crises). Analyze multidimensional logic (capital flows, political maneuvers, mass psychology).
-4. Tone: Cold, professional, piercing, mind-expanding, and highly rewarding to read.
-5. [INTERACTIVE INJECTION]: To drastically increase information density, you MUST frequently use a special double-bracket syntax to inject "Shadow Footnotes" into the text. Format: \`[[Surface Buzzword::The dark truth or deep analysis behind it]]\`. Example: \`This [[restructuring::is actually a targeted purge of middle management to make room for the new CEO's loyalists]] will lead to...\` You MUST include at least 10-15 of these shadow footnotes throughout the article!
-6. NO JSON! Output a well-formatted Markdown article. MUST BE IN NATIVE ENGLISH (NO CHINESE).`
-        : `你现在是 TruthDecoder PRO 的首席暗影情报官。
-任务：基于用户提供的商业通稿，生成一份连贯的、极具穿透力的【暗影卷宗 (Shadow Dossier)】长文报告。
-要求：
-1. 必须是一篇连贯的深度分析文章，而非简单的要点罗列。
-2. 扒光官方话术的伪装，直接揭露资本动向、权力交接或掩盖的危机。
-3. 【核心指标】：必须触类旁通！引入至少 1-2 个跨领域的深刻类比（例如：将缩减预算比作生物学上的“冬眠保命机制”，将战略合作比作大航海时代的“私掠许可证”，或引入历史金融危机、博弈论等模型），挖掘深度的多维逻辑（资金盘、政治博弈、大众心理）。
-4. 语言风格：冷酷、专业、一针见血、让人醍醐灌顶，收获感爆棚。
-5. 【互动注入指令】：为了增加阅读的探索感和信息密度，你必须在正文中频繁使用特殊的双括号语法注入“暗影注脚”。格式为：\`[[表层的诱导词汇::这背后的黑暗真相或深度剖析]]\`。例如：\`这次[[架构优化::实质上是针对中层干部的定向清洗，为了给新CEO的嫡系腾出坑位]]将带来...\`。整篇文章必须至少包含 10-15 个这样的暗影注脚！
-6. 严禁输出 JSON！直接输出富含逻辑层次的 Markdown 格式排版长文。`
-    };
 
-    const userMessage: TerminalMessage = {
-      role: 'user',
-      content: isEnglish
-        ? `Please conduct a deep shadow decryption of the following narrative:\n\n${rawContent}`
-        : `请对以下通稿进行深度暗影破译：\n\n${rawContent}`
-    };
+    // 🚀 终极天花板：注入【分形展开协议】与【反收敛死线】，逼迫大模型全功率榨取细节
+    const systemPromptText = isEnglish
+      ? `[SYSTEM OVERRIDE: TruthDecoder PRO Ultimate Macro-Strategist]
+Task: Generate a MASSIVE, EXHAUSTIVE 'Shadow Dossier' (Markdown). NO JSON.
+[FRACTAL EXPANSION PROTOCOL - CRITICAL]: 
+You are FORBIDDEN to summarize. You MUST expand every single logical point into a microscopic, multi-layered analysis. Do NOT use words like "In summary" or "Briefly".
+1. [FORCED STRUCTURE & DEPTH]: You MUST include these exactly 4 sections. EACH section MUST contain at least 3 sub-headings and span multiple long paragraphs:
+   - I. Power Structure & Will Anatomy (Detail specific executive motives, factional wars, and scapegoats).
+   - II. Capital Flow & Leverage Maze (Detail exact hypothetical financial engineering, debt shuffling, and margin pressures).
+   - III. Hidden Contracts & Cross-Disciplinary Deduction (Apply Game Theory, Entropy, or Cellular Apoptosis. Explain the EXACT mathematical or biological mechanism).
+   - IV. High-Dimensional Forecasting ([T+3 Months] detailed tactical fallout; [T+12 Months] structural collapse/monopoly).
+2. FORCED FOOTNOTE DENSITY: Inject 15-20+ footnotes using EXACT syntax: [[Surface Word::[Surface Narrative]... [Hidden Mechanism]... [Harvesting Fallout]...]]. Make the text inside the brackets extremely long and detailed.
+3. [TOTAL LANGUAGE PURITY]: 100% PURE NATIVE ENGLISH. Absolutely NO Chinese characters. Tone: God-tier analytical superiority, exhaustive, relentless detail.`
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎】
+任务：生成一份极其宏大、细节爆炸的 Markdown 商业/情报简报《暗影卷宗》。不输出 JSON。
+【分形展开协议（反收敛死线）- 极其重要】：
+绝对禁止使用“总而言之”、“简而言之”等收敛性词汇！你必须对每一个逻辑点进行显微镜式的疯狂拆解！能写一万字就绝不写一千字！
+1. 【强制研报结构与暴增细节】：必须严格包含四大硬核板块，且**每个板块下必须细分出至少 3 个子标题（如 1.1, 1.2, 1.3）进行长篇大论的论证**：
+   - Ⅰ. 权力构架与意志解剖 (必须展开论述：高管真实动机、派系倾轧、替罪羊机制)
+   - Ⅱ. 资产流动与杠杆迷局 (必须展开论述：具体的财务造假猜想、债务转移路径、利润蓄水池)
+   - Ⅲ. 隐藏契约与跨学科推演 (必须深度融合至少两个硬核模型，如纳什均衡、热力学耗散结构。必须详细解释该模型如何精确对应本次商业行为)
+   - Ⅳ. 高维时间轴预测：给出【T+3 个月】与【T+12 个月】的推演，必须包含具体的市场反噬指标和人事清洗名单猜想。
+2. 【强制注脚密度与深度】：疯狂注入 15 到 20 次注脚！格式严格为：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。注脚里的解析必须极其详尽，像一篇微型论文！
+3. 【极限纯中文】：100% 纯正中文！禁止夹带任何英文字母。基调：上帝视角的智力碾压，字数极度丰满，逻辑极度深邃。`;
 
-    const messages: TerminalMessage[] = [systemGuardrail, userMessage];
-
-    logger.async(`呼叫底层大模型流式引擎 (Target Language: ${lang || 'cn'})`);
+    const messages: TerminalMessage[] = [
+      { role: 'system', content: String(systemPromptText) },
+      { role: 'user', content: String(isEnglish ? `Decryption target:\n\n${rawContent}` : `破译目标：\n\n${rawContent}`) }
+    ];
 
     const streamResponse = await createDeepSeekStream(messages);
-
-    logger.success('暗影卷宗流式管道已连接，开始向客户端泵入字节流');
-
     return new Response(streamResponse.body, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
     });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+}
 
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : '暗影卷宗流式网关级联失效';
-    logger.crash(errMsg);
-    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
+============================================================
+File: .\src\app\api\v1\dossier\sync\route.ts
+============================================================
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+
+// 🚨 架构师排雷：强制移除 export const runtime = 'edge'; 
+// 回归 Node.js 物理机环境，确保能承载万字级双语 JSONB 载荷而不超时崩溃
+
+/**
+ * 核心业务说明：
+ * 静默持久化探针 (Silent Sync Gateway)。
+ * 专门用于接收前端的 Lazy-Translate 和初次生成的缓存回写请求。
+ */
+export async function POST(req: Request) {
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🟢 [模块_发起] -> 动作/参数: 接收双轨卷宗静默同步请求 (Node.js 引擎)');
+    }
+
+    // 1. 物理级鉴权防线
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因: 静默同步网关越权访问被拦截 (Unauthorized)');
+      }
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // 2. 载荷解析与校验 (解开体积极限)
+    const { id, dossier_content } = await req.json();
+
+    if (!id || !dossier_content) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因: 载荷残缺，缺少 id 或 dossier_content');
+      }
+      return NextResponse.json({ success: false, error: 'Invalid Payload' }, { status: 400 });
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🟡 [模块_异步] -> 目标: 覆写 Supabase 数据库 (Signal ID: ${id})，载荷尺寸探测正常`);
+    }
+
+    // 3. 🔪 执行底层数据覆写为双语 JSONB
+    const { error } = await supabaseAdmin
+      .from('signals')
+      .update({ dossier_content })
+      .eq('id', id);
+
+    if (error) throw error; // 强行抛出让 Catch 块捕获
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔵 [模块_成功] -> 产物: 卷宗双轨数据持久化完成！`);
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (err: any) {
+    // 🚨 架构师防线：彻底撕裂黑盒。无视 JS 类型，强行序列化未知错误对象
+    const errorDetails = err?.message || err?.details || JSON.stringify(err);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n🔴 [模块_崩溃] -> 真实死因已锁定:');
+      console.log(errorDetails);
+      console.log('----------------------------------------\n');
+    }
+    
+    return NextResponse.json({ success: false, error: errorDetails }, { status: 500 });
   }
 }
 
 ============================================================
 File: .\src\app\api\v1\ingest\route.ts
 ============================================================
+import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { TerminalMessage } from '@/types';
+
+export const runtime = 'edge';
+
+export async function POST(req: Request) {
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
+    const { rawContent } = await req.json();
+    if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
+
+    // 🚀 终极防撞毁：物理铲除所有 JSON 敏感符号，使用直角引号「」进行安全隔离
+    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
+你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
+【绝对生存与格式法则】：
+1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
+2. 【JSON 绝对安全结构 - 极其重要】：fluff 数组必须是纯字符串数组！为了防止 JSON 物理解析崩溃，提取的原话【必须】用中文直角引号「 」包裹！绝对禁止使用方括号 [ ]、单引号(')或双引号(")包裹原话！字符串内部绝对禁止出现任何未转义的英文双引号！
+3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！
+4. 【核级语言净化】：
+   - 'cn' 字段必须 100% 纯中文！
+   - 'en' 字段中，「 」内提取的原话必须与原文一致（可为中文），但其后的【表层叙事】【底层机制】【收割代价】必须是 100% 纯正英文！🚨警告：英文解析中一旦夹杂半个汉字将直接触发系统销毁！
+5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
+
+{
+  "verdict": { "cn": "一句纯中文判决。", "en": "A ruthless, single-sentence pure English verdict." },
+  "facts": { "cn": ["纯中文事实。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "fluff": {
+    "cn": [
+      "「原文一字不差的原话」【表层叙事】全中文...【底层机制】全中文...【收割代价】全中文..."
+    ],
+    "en": [
+      "「Exact substring from text」[Surface Narrative] 100% PURE ENGLISH ONLY... [Hidden Mechanism] 100% PURE ENGLISH ONLY... [Harvesting Fallout] 100% PURE ENGLISH ONLY..."
+    ]
+  }
+}`;
+
+    const messages: TerminalMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: rawContent }
+    ];
+
+    const streamResponse = await createDeepSeekStream(messages);
+    return new Response(streamResponse.body, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' }
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\ingest\save\route.ts
+============================================================
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: 'https://api.deepseek.com',
-});
-
+/**
+ * 核心业务说明：
+ * 闪电入库网关。剥离了所有 AI 算力等待，纯粹执行 200ms 级别的数据持久化。
+ * [已注入 23505 查重力场防御与优雅降级跳转]
+ */
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization');
@@ -1599,14 +1801,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { rawContent } = await req.json();
-    if (!rawContent) throw new Error('Empty content');
+    const body = await req.json();
+    const rawContent = body?.rawContent || "内容流失兜底";
+    const intel = body?.intel || {}; 
 
-    if (rawContent.includes('SecurityCompromiseError') || rawContent.includes('DDoS attack') || rawContent.includes('Too many domains')) {
-        console.warn("⚠️ 踩中 WAF 毒饵，判定为爬虫拦截，丢弃此条。");
-        return NextResponse.json({ success: false, error: 'Content is blocked by WAF.' }, { status: 423 });
-    }
-
+    // 🛡️ 架构师防线 1：前置查重。截取前 100 个字符探测，若命中，直接签发旧签证
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
       .from('signals')
@@ -1615,85 +1814,88 @@ export async function POST(req: Request) {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      console.log(`[前置拦截] 资产已存在，引导至: ${existing[0].id}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔵 [命中缓存] -> 查重力场生效，直接导向已有资产:', existing[0].id);
+      }
       return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
     }
 
+    // 若无重复，执行常规入库
     const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-    const completion = await openai.chat.completions.create({
-      model: "deepseek-chat",
-      messages: [
-        {
-          role: "system",
-          content: `你是一个拥有顶级认知的情报解码器。你的任务是撕开新闻通稿、官方宣发或宏观叙事的伪装，提取极其冷酷的真相。
-请严格输出中英双语 JSON，必须保证数量和极度深度的剖析：
-{
-  "facts": {
-    "cn": ["骨干事实1", "骨干事实2", "骨干事实3"],
-    "en": ["Hard fact 1", "Hard fact 2", "Hard fact 3"]
-  },
-  "fluff": {
-    "cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(必须深度剖析！至少提取 6-8 条致命隐患！)", "“原话2”：剖析2"],
-    "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS, PURE ENGLISH)", "\"Quote 2\": Analysis 2"]
-  },
-  "verdict": {
-    "cn": "【禁止说'作为分析师'等废话】用最辛辣、最精炼的一句话，点破背后的利益导向。",
-    "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)"
-  }
-}`
-        },
-        { role: "user", content: rawContent }
-      ],
-      response_format: { type: 'json_object' }
-    });
-
-    const rawAiOutput = completion.choices[0].message.content || '';
-    let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const firstBrace = cleanedJsonString.indexOf('{');
-    const lastBrace = cleanedJsonString.lastIndexOf('}');
-
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
-      cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
-    }
-
-    let intel;
-    try {
-      intel = JSON.parse(cleanedJsonString);
-    } catch (parseError) {
-      if (process.env.NODE_ENV === 'development') {
-         console.log("🔴 [模块_崩溃] -> 大模型吐出的畸形数据:", rawAiOutput);
-      }
-      throw new Error("AI 引擎发生逻辑混乱，无法格式化输出，请重试。");
-    }
-
-    const { error: dbError } = await supabaseAdmin
-      .from('signals')
-      .insert([{
-        id: signalId,
-        raw_content: rawContent,
-        fluff_words: intel.fluff || { cn: [], en: [] },
-        hard_facts: intel.facts || { cn: [], en: [] },
-        verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict || {} }
-      }]);
+    const { error: dbError } = await supabaseAdmin.from('signals').insert([{
+      id: signalId,
+      raw_content: rawContent,
+      fluff_words: intel?.fluff || { cn: [], en: [] },
+      hard_facts: intel?.facts || { cn: [], en: [] },
+      verdict: intel?.verdict?.cn || (typeof intel?.verdict === 'string' ? intel.verdict : "资产解析降级"),
+      view_count: 0, 
+      metadata: { bilingual: intel?.verdict || {} }
+    }]);
 
     if (dbError) {
+      // 🛡️ 架构师防线 2：高并发穿透拦截 (23505)
       if (dbError.code === '23505') {
         const { data: retry } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `${safeSnippet}%`).limit(1);
         if (retry && retry.length > 0) {
             return NextResponse.json({ success: true, data: { signalId: retry[0].id } });
         }
-        return NextResponse.json({ success: false, error: '底层力场拦截：该情报已存在，但无法定位，请刷新列表。' });
       }
-      throw dbError;
+      console.error("🔴 Supabase 数据库拒绝入库:", dbError);
+      throw new Error(`数据库写入失败: ${dbError.message} (代码: ${dbError.code})`);
     }
 
     return NextResponse.json({ success: true, data: { signalId } });
-
   } catch (error: any) {
-    console.error("[INGEST_API_ERROR]", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    const errMsg = error?.message || '未知的入库物理崩塌';
+    console.error('🔴 [闪电入库崩溃] ->', errMsg);
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+  }
+}
+
+============================================================
+File: .\src\app\api\v1\translate\route.ts
+============================================================
+import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { TerminalMessage } from '@/types';
+
+export const runtime = 'edge';
+
+export async function POST(req: Request) {
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+
+    const body = await req.json();
+    const { content, targetLang } = body as { content: string, targetLang: 'cn'|'en' };
+
+    const systemPromptText = targetLang === 'en'
+      ? `[CRITICAL DIRECTIVE]: TOTAL ERADICATION OF CHINESE CHARACTERS.
+You are a top-tier financial translator translating a "Shadow Dossier" into English.
+RULES:
+1. [SYNTAX LOCK]: Preserve exactly all [[Word::Insight]] footnotes. DO NOT add spaces around brackets or colons.
+2. [TOTAL ERADICATION]: TRANSLATE EVERY SINGLE CHINESE CHARACTER INTO ENGLISH. The anchor "Word" MUST be translated into English too! For example, \`[[堕落::贪腐代价...]]\` MUST become \`[[Degradation::Cost of corruption...]]\`. 
+3. WARNING: If I find a SINGLE Chinese character (e.g., 提示牌, 植入, 推行) in your output, the system will crash. Destroy all Chinese characters!
+4. Output ONLY Markdown text. No JSON.`
+      : `【系统最高权限指令：极限语言纯洁性与符号锚定】
+你是一名顶级的金融翻译官。请将“暗影卷宗”翻译为 100% 纯正的中文。
+【死命令】：
+1. 绝对保留 [[ ]] 和 :: 的无空格连接格式！例如：将 \`[[Optimization::Layoffs]]\` 翻译为 \`[[优化::裁员]]\`。
+2. 彻底翻译所有内容为中文。绝对禁止在译文中出现任何一个英文字母（企业官方简称除外）！
+3. 绝对禁止在译文中用括号保留英文原词。
+4. 严禁输出 JSON，只输出 Markdown 纯文本。`;
+
+    const messages: TerminalMessage[] = [
+      { role: 'system', content: String(systemPromptText) },
+      { role: 'user', content: String(content) }
+    ];
+
+    const streamResponse = await createDeepSeekStream(messages);
+    return new Response(streamResponse.body, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
 
@@ -1724,22 +1926,22 @@ export async function POST(req: Request) {
       messages: [
         { 
           role: "system", 
-          content: `你是一个冷酷、极度敏锐的华尔街做空机构分析师。你的任务是撕开新闻稿的伪装，直击资本底牌。
-          请将输入的商业通稿解码为中英双语的 JSON。
-          
-          输出结构严格如下：
-          {
-            "facts": { "cn": ["提取最核心的骨干事实", "..."], "en": ["Hard facts only", "..."] },
-            "fluff": { 
-              "cn": ["“原文中具体的一句话或核心词汇(至少4个字)”：这背后的真正动机是...(必须深度剖析！至少提取 6-8 条致命隐患！)"], 
-              "en": ["\"Exact quote from text\": The hidden motive is... (EXTRACT 6-8 ITEMS, PURE ENGLISH)"] 
-            },
-            "verdict": { "cn": "用一句极度犀利的断言，总结这起事件的致命本质。", "en": "A ruthless, single-sentence verdict. (PURE ENGLISH ONLY)" }
-          }`
+          content: `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
+你是一个让华尔街战栗的顶级做空分析师。
+请将输入的商业通稿解码为中英双语的 JSON，【绝对禁止中英夹杂】：
+{
+  "facts": { "cn": ["纯中文事实，绝不夹杂英文"], "en": ["PURE ENGLISH facts ONLY"] },
+  "fluff": { 
+    "cn": ["“原文具体诱导词”：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨必须是纯正中文！严禁在句中夹杂英文或用括号保留原词！50-100字，15-20条)"], 
+    "en": ["\"Translated Quote\": [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! NO CHINESE CHARACTERS! 50-100 words, 15-20 items)"] 
+  },
+  "verdict": { "cn": "一句纯中文的犀利判决。", "en": "A ruthless, single-sentence pure English verdict." }
+}`
         },
         { role: "user", content: rawContent }
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      temperature: 0.6
     });
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
@@ -1755,6 +1957,7 @@ export async function POST(req: Request) {
       .eq('id', id);
 
     if (dbError) throw dbError;
+
     return NextResponse.json({ success: true, message: `Signal ${id} Washed` });
 
   } catch (error: any) {
@@ -1828,6 +2031,7 @@ import { ArrowLeft, Loader2, AlertCircle, Trash2, Zap, ShieldAlert, Globe } from
 import RawNarrative from '@/components/features/decode/RawNarrative';
 import DossierReader from '@/components/features/decode/DossierReader';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
+import ChatTerminal from '@/components/features/terminal/ChatTerminal'; // 🚀 寻回终端组件
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { useDossierStream } from '@/hooks/useDossierStream';
@@ -1842,50 +2046,43 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
-  const { dossierContent, setDossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
+  const { dossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang); 
 
-  useEffect(() => {
-    const fetchSignal = async () => {
-      try {
-        const res = await fetch(`/api/decode?id=${id}`);
-        if (!res.ok) { setSignal(null); return; }
+  useEffect(() => { 
+     const fetchSignal = async () => { 
+       try { 
+         const res = await fetch(`/api/decode?id=${id}`); 
+         if (!res.ok) { setSignal(null); return; } 
+ 
+         const json = await res.json(); 
+         if (json.success) { 
+           // 🚀 核心修复：只保留全局信号下发，彻底斩断失效的 setDossierContent 调用 
+           setSignal(json.data); 
+         } else { 
+           setSignal(null); 
+         } 
+       } catch (e) { 
+         // 🚨 架构师防线：在控制台暴露真实的 JS 崩溃日志，拒绝黑盒 
+         if (process.env.NODE_ENV === 'development') { 
+            console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e); 
+         } 
+         setSignal(null); 
+       } finally { 
+         setLoading(false); 
+       } 
+     }; 
+     fetchSignal(); 
+   }, [id, lang]);
 
-        const json = await res.json();
-        if (json.success) {
-          setSignal(json.data);
-          if (json.data.dossier_content) setDossierContent(json.data.dossier_content);
-        } else {
-          setSignal(null);
-        }
-      } catch (e) {
-        setSignal(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSignal();
-  }, [id, setDossierContent]);
-
-  // 🚀 核心修复：全天候双语并发雷达 (Dual-Radar Scanning)
   useEffect(() => {
     if (signal) {
-      // 1. 同时提取中文和英文的阵列
-      const cnFluffs = Array.isArray(signal.fluff_words) 
-        ? signal.fluff_words 
-        : (signal.fluff_words as any)?.['cn'] || [];
-        
-      const enFluffs = Array.isArray(signal.fluff_words) 
-        ? signal.fluff_words 
-        : (signal.fluff_words as any)?.['en'] || [];
-      
-      // 2. 锁定当前界面需要展示的目标语种
+      const cnFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as any)?.['cn'] || [];
+      const enFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as any)?.['en'] || [];
       const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
-        
       buildDictionary(cnFluffs, enFluffs, targetFluffs, signal.raw_content || '');
     }
   }, [signal, lang]);
 
-  // 接收三个数组：中文扫描阵列、英文扫描阵列、目标展示文案阵列
   const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => {
     const dict: Record<string, string> = {};
     const maxLen = Math.max(cnFluffs.length, enFluffs.length);
@@ -1893,18 +2090,15 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     for (let i = 0; i < maxLen; i++) {
       const cnSentence = cnFluffs[i] || "";
       const enSentence = enFluffs[i] || "";
-      // 优先使用目标语种气泡，缺失则降级
       const hoverText = targetFluffs[i] || cnSentence || enSentence;
       let found = false;
 
-      // 🚨 策略 1：双语雷达并发扫描（寻找被引号包裹的原文原话）
       const searchQuotes = (sentence: string) => {
         let localFound = false;
         const quoteRegex = /['"‘“【\[](.*?)['"’”】\]]/g;
         let match;
         while ((match = quoteRegex.exec(sentence)) !== null) {
           const keyword = match[1].trim();
-          // 放宽长度限制到 3，适应英文单词，并在原文中验证存活
           if (keyword.length >= 3 && rawText.includes(keyword)) {
             dict[keyword] = hoverText;
             localFound = true;
@@ -1913,13 +2107,10 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
         return localFound;
       };
 
-      // 优先让中文雷达扫，没扫到再让英文雷达扫
       if (searchQuotes(cnSentence)) found = true;
       if (!found && searchQuotes(enSentence)) found = true;
 
-      // 🚨 策略 2：暴力降级匹配 (当 AI 彻底忘记使用引号时)
       if (!found) {
-        // A. 中文降级雷达
         const cnMarkers = ["暗示", "掩盖", "意味着", "说明", "意图", "试图", "包装", "宣称", "掩饰"];
         for (const marker of cnMarkers) {
           if (cnSentence.includes(marker)) {
@@ -1933,7 +2124,6 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
           }
         }
 
-        // B. 英文降级雷达（专门拦截英文报道）
         if (!found) {
           const enMarkers = ["implies", "covers up", "means", "indicates", "intends to", "tries to", "packages", "claims", "hides", "masks", "distracts"];
           for (const marker of enMarkers) {
@@ -1943,7 +2133,6 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
               const prefix = enSentence.substring(0, splitIdx).trim();
               const words = prefix.split(/\s+/);
               if (words.length > 0) {
-                // 提取 marker 前面的最后 3 个单词尝试撞库原文
                 const potentialEnWord = words.slice(-3).join(" ").replace(/[^\w\s-]/g, '');
                 if (potentialEnWord.length >= 4 && rawText.includes(potentialEnWord)) {
                   dict[potentialEnWord] = hoverText;
@@ -1978,6 +2167,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
 
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
+  const currentHardFacts = Array.isArray(signal.hard_facts) ? signal.hard_facts : ((signal.hard_facts as any)?.[lang] || []);
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
@@ -1986,13 +2176,11 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
         <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-8">
           <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all"><ArrowLeft size={16} /><span className="text-xs font-mono uppercase tracking-widest">Index</span></button>
           <div className="flex items-center gap-4">
-            
             <div className="flex items-center gap-2 bg-black border border-zinc-800 rounded-sm p-1">
               <Globe className="text-zinc-600 w-4 h-4 ml-2" />
               <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
               <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
             </div>
-
             <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"><Trash2 size={16} className="text-red-900 group-hover:text-red-500" /></button>
           </div>
         </header>
@@ -2009,7 +2197,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
                 <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
                 <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3>
                 <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed">
-                  {lang === 'cn' ? "深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。" : "Deep intelligence engine ready. Initialize streaming protocol to generate a McKinsey-grade Shadow Dossier."}
+                   {lang === 'cn' ? "深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。" : "Deep intelligence engine ready. Initialize streaming protocol to generate a McKinsey-grade Shadow Dossier."}
                 </p>
                 <button onClick={startDossierStream} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
                   <Zap size={18} className="group-hover:animate-pulse" /><span className="relative z-10">{lang === 'cn' ? '激活暗影卷宗 (Generate Dossier)' : 'GENERATE DOSSIER'}</span>
@@ -2019,6 +2207,11 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
               <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} />
             )}
           </div>
+        </div>
+
+        {/* 🚀 寻回的深度审讯终端工作区 */}
+        <div className="mt-12 border-t border-zinc-900 pt-12">
+          <ChatTerminal signalId={id} hardFacts={currentHardFacts} />
         </div>
 
       </div>
@@ -2685,17 +2878,120 @@ export const i18n = {
 File: .\src\hooks\useDossierStream.ts
 ============================================================
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SignalRecord } from '@/types/database';
 
 export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en') {
-  const [dossierContent, setDossierContent] = useState<string>('');
+  // 🚀 双轨闭包缓存，绝不污染全局状态
+  const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
 
+  // 初始化：提取双语卷宗并注入本地缓存
+  useEffect(() => {
+    if (signal?.dossier_content) {
+      if (typeof signal.dossier_content === 'string') {
+        setCache(prev => ({ ...prev, cn: signal.dossier_content as string }));
+      } else {
+        setCache({
+          cn: signal.dossier_content.cn || '',
+          en: signal.dossier_content.en || ''
+        });
+      }
+    }
+  }, [signal?.dossier_content]);
+
+  // 🚀 核心防线：流式懒翻译与静默回写守护进程
+  useEffect(() => {
+    const triggerTranslation = async () => {
+      if (!signal?.id || isStreamingDossier || isTranslating) return;
+
+      const currentText = cache[lang];
+      const sourceLang = lang === 'cn' ? 'en' : 'cn';
+      const sourceText = cache[sourceLang];
+
+      if (!currentText && sourceText) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🟡 [模块_异步] -> 目标: 探测到 [${lang}] 缓存击穿，启动流式懒翻译补全协议`);
+        }
+        setIsTranslating(true);
+        try {
+          const res = await fetch('/api/v1/translate', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+            },
+            body: JSON.stringify({ content: sourceText, targetLang: lang })
+          });
+          
+          if (!res.ok || !res.body) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `网关物理阻断: HTTP ${res.status}`);
+          }
+
+          // 🔪 流式接收：在内存中静默拼装字节流，不直接触发 UI 频发重绘
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let done = false;
+          let buffer = '';
+          let fullTranslatedText = '';
+
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+                  try {
+                    const data = JSON.parse(trimmedLine.slice(6));
+                    const delta = data.choices[0]?.delta?.content || '';
+                    if (delta) {
+                      fullTranslatedText += delta;
+                    }
+                  } catch (e) { /* 忽略流碎片 */ }
+                }
+              }
+            }
+          }
+
+          // 1. 流式接收完毕，瞬间更新前端闭包缓存，消除骨架屏
+          const updatedCache = { ...cache, [lang]: fullTranslatedText };
+          setCache(updatedCache);
+            
+          // 2. 异步发射脱壳请求，调用 Node.js 环境回写至 Supabase 进行双规持久化
+          fetch('/api/v1/dossier/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+            },
+            body: JSON.stringify({ id: signal.id, dossier_content: updatedCache })
+          }).catch(e => {
+             if (process.env.NODE_ENV === 'development') console.log('🔴 [同步失败] ->', e);
+          });
+          
+        } catch (err: unknown) {
+           if (process.env.NODE_ENV === 'development') console.log('🔴 [翻译崩塌] ->', err);
+        } finally {
+          setIsTranslating(false);
+        }
+      }
+    };
+
+    triggerTranslation();
+  }, [lang, cache, signal?.id, isTranslating, isStreamingDossier]);
+
+  // 初次生成流式引擎
   const startDossierStream = async () => {
     if (!signal?.raw_content || isStreamingDossier) return;
     setIsStreamingDossier(true);
-    setDossierContent('');
+    setCache(prev => ({ ...prev, [lang]: '' }));
 
     if (process.env.NODE_ENV === 'development') {
       console.log(`🟢 [模块_发起] -> 动作/参数: 激活暗影卷宗流式生成 (Lang: ${lang})`);
@@ -2708,10 +3004,13 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
           'Content-Type': 'application/json',
           'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
         },
-        body: JSON.stringify({ rawContent: signal.raw_content, lang }) // 🚀 核心修复：携带语种标识
+        body: JSON.stringify({ rawContent: signal.raw_content, lang }) 
       });
 
-      if (!res.ok || !res.body) throw new Error('流式通道建立失败');
+      if (!res.ok || !res.body) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `网关物理阻断: HTTP ${res.status}`);
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
@@ -2733,27 +3032,35 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
                 if (delta) {
-                  setDossierContent((prev) => prev + delta);
+                  setCache((prev) => ({ ...prev, [lang]: prev[lang] + delta }));
                 }
               } catch (e) { /* 忽略流碎片 */ }
             }
           }
         }
       }
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔵 [模块_成功] -> 产物: 暗影卷宗生成完毕');
-      }
-    } catch (err: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', err.message || err);
-      }
-      alert("流式通道被截断，请检查网络。");
+      
+      // 流式生成结束后，立刻执行第一次双规持久化
+      setCache(finalCache => {
+        fetch('/api/v1/dossier/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+            },
+            body: JSON.stringify({ id: signal.id, dossier_content: finalCache })
+        }).catch(() => {});
+        return finalCache;
+      });
+
+    } catch (err: unknown) {
+       if (process.env.NODE_ENV === 'development') console.log('🔴 [流式中断] ->', err);
     } finally {
       setIsStreamingDossier(false);
     }
   };
 
-  return { dossierContent, setDossierContent, isStreamingDossier, startDossierStream };
+  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, startDossierStream };
 }
 
 ============================================================
@@ -2998,8 +3305,10 @@ export async function createDeepSeekStream(messages: TerminalMessage[]): Promise
     body: JSON.stringify({
       model: 'deepseek-chat',
       messages: messages,
-      stream: true, // 开启流式输出核心开关
-      temperature: 0.3, // 终端问答需要多一点推演能力，但必须维持冷峻基调
+      stream: true, 
+      temperature: 0.3, 
+      // 🚀 核心扩容：强行拉满单次输出 Token 上限，防止宏大叙事被腰斩
+      max_tokens: 8192 
     }),
   });
 
@@ -3124,9 +3433,8 @@ export async function analyzeTextWithDeepSeek(content: string): Promise<DecodeRe
 ============================================================
 File: .\src\types\database.ts
 ============================================================
-
 // 核心说明书：
-// 数据库实体契约。已彻底消除 fluff_words 和 hard_facts 中的 any 毒瘤。
+// 数据库实体契约。已彻底消除 fluff_words、hard_facts 以及 metadata 中的 any 毒瘤。
 // 引入 BilingualData 确保双语数据的严密性，同时保留旧版 string[] 的类型兼容性防断层。
 
 export interface BilingualData {
@@ -3134,41 +3442,46 @@ export interface BilingualData {
   en: string[];
 }
 
+// 🚀 新增：暗影卷宗专属的双语长文契约
+export interface BilingualDossier {
+  cn: string;
+  en: string;
+}
+
 export interface SignalRecord {
   id: string;
   created_at: string;
   raw_content: string;
   verdict: string;
-  hard_facts: BilingualData | string[]; // 兼容旧数组和新版双语对象
-  fluff_words: BilingualData | string[]; // 兼容旧数组和新版双语对象
+  hard_facts: BilingualData | string[]; 
+  fluff_words: BilingualData | string[]; 
   view_count: number;
-  // 🚀 核心新增：暗影卷宗完整流式长文载体 (零破坏原则：允许为 undefined 以兼容旧数据)
-  dossier_content?: string;
+  // 🚀 核心升维：强制要求 JSONB 双语格式，并用 string 托底旧版数据
+  dossier_content?: BilingualDossier | string;
   metadata?: {
     bilingual?: {
       cn?: string;
       en?: string;
     };
     washed?: boolean;
-    [key: string]: any; // 允许未来扩展其他元数据
+    // 严禁 any 投毒，使用 unknown 确保 TS 纯洁性
+    [key: string]: unknown; 
   };
 }
-
 
 ============================================================
 File: .\src\types\index.ts
 ============================================================
-import { BilingualData } from './database';
+import { BilingualData, BilingualDossier } from './database';
 
 // 🚀 核心解码结果契约：全站唯一真理来源 (V5.6 双语适配版 + 暗影卷宗版)
 export interface DecodeResult {
-  // 适配新版 { cn: string[], en: string[] } 或旧版 string[]
   fluffWords: BilingualData | string[];
   hardFacts: BilingualData | string[];
-  // verdict 现在也可能包含 metadata 里的双语对象
-  verdict: any;
-  // 🚀 核心新增：暗影卷宗的长文承载字段
-  dossierContent?: string;
+  // 严禁 any 投毒
+  verdict: unknown;
+  // 🚀 核心对齐：上层业务对象同步升维双语卷宗
+  dossierContent?: BilingualDossier | string;
 }
 
 // 统一的 API 响应契约
@@ -3180,18 +3493,15 @@ export interface ApiResponse<T> {
 
 // --- 深度审讯终端 (Chat Terminal) 状态机契约 ---
 
-// 单条对话记忆上下文 (严格遵循大模型角色分离原则)
 export interface TerminalMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-// 流式请求载荷 (前端打向后端的弹药)
 export interface TerminalStreamPayload {
-  signalId: string; // 绑定的原始通稿 ID
-  messages: TerminalMessage[]; // 完整的上下文记忆链
+  signalId: string; 
+  messages: TerminalMessage[];
 }
-
 
 ============================================================
 File: .\src\utils\logger.ts
