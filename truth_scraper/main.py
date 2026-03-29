@@ -4,6 +4,9 @@ import time
 import os
 import re
 import json # 🟢 新增：用于解析流媒体碎片
+import warnings 
+from bs4 import XMLParsedAsHTMLWarning 
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from extractors import EXTRACTORS 
@@ -38,41 +41,56 @@ def save_seen_url(url):
     with open(HISTORY_FILE, "a") as f:
         f.write(url + "\n")
 
-def fetch_html(url):
-    session = requests.Session()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Connection": "keep-alive",
-    }
-    try:
-        adapter = HTTPAdapter(max_retries=3)
-        session.mount("https://", adapter)
-        resp = session.get(url, headers=headers, verify=False, timeout=15)
-        resp.raise_for_status()
-        return resp.text
-    except Exception as e:
-        print(f"🔴 [模块_崩溃] -> 原因: 猎犬请求 {url} 失败")
-        return None
+def fetch_html(url): 
+     session = requests.Session() 
+     # 🚨 注入深度浏览器伪装指纹，绕过 Yahoo/Reuters 的初级反爬墙 
+     headers = { 
+         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
+         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", 
+         "Accept-Language": "en-US,en;q=0.5", 
+         "Upgrade-Insecure-Requests": "1", 
+         "Connection": "keep-alive", 
+     } 
+     
+     try: 
+         adapter = HTTPAdapter(max_retries=3) 
+         session.mount("https://", adapter) 
+         resp = session.get(url, headers=headers, verify=False, timeout=20) 
+         resp.raise_for_status() 
+         return resp.text 
+     except requests.exceptions.HTTPError as e: 
+         print(f"🔴 [模块_崩溃] -> 原因: 遭遇媒体防爬墙阻击 (HTTP {e.response.status_code})") 
+         return None 
+     except Exception as e: 
+         # 撕裂黑盒，暴露真实的物理死因（如 Timeout, ProxyError） 
+         print(f"🔴 [模块_崩溃] -> 原因: 物理网络连接断裂 ({type(e).__name__}: {str(e)[:50]})" ) 
+         return None 
 
-def extract_article_links(html, base_url):
-    soup = BeautifulSoup(html, 'html.parser')
-    links = set()
-    
-    items = soup.find_all('item')
-    if items:
-        for item in items:
-            link_tag = item.find('link')
-            if link_tag and link_tag.text:
-                links.add(link_tag.text.strip())
-        return links
-
-    for a in soup.find_all('a', href=True):
-        href = a.get('href', '')
-        if '/news/' in href or '/m/' in href or '/articles/' in href:
-            full_url = href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/')
-            links.add(full_url)
-    return links
+def extract_article_links(html, base_url): 
+     """ 
+     核心业务说明： 
+     兼容 HTML <a> 标签与 XML(RSS) <item><link> 的双轨探测器。 
+     继续使用内置 html.parser，但已在上层静默了烦人的警告。 
+     """ 
+     soup = BeautifulSoup(html, 'html.parser') 
+     links = set() 
+     
+     # 策略 1：尝试提取标准 RSS 的 link (针对 WSJ / Bloomberg) 
+     items = soup.find_all('item') 
+     if items: 
+         for item in items: 
+             link_tag = item.find('link') 
+             if link_tag and link_tag.text: 
+                 links.add(link_tag.text.strip()) 
+         return links 
+ 
+     # 策略 2：降级为 HTML 链接提取 (针对 Yahoo) 
+     for a in soup.find_all('a', href=True): 
+         href = a.get('href', '') 
+         if '/news/' in href or '/m/' in href or '/articles/' in href: 
+             full_url = href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/') 
+             links.add(full_url) 
+     return links
 
 def is_high_value_intel(content):
     if not content:

@@ -3,6 +3,10 @@ import time
 import subprocess
 import os
 import requests
+from dotenv import load_dotenv
+
+# 🚨 核心注入：物理级读取项目根目录的 .env 文件
+load_dotenv()
 
 # 🚨 核心配置：载入 Supabase 环境变量，用于轮询指令旗帜
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -62,10 +66,13 @@ def main():
     print("==================================================")
 
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("🔴 [警告] 未检测到 Supabase 凭证，中控台手动触发功能将失效！")
+        print("🔴 [致命崩溃] 未检测到 Supabase 凭证！请检查根目录 .env 文件是否配置正确！")
 
-    # 保持原有的定时巡航节奏（目前为每 60 分钟，您可自行调节）
     schedule.every(60).minutes.do(run_hunter_killer)
+
+    # 🚨 架构师微操：在进入死循环前，强行先拉起一次猎犬！
+    print("🟢 [总控台] -> 初始点火：启动首次全网扫荡...")
+    run_hunter_killer()
 
     # 物理级死循环
     while True:
