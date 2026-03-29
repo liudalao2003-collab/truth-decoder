@@ -81,23 +81,60 @@ export async function POST() {
         return; 
       } 
 
-      // 🚨 物理铡刀 1：Jina AI 死线 (8s)
-      const jinaController = new AbortController();
-      const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000); 
-
-      const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
-        headers: { 'X-Return-Format': 'markdown' }, 
-        signal: jinaController.signal 
-      });
-      clearTimeout(jinaTimeoutId); 
-
-      let fullText = await articleRes.text(); 
-      fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 2500);
-
-      if (fullText.length < 200) { 
-        console.log(`⚠️ 提纯过短抛弃: ${title.substring(0, 30)}`);
-        return; 
-      } 
+       // 🚨 物理铡刀 1：Jina AI 死线 (8s) 
+       let fullText = ""; 
+       try { 
+         const jinaController = new AbortController(); 
+         const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000);  
+  
+         const articleRes = await fetch(` https://r.jina.ai/${link} `, {  
+           headers: { 'X-Return-Format': 'markdown' },  
+           signal: jinaController.signal  
+         }); 
+         clearTimeout(jinaTimeoutId);  
+         fullText = await articleRes.text();  
+       } catch (e) { 
+         console.log(`⚠️ Jina 主引擎通信中断`); 
+       } 
+  
+       fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' '); 
+  
+       // 🚀 架构师新增：双擎降落伞 (Fallback Engine) 
+       // 如果 Jina 返回空、过短，或者触发了常见的反爬报错，立即启用直连暴力解析 
+       if (fullText.length < 200 || fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack')) { 
+         console.log(`⚠️ Jina 主引擎遭拦截 (长度: ${fullText.length})，启动原生直连降落伞...`); 
+         try { 
+           const fallbackController = new AbortController(); 
+           const fallbackTimeout = setTimeout(() => fallbackController.abort(), 6000); 
+           const fallbackRes = await fetch(link, { 
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }, 
+              signal: fallbackController.signal 
+           }); 
+           clearTimeout(fallbackTimeout); 
+           const rawHtml = await fallbackRes.text(); 
+  
+           // 暴力正则：剔除 script, style，剥离 HTML 标签，强洗纯文本 
+           const cleanText = rawHtml 
+               .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ') 
+               .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ') 
+               .replace(/<[^>]+>/g, ' ') 
+               .replace(/\s+/g, ' ') 
+               .trim(); 
+  
+           fullText = cleanText; 
+         } catch (fallbackErr) { 
+           console.log(`❌ 备用引擎亦失效: ${fallbackErr}`); 
+           return; // 双擎全灭，抛弃该条线索 
+         } 
+       } 
+  
+       // 🚨 护盾 2：物理截断 (上限 2500)，降低算力消耗，提速出块 
+       fullText = fullText.substring(0, 2500); 
+  
+       if (fullText.length < 200) {  
+         console.log(`⚠️ 强洗后文本依然过短，物理抛弃: ${title.substring(0, 30)}`); 
+         return;  
+       }
 
       // 🚨 物理铡刀 2：DeepSeek 绝对死线 (25s) 强行拔网线
       const dsController = new AbortController();
