@@ -1,10 +1,12 @@
 "use client"; 
 import React, { useState } from 'react';
 import { FileText, Zap } from 'lucide-react'; 
+import { BilingualData } from '@/types/database'; // 🛡️ 引入强类型契约
 
 interface RawNarrativeProps { 
   rawContent: string; 
-  fluffWords: any; 
+  // 🚨 架构师修复：彻底铲除 any，使用确定的双语或数组类型
+  fluffWords: BilingualData | string[]; 
   lang?: 'cn' | 'en';
   dictionary?: Record<string, string>; 
 } 
@@ -16,22 +18,20 @@ export default function RawNarrative({ rawContent, fluffWords, lang = 'cn', dict
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
     setHoverInfo({ text, x: safeX, y: rect.top }); 
-  }; 
+  };
 
   const renderRawText = () => { 
     if (!rawContent) return null;
     
     // 1. 过滤空键，并按长度降序排列，防止“包含关系的短词”错误截断长词
-    const keys = Object.keys(dictionary).filter(k => k.trim() !== '').sort((a, b) => b.length - a.length); 
-
+    const keys = Object.keys(dictionary).filter(k => k.trim() !== '').sort((a, b) => b.length - a.length);
     if (keys.length === 0) return <span className="opacity-80">{rawContent}</span>;
 
     let parts: (string | React.ReactNode)[] = [rawContent];
-    const usedKeys = new Set<string>(); // 🚨 核心防线：全局去重账本
 
     keys.forEach((key, keyIndex) => {
       const newParts: (string | React.ReactNode)[] = [];
-      let keyUsedInThisRun = false; // 确保该词在整个循环中只被高亮一次
+      let keyUsedInThisRun = false; 
 
       parts.forEach(part => {
         if (typeof part === 'string' && !keyUsedInThisRun) {
@@ -59,7 +59,6 @@ export default function RawNarrative({ rawContent, fluffWords, lang = 'cn', dict
       });
       parts = newParts;
     });
-
     return parts.map((p, i) => (typeof p === 'string' ? <span key={i} className="opacity-80">{p}</span> : p));
   };
 
@@ -79,7 +78,6 @@ export default function RawNarrative({ rawContent, fluffWords, lang = 'cn', dict
            </div> 
         </div> 
         
-        {/* 🚨 补充 whitespace-pre-wrap 确保原文换行不会黏在一起 */}
         <div className="p-8 md:p-12 relative flex-1 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"> 
           <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]"></div> 
           <div className="relative z-20 font-serif text-base leading-[2] text-zinc-400 tracking-wide text-justify whitespace-pre-wrap"> 
@@ -105,5 +103,5 @@ export default function RawNarrative({ rawContent, fluffWords, lang = 'cn', dict
         </div> 
       )} 
     </> 
-  ); 
+  );
 }
