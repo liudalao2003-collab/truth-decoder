@@ -33,7 +33,6 @@ export async function POST() {
 
     const targetUrl = 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664';
     
-    // 🚨 物理铡刀 0：RSS 获取死线 (5s)
     const rssController = new AbortController();
     const rssTimeout = setTimeout(() => rssController.abort(), 5000);
     const rssRes = await fetch(targetUrl, {  
@@ -74,111 +73,109 @@ export async function POST() {
     const scrapePromises = items.map(async (item) => {
       const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
       const link = item[2].trim(); 
-        
-      const { data: existing } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `%${title.substring(0, 20)}%`).limit(1);
-      if (existing && existing.length > 0) { 
-        console.log(`⚠️ 重复情报跳过: ${title.substring(0, 30)}`);
-        return; 
-      } 
+      
+      // 🚨 架构师加固：给单兵线程套上独立监控黑匣子
+      try {
+        const { data: existing } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `%${title.substring(0, 20)}%`).limit(1);
+        if (existing && existing.length > 0) { 
+          console.log(`⚠️ 重复情报跳过: ${title.substring(0, 30)}`);
+          return; 
+        } 
 
-       // 🚨 物理铡刀 1：Jina AI 死线 (8s) 
-       let fullText = ""; 
-       try { 
-         const jinaController = new AbortController(); 
-         const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000);  
-  
-         const articleRes = await fetch(` https://r.jina.ai/${link} `, {  
-           headers: { 'X-Return-Format': 'markdown' },  
-           signal: jinaController.signal  
-         }); 
-         clearTimeout(jinaTimeoutId);  
-         fullText = await articleRes.text();  
-       } catch (e) { 
-         console.log(`⚠️ Jina 主引擎通信中断`); 
-       } 
-  
-       fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' '); 
-  
-       // 🚀 架构师新增：双擎降落伞 (Fallback Engine) 
-       // 如果 Jina 返回空、过短，或者触发了常见的反爬报错，立即启用直连暴力解析 
-       if (fullText.length < 200 || fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack')) { 
-         console.log(`⚠️ Jina 主引擎遭拦截 (长度: ${fullText.length})，启动原生直连降落伞...`); 
-         try { 
-           const fallbackController = new AbortController(); 
-           const fallbackTimeout = setTimeout(() => fallbackController.abort(), 6000); 
-           const fallbackRes = await fetch(link, { 
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }, 
-              signal: fallbackController.signal 
-           }); 
-           clearTimeout(fallbackTimeout); 
-           const rawHtml = await fallbackRes.text(); 
-  
-           // 暴力正则：剔除 script, style，剥离 HTML 标签，强洗纯文本 
-           const cleanText = rawHtml 
-               .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ') 
-               .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ') 
-               .replace(/<[^>]+>/g, ' ') 
-               .replace(/\s+/g, ' ') 
-               .trim(); 
-  
-           fullText = cleanText; 
-         } catch (fallbackErr) { 
-           console.log(`❌ 备用引擎亦失效: ${fallbackErr}`); 
-           return; // 双擎全灭，抛弃该条线索 
-         } 
-       } 
-  
-       // 🚨 护盾 2：物理截断 (上限 2500)，降低算力消耗，提速出块 
-       fullText = fullText.substring(0, 2500); 
-  
-       if (fullText.length < 200) {  
-         console.log(`⚠️ 强洗后文本依然过短，物理抛弃: ${title.substring(0, 30)}`); 
-         return;  
-       }
+        let fullText = "";
+        try {
+          const jinaController = new AbortController();
+          const jinaTimeoutId = setTimeout(() => jinaController.abort(), 8000); 
 
-      // 🚨 物理铡刀 2：DeepSeek 绝对死线 (25s) 强行拔网线
-      const dsController = new AbortController();
-      const dsTimeoutId = setTimeout(() => dsController.abort(), 25000);
+          const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
+            headers: { 'X-Return-Format': 'markdown' }, 
+            signal: jinaController.signal 
+          });
+          clearTimeout(jinaTimeoutId); 
+          fullText = await articleRes.text(); 
+        } catch (e) {
+          console.log(`⚠️ Jina 主引擎通信中断`);
+        }
 
-      const completion = await openai.chat.completions.create({ 
-        model: "deepseek-chat", 
-        messages: [ 
-          { role: "system", content: depthPrompt }, 
-          { role: "user", content: `标题：${title}\n内容：${fullText}` } 
-        ], 
-        response_format: { type: 'json_object' } 
-      }, {
-        signal: dsController.signal as any // 强行注入底层的 AbortSignal
-      }); 
-      clearTimeout(dsTimeoutId);
+        fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ');
 
-      const rawAiOutput = completion.choices[0].message.content || ''; 
-      let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const firstBrace = cleanedJsonString.indexOf('{'); 
-      const lastBrace = cleanedJsonString.lastIndexOf('}'); 
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
-          cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
-      } 
-        
-      const intel = JSON.parse(cleanedJsonString);
+        if (fullText.length < 200 || fullText.includes('SecurityCompromiseError') || fullText.includes('DDoS attack')) {
+          console.log(`⚠️ Jina 遭拦截，启动原生直连降落伞...`);
+          try {
+            const fallbackController = new AbortController();
+            const fallbackTimeout = setTimeout(() => fallbackController.abort(), 6000);
+            const fallbackRes = await fetch(link, {
+               headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' },
+               signal: fallbackController.signal
+            });
+            clearTimeout(fallbackTimeout);
+            const rawHtml = await fallbackRes.text();
 
-      const { error: dbError } = await supabaseAdmin.from('signals').insert([{ 
-        id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 
-        raw_content: `【标题】${title}\n\n【正文】\n${fullText}`, 
-        fluff_words: intel.fluff || { cn: [], en: [] },  
-        hard_facts: intel.facts || { cn: [], en: [] }, 
-        verdict: intel.verdict?.cn || (intel.verdict || "解析失败"), 
-        view_count: 0, 
-        metadata: { source_url: link, bilingual: intel.verdict || {} }  
-      }]);
+            fullText = rawHtml
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+          } catch (fallbackErr) {
+            console.log(`❌ 备用引擎失效`);
+            return; 
+          }
+        }
 
-      if (dbError) throw new Error(`DB写入拒接: ${dbError.message}`);
+        fullText = fullText.substring(0, 2500);
 
-      processedCount++; 
-      console.log(`✅ 成功落盘: ${title.substring(0, 30)}`);
+        if (fullText.length < 200) { 
+          console.log(`⚠️ 强洗后依然过短，物理抛弃: ${title.substring(0, 30)}`);
+          return; 
+        } 
+
+        const dsController = new AbortController();
+        const dsTimeoutId = setTimeout(() => dsController.abort(), 25000);
+
+        const completion = await openai.chat.completions.create({ 
+          model: "deepseek-chat", 
+          messages: [ 
+            { role: "system", content: depthPrompt }, 
+            { role: "user", content: `标题：${title}\n内容：${fullText}` } 
+          ], 
+          response_format: { type: 'json_object' } 
+        }, {
+          signal: dsController.signal as any 
+        }); 
+        clearTimeout(dsTimeoutId);
+
+        const rawAiOutput = completion.choices[0].message.content || ''; 
+        let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const firstBrace = cleanedJsonString.indexOf('{'); 
+        const lastBrace = cleanedJsonString.lastIndexOf('}'); 
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
+            cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+        } 
+          
+        const intel = JSON.parse(cleanedJsonString);
+
+        const { error: dbError } = await supabaseAdmin.from('signals').insert([{ 
+          id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 
+          raw_content: `【标题】${title}\n\n【正文】\n${fullText}`, 
+          fluff_words: intel.fluff || { cn: [], en: [] },  
+          hard_facts: intel.facts || { cn: [], en: [] }, 
+          verdict: intel.verdict?.cn || (intel.verdict || "解析失败"), 
+          view_count: 0, 
+          metadata: { source_url: link, bilingual: intel.verdict || {} }  
+        }]);
+
+        if (dbError) throw new Error(`DB写入拒接: ${dbError.message}`);
+
+        processedCount++; 
+        console.log(`✅ 成功落盘: ${title.substring(0, 30)}`);
+
+      } catch (innerError: any) {
+        // 🚀 核心修复：捕获被 25 秒铡刀切断抛出的 AbortError 或 JSON 解析失败
+        console.log(`🔴 [单兵线程阵亡] 标题: ${title.substring(0, 15)}... 死因: ${innerError.message || innerError.name}`);
+      }
     });
 
-    // 无论内部如何厮杀与超时被斩，主线程都会在此兜底，并正常向前端返回 200 OK
     await Promise.allSettled(scrapePromises);
 
     return NextResponse.json({ success: true, processedCount });
