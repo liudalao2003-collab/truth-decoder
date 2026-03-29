@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const authHeader = req.headers.get('Authorization');
     if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
-    const body = await req.json();
+    const body = await request.json();
     const { content, targetLang } = body as { content: string, targetLang: 'cn'|'en' };
 
     const systemPromptText = targetLang === 'en'
@@ -16,7 +16,10 @@ export async function POST(req: Request) {
 You are a top-tier financial translator translating a "Shadow Dossier" into English.
 RULES:
 1. [SYNTAX LOCK]: Preserve exactly all [[Word::Insight]] footnotes. DO NOT add spaces around brackets or colons.
-2. [TOTAL ERADICATION]: TRANSLATE EVERY SINGLE CHINESE CHARACTER INTO ENGLISH. The anchor "Word" MUST be translated into English too! For example, \`[[堕落::贪腐代价...]]\` MUST become \`[[Degradation::Cost of corruption...]]\`. 
+2. [TOTAL ERADICATION]: TRANSLATE EVERY SINGLE CHINESE CHARACTER INTO ENGLISH.
+   🚨 The anchor "Word" MUST be translated into English too! 
+   BAD CASE: \`[[裁员::[Surface] Cost cutting...]]\`
+   GOOD CASE: \`[[Layoffs::[Surface] Cost cutting...]]\`
 3. WARNING: If I find a SINGLE Chinese character (e.g., 提示牌, 植入, 推行) in your output, the system will crash. Destroy all Chinese characters!
 4. Output ONLY Markdown text. No JSON.`
       : `【系统最高权限指令：极限语言纯洁性与符号锚定】
