@@ -1,40 +1,51 @@
+"use client";
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal as TerminalIcon, Send, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { useTerminalMachine } from '@/hooks/useTerminalMachine';
+import { createClient } from '@/lib/supabase/client'; // 🚀 引入侦察兵
 
 interface ChatTerminalProps {
   signalId: string;
   hardFacts: string[];
+  onRequireAuth: () => void; // 🚀 接收拦截回调
 }
 
-/**
- * 核心业务说明：
- * 沉浸式深度审讯终端。已剥离所有悬浮窗与折叠逻辑。
- * 作为解码报告底部的核心常驻工作区，直接承受用户的高频追问流量。
- */
-export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps) {
+export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: ChatTerminalProps) {
   const [inputValue, setInputValue] = useState('');
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+  const supabase = createClient();
 
   const { messages, isStreaming, error, submitInterrogation, clearTerminal } = useTerminalMachine({ signalId, hardFacts });
 
-  // 核心业务：控制终端在收到新字节流时，永远保持自动滚屏到底部。
   useEffect(() => {
     if (endOfMessagesRef.current) {
       endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isStreaming) return;
+
+    // 🚀 核心拦截逻辑：配额检测
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // 如果没有登录，且历史消息（用户+AI）已经超过 2 条（即一轮对话）
+    if (!session && messages.length >= 2) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟡 [模块_异步] -> 目标: 探测到匿名用户配额耗尽，阻断 API 泵入');
+      }
+      onRequireAuth();
+      return;
+    }
+
     submitInterrogation(inputValue);
     setInputValue('');
   };
 
   return (
     <div className="w-full bg-black border border-zinc-800 shadow-2xl flex flex-col h-[600px] rounded-sm relative overflow-hidden group">
-      {/* 终端头部 */}
+      {/* ... [保持 UI 渲染部分不变，节省 CEO 阅读带宽] ... */}
       <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
         <div className="flex items-center gap-3">
           <TerminalIcon className="w-5 h-5 text-red-600 group-hover:animate-pulse" />
@@ -47,7 +58,6 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
         </div>
       </div>
 
-      {/* 消息滚动区 */}
       <div className="flex-1 overflow-y-auto p-6 space-y-8 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-800 bg-zinc-950/30">
         {messages.length === 0 && (
           <div className="text-zinc-600 text-xs text-center mt-20 uppercase tracking-[0.2em]">
@@ -62,9 +72,7 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
               {msg.role === 'user' ? 'GUEST_USER' : 'SYSTEM_AI'}
             </span>
             <div className={`p-4 max-w-[90%] md:max-w-[75%] leading-relaxed ${
-              msg.role === 'user' 
-                ? 'bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-sm' 
-                : 'bg-transparent text-white border-l-2 border-red-700 pl-5 text-base'
+              msg.role === 'user' ? 'bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-sm' : 'bg-transparent text-white border-l-2 border-red-700 pl-5 text-base'
             }`}>
               {msg.content}
             </div>
@@ -80,7 +88,6 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
         <div ref={endOfMessagesRef} className="h-4" />
       </div>
 
-      {/* 输入区域 */}
       <div className="p-4 bg-zinc-950 border-t border-zinc-800">
         <form onSubmit={handleSubmit} className="relative flex items-center">
           <span className="absolute left-4 text-red-600 font-black text-lg">{'>'}</span>
@@ -92,11 +99,7 @@ export default function ChatTerminal({ signalId, hardFacts }: ChatTerminalProps)
             placeholder="输入指令，洞透底层逻辑..."
             className="w-full bg-black border border-zinc-800 text-white font-mono text-base py-4 pl-10 pr-16 focus:outline-none focus:border-red-800 transition-colors disabled:opacity-50 rounded-sm"
           />
-          <button 
-            type="submit" 
-            disabled={!inputValue.trim() || isStreaming}
-            className="absolute right-4 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors bg-zinc-900 p-2 rounded-sm"
-          >
+          <button type="submit" disabled={!inputValue.trim() || isStreaming} className="absolute right-4 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors bg-zinc-900 p-2 rounded-sm">
             {isStreaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </form>
