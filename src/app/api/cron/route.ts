@@ -86,30 +86,34 @@ export async function GET(req: Request) {
 
         if (fullText.length < 200) continue;
 
-        // 🚀 核心升维：注入与 ingest 相同的极限要求
-        const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
-你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
-【绝对生存与格式法则】：
-1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
-2. 【物理级精准复刻】：fluff 数组中提取的诱导词，必须是原文中【连续且一字不差】的字符串！绝对禁止概括或改写！
-3. 【终极语言阉割】：'cn' 字段必须 100% 纯中文，严禁夹带任何英文字母，绝对禁止用括号标注英文原词！'en' 字段必须 100% 纯英文！
-4. 【致命结构】：fluff 数组内的解析必须是单行纯文本！严禁换行！每条必须严格包含三个维度的显式前缀：【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
-
-{
-  "verdict": { "cn": "一句极具张力的纯中文判决。", "en": "A ruthless, single-sentence pure English verdict." },
-  "facts": { "cn": ["纯中文事实，提炼变更。"], "en": ["PURE ENGLISH facts ONLY."] },
-  "fluff": {
-    "cn": ["“原文一字不差的原话”：【表层叙事】全中文...；【底层机制】全中文...；【收割代价】全中文...。(🚨绝对单行纯文本！15-20条)"],
-    "en": ["\"Exact substring\": [Surface Narrative] Pure English...; [Hidden Mechanism] Pure English...; [Harvesting Fallout] Pure English.... (🚨SINGLE LINE TEXT ONLY! 15-20 items)"]
-  }
-}`;
-
-        const completion = await openai.chat.completions.create({
-          model: "deepseek-chat",
-          messages: [{ role: "system", content: depthPrompt }, { role: "user", content: `标题：${title}\n内容：${fullText}` }],
-          response_format: { type: 'json_object' },
-          temperature: 0.3
-        });
+        // 🚀 架构师修复：确保定时任务抓取的情报也能激活前端红字气泡 
+ const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】 
+ 你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。 
+ 【绝对生存与格式法则】： 
+ 1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！ 
+ 2. 【JSON 绝对安全结构】：fluff 数组必须是纯字符串数组！提取的原话【必须】用中文直角引号「 」包裹！ 
+ 3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！ 
+ 4. 【核级语言净化】：'cn' 字段 100% 纯中文，'en' 字段解析部分 100% 纯英文。 
+ 5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！ 
+ 
+ { 
+   "verdict": { "cn": "...", "en": "..." }, 
+   "facts": { "cn": ["事实1"], "en": ["Fact1"] }, 
+   "fluff": { 
+     "cn": ["「原文原话」【表层叙事】...【底层机制】...【收割代价】..."], 
+     "en": ["「Exact Quote」[Surface]... [Hidden]... [Fallout]..."] 
+   } 
+ }`; 
+ 
+ const completion = await openai.chat.completions.create({ 
+   model: "deepseek-chat", 
+   messages: [ 
+     { role: "system", content: depthPrompt }, 
+     { role: "user", content: `标题：${title}\n内容：${fullText}` } 
+   ], 
+   response_format: { type: 'json_object' }, 
+   temperature: 0.3 
+ });
 
         const rawAiOutput = completion.choices[0].message.content || '';
         let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim();

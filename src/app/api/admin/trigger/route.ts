@@ -76,18 +76,35 @@
            continue; 
          } 
   
-         const depthPrompt = aiDepth === 'quick'  
-           ? "提取核心 facts 和一句 verdict，双语 JSON。" 
-           : "你是一个冷酷的华尔街分析师。请将以下洗净的新闻通稿深度解码为中英双语 JSON：{ \"facts\": {\"cn\":[\"骨干事实1\", \"事实2\"], \"en\":[]}, \"fluff\": {\"cn\":[\"隐秘动机或套话1\"], \"en\":[]}, \"verdict\": {\"cn\":\"一段辛辣的最终裁决\", \"en\":\"\"} }"; 
-  
-         const completion = await openai.chat.completions.create({ 
-           model: "deepseek-chat", 
-           messages: [ 
-             { role: "system", content: depthPrompt }, 
-             { role: "user", content: `标题：${title}\n内容：${fullText}` } 
-           ], 
-           response_format: { type: 'json_object' } 
-         }); 
+         // 🚀 架构师修复：同步 Ingest 接口的核级提示词，确保带引号的关键词产出 
+ const depthPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】 
+ 你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。 
+ 【绝对生存与格式法则】： 
+ 1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！ 
+ 2. 【JSON 绝对安全结构】：fluff 数组必须是纯字符串数组！提取的原话【必须】用中文直角引号「 」包裹！ 
+ 3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！ 
+ 4. 【核级语言净化】：'cn' 字段 100% 纯中文，'en' 字段解析部分 100% 纯英文。 
+ 5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！ 
+ 
+ { 
+   "verdict": { "cn": "...", "en": "..." }, 
+   "facts": { "cn": ["事实1"], "en": ["Fact1"] }, 
+   "fluff": { 
+     "cn": ["「原文原话」【表层叙事】...【底层机制】...【收割代价】..."], 
+     "en": ["「Exact Quote」[Surface]... [Hidden]... [Fallout]..."] 
+   } 
+ }`; 
+ 
+ // 🚨 架构师微操：调用我们之前改进的 createDeepSeekStream 并开启 isJson=true 
+ const completion = await openai.chat.completions.create({ 
+   model: "deepseek-chat", 
+   messages: [ 
+     { role: "system", content: depthPrompt }, 
+     { role: "user", content: `标题：${title}
+内容：${fullText}` } 
+   ], 
+   response_format: { type: 'json_object' } // 强制 JSON 模式 
+ }); 
   
          const rawAiOutput = completion.choices[0].message.content || ''; 
          let cleanedJsonString = rawAiOutput.replace(/```json/gi, '').replace(/```/g, '').trim(); 
