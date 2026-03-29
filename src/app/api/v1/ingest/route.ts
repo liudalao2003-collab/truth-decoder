@@ -43,7 +43,9 @@ export async function POST(req: Request) {
       { role: 'user', content: rawContent }
     ];
 
-    const streamResponse = await createDeepSeekStream(messages);
+    // 🚨 架构师微操：强制开启 isJson = true，建立物理级语法护盾
+    const streamResponse = await createDeepSeekStream(messages, true);
+    
     return new Response(streamResponse.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' }
     });
