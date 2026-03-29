@@ -131,7 +131,8 @@ export async function POST() {
         } 
 
         const dsController = new AbortController();
-        const dsTimeoutId = setTimeout(() => dsController.abort(), 25000);
+       // 🚀 架构师微调：在并发安全区内，将大模型思考死线放宽至 40 秒，大幅降低误杀率
+const dsTimeoutId = setTimeout(() => dsController.abort(), 40000);
 
         const completion = await openai.chat.completions.create({ 
           model: "deepseek-chat", 
