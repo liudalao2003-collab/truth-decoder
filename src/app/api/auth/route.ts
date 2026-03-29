@@ -1,34 +1,48 @@
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { logger } from '@/utils/logger';
+import { createClient } from '@/lib/supabase/server';
 
+/**
+ * 核心业务说明：
+ * C端与 B端通用的身份签发网关。
+ * 接收前端的账号密码，调用 Supabase Auth 签发 JWT。
+ * 依赖 `@supabase/ssr` 底层机制，成功登录后会自动将 Session 注入浏览器的 Cookie 中。
+ */
 export async function POST(req: Request) {
   try {
-    const { passcode } = await req.json();
-    const serverPass = process.env.ADMIN_PASSCODE;
+    const { email, password } = await req.json();
 
-    // 🚨 架构师修复：使用统一 logger 并包裹环境检查，防止 Vercel 日志泄露密码
     if (process.env.NODE_ENV === 'development') {
-      console.log("-----------------------------------------");
-      console.log("🔐 [DEBUG] 正在核对指挥官权限...");
-      // 对敏感字符执行脱敏处理，即使在开发环境也保持警惕
-      const maskedPass = passcode ? `${passcode.substring(0, 2)}****` : "EMPTY";
-      console.log("📡 [收到请求] 用户输入:", `[${maskedPass}]`);
+      const maskedEmail = email ? `${email.substring(0, 3)}***` : "EMPTY";
+      console.log('🟢 [模块_发起] -> 动作/参数:', `请求核心数据库核验身份: [${maskedEmail}]`);
     }
-    
-    if (passcode === serverPass && serverPass !== undefined) {
-      logger.success("指挥官身份验证通过，准予进入中控台");
-      (await cookies()).set('truth_admin_token', 'ACCESS_GRANTED_2026', { 
-        maxAge: 60 * 60 * 24 * 7, 
-        httpOnly: true,
-        path: '/'
-      });
-      return NextResponse.json({ success: true });
+
+    // 唤醒服务端重装步兵客户端
+    const supabase = await createClient();
+
+    // 向 Supabase 核心发起验证请求
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data.user) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因:', error?.message || '凭证无效或被拒绝访问');
+      }
+      return NextResponse.json({ success: false, error: 'Unauthorized Access' }, { status: 401 });
     }
-    
-    logger.crash("身份验证失败：凭证不匹配");
-    return NextResponse.json({ success: false }, { status: 401 });
-  } catch (e) {
-    return NextResponse.json({ success: false }, { status: 400 });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔵 [模块_成功] -> 产物:', `指挥官身份验证通过, 分配独立 Session, UserID: ${data.user.id}`);
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : '身份验证服务遭遇未知物理崩塌';
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
+    }
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
