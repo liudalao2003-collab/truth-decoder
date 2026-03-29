@@ -45,7 +45,6 @@ export async function POST() {
 
     let processedCount = 0;
 
-    // 🚀 架构师重构：统一定义核级 Prompt，防止幻觉
     const depthPrompt = aiDepth === 'quick'  
       ? "提取核心 facts 和一句 verdict，双语 JSON。" 
       : `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
@@ -66,21 +65,19 @@ export async function POST() {
   }
 }`;
 
-    // 🚀 架构师重构：将串行阻塞改为并发集群轰炸 (Promise.allSettled)
     const scrapePromises = items.map(async (item) => {
       const title = item[1].replace(/<!\[CDATA\[|\]\]>/g, '');
       const link = item[2].trim(); 
         
-      // 🚨 护盾 1：查重拦截
       const { data: existing } = await supabaseAdmin.from('signals').select('id').ilike('raw_content', `%${title.substring(0, 20)}%`).limit(1);
       if (existing && existing.length > 0) { 
-        console.log(`⚠️ 发现重复情报，跳过: ${title.substring(0, 30)}`);
+        console.log(`⚠️ 重复情报跳过: ${title.substring(0, 30)}`);
         return; 
       } 
 
+      // 🚨 护盾 1：Jina AI 强行熔断 (压缩至 10 秒)
       const controller = new AbortController();
-      // 缩短 Jina 请求超时时间，防止单点拖死全局
-      const timeoutId = setTimeout(() => controller.abort(), 15000); 
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
 
       const articleRes = await fetch(`https://r.jina.ai/${link}`, { 
         headers: { 'X-Return-Format': 'markdown' }, 
@@ -89,13 +86,15 @@ export async function POST() {
       clearTimeout(timeoutId); 
 
       let fullText = await articleRes.text(); 
-      fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 3500);
+      // 🚨 护盾 2：物理截断 (3500 -> 2500)，降低算力消耗，提速出块
+      fullText = fullText.replace(/\[.*?\]\(.*?\)/g, '').replace(/!\[.*?\]/g, '').replace(/#+/g, '').replace(/\s+/g, ' ').substring(0, 2500);
 
       if (fullText.length < 200) { 
-        console.log(`⚠️ 提纯后文本过短，抛弃: ${title.substring(0, 30)}`);
+        console.log(`⚠️ 提纯过短抛弃: ${title.substring(0, 30)}`);
         return; 
       } 
 
+      // 🚨 护盾 3：向 DeepSeek 注入 35 秒绝对死线
       const completion = await openai.chat.completions.create({ 
         model: "deepseek-chat", 
         messages: [ 
@@ -103,6 +102,8 @@ export async function POST() {
           { role: "user", content: `标题：${title}\n内容：${fullText}` } 
         ], 
         response_format: { type: 'json_object' } 
+      }, {
+        timeout: 35000 // OpenAI SDK 原生级超时拦截
       }); 
 
       const rawAiOutput = completion.choices[0].message.content || ''; 
@@ -115,7 +116,6 @@ export async function POST() {
         
       const intel = JSON.parse(cleanedJsonString);
 
-      // 🚨 护盾 2：落盘并发
       const { error: dbError } = await supabaseAdmin.from('signals').insert([{ 
         id: `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`, 
         raw_content: `【标题】${title}\n\n【正文】\n${fullText}`, 
@@ -126,13 +126,12 @@ export async function POST() {
         metadata: { source_url: link, bilingual: intel.verdict || {} }  
       }]);
 
-      if (dbError) throw new Error(`数据库写入被拒: ${dbError.message}`);
+      if (dbError) throw new Error(`DB写入拒接: ${dbError.message}`);
 
       processedCount++; 
       console.log(`✅ 成功落盘: ${title.substring(0, 30)}`);
     });
 
-    // 坐和放宽，等待所有并发线程执行完毕（即使某个失败，也不会引发主线程 500）
     await Promise.allSettled(scrapePromises);
 
     return NextResponse.json({ success: true, processedCount });
