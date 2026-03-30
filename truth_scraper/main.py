@@ -3,7 +3,7 @@ import urllib3
 import time
 import os
 import re
-import json # 🟢 新增：用于解析流媒体碎片
+import json
 import warnings 
 from bs4 import XMLParsedAsHTMLWarning 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
@@ -16,13 +16,16 @@ load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 🚀 全局雷达配置 ---
-# 🚨 架构师加固：支持通过 .env 配置生产环境的 Vercel 域名
 BASE_URL = os.getenv("NEXT_PUBLIC_BASE_URL", "http://localhost:3000").rstrip('/')
 API_INGEST = f"{BASE_URL}/api/v1/ingest"
 API_SAVE = f"{BASE_URL}/api/v1/ingest/save"
 
-INGEST_TOKEN = os.getenv("INGEST_TOKEN", "[CENSORED_BY_ARCHITECT]")
+INGEST_TOKEN = os.getenv("INGEST_TOKEN", "REPLACE_ME")
 HISTORY_FILE = "seen_urls.txt"
+
+# 🚨 新增：读取云端数据库配置
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 TARGET_FEEDS = [
     "https://finance.yahoo.com/news/",
@@ -41,9 +44,25 @@ def save_seen_url(url):
     with open(HISTORY_FILE, "a") as f:
         f.write(url + "\n")
 
+def get_scrape_intensity():
+    """🚀 核心修复：从云端神经中枢实时读取控制面板设置的抓取强度限制"""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return 50 # 默认兜底
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/system_configs?id=eq.scrape_intensity&select=value"
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200 and resp.json():
+            return int(resp.json()[0].get("value", {}).get("limit", 50))
+    except Exception as e:
+        print(f"🟡 [控制面板离线] 无法读取强度设置，使用默认值 50")
+    return 50
+
 def fetch_html(url): 
      session = requests.Session() 
-     # 🚨 注入深度浏览器伪装指纹，绕过 Yahoo/Reuters 的初级反爬墙 
      headers = { 
          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", 
          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", 
@@ -62,20 +81,13 @@ def fetch_html(url):
          print(f"🔴 [模块_崩溃] -> 原因: 遭遇媒体防爬墙阻击 (HTTP {e.response.status_code})") 
          return None 
      except Exception as e: 
-         # 撕裂黑盒，暴露真实的物理死因（如 Timeout, ProxyError） 
          print(f"🔴 [模块_崩溃] -> 原因: 物理网络连接断裂 ({type(e).__name__}: {str(e)[:50]})" ) 
          return None 
 
 def extract_article_links(html, base_url): 
-     """ 
-     核心业务说明： 
-     兼容 HTML <a> 标签与 XML(RSS) <item><link> 的双轨探测器。 
-     继续使用内置 html.parser，但已在上层静默了烦人的警告。 
-     """ 
      soup = BeautifulSoup(html, 'html.parser') 
      links = set() 
      
-     # 策略 1：尝试提取标准 RSS 的 link (针对 WSJ / Bloomberg) 
      items = soup.find_all('item') 
      if items: 
          for item in items: 
@@ -84,7 +96,6 @@ def extract_article_links(html, base_url):
                  links.add(link_tag.text.strip()) 
          return links 
  
-     # 策略 2：降级为 HTML 链接提取 (针对 Yahoo) 
      for a in soup.find_all('a', href=True): 
          href = a.get('href', '') 
          if '/news/' in href or '/m/' in href or '/articles/' in href: 
@@ -140,8 +151,8 @@ def route_and_extract(url, html):
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - CORE ENGINE V5.9 SYNC       ")
-    print("      [+] 启用流式 JSON 缝合与闪电入库网关...     ")
+    print("      TRUTH DECODER - CORE ENGINE V6.0 (THROTTLED)")
+    print("      [+] 启用流式 JSON 缝合与云端限流管控...     ")
     print("==================================================")
     
     seen_urls = load_seen_urls()
@@ -157,7 +168,18 @@ def main():
         time.sleep(1)
 
     fresh_targets = [url for url in all_targets if url not in seen_urls]
-    print(f"\n🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索\n")
+    
+    # ==========================================
+    # 🚀 核心修复区：向云端控制台请示“抓取强度”
+    # ==========================================
+    intensity_limit = get_scrape_intensity()
+    print(f"\n📡 [云端控制台] -> 当前下达的全局抓取限制为: {intensity_limit} 条/次")
+
+    if len(fresh_targets) > intensity_limit:
+        print(f"🟡 [限流阀激活] -> 发现 {len(fresh_targets)} 条新线索，强行截断至 {intensity_limit} 条！\n")
+        fresh_targets = fresh_targets[:intensity_limit]
+    else:
+        print(f"\n🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索\n")
 
     success_count = 0
     for url in fresh_targets:
@@ -178,16 +200,13 @@ def main():
             save_seen_url(url)
             continue
 
-        # ==========================================
-        # 🚀 核心修复区：流式接收 -> 缝合 -> 闪电入库
-        # ==========================================
         try:
             print("   🟢 [模块_发起] -> 动作/参数: 呼叫 AI 流式破译引擎...")
             resp = requests.post(
                 API_INGEST, 
                 json={"rawContent": raw_content}, 
                 headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
-                stream=True, # 强制以流模式接收
+                stream=True, 
                 timeout=60
             )
             
@@ -208,7 +227,6 @@ def main():
                         except:
                             pass
 
-            # 剥离 Markdown 干扰符
             cleaned_json = raw_json_string.replace('```json', '').replace('```', '').strip()
             first_brace = cleaned_json.find('{')
             last_brace = cleaned_json.rfind('}')
