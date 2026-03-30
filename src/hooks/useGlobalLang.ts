@@ -4,16 +4,18 @@ import { useState, useEffect, useCallback } from 'react';
 export type LangType = 'cn' | 'en';
 
 export function useGlobalLang() {
-  // 🚀 架构师修复：惰性初始化，消灭 useEffect 内部的同步 setState 导致的级联渲染
-  const [lang, setLangState] = useState<LangType>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('TRUTH_DECODER_LANG');
-      return (stored === 'cn' || stored === 'en') ? stored : 'cn';
-    }
-    return 'cn';
-  });
+  // 🚀 核心修复：初始状态强制对齐服务端 (cn)，避免 React 418 报错
+  const [lang, setLangState] = useState<LangType>('cn');
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    // 组件挂载后，安全提取本地缓存
+    setIsMounted(true);
+    const stored = localStorage.getItem('TRUTH_DECODER_LANG') as LangType;
+    if (stored === 'cn' || stored === 'en') {
+      setLangState(stored);
+    }
+
     const handleLangChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ lang: LangType }>;
       if (customEvent.detail && customEvent.detail.lang) {
@@ -27,15 +29,11 @@ export function useGlobalLang() {
 
   const setLang = useCallback((newLang: LangType) => {
     if (newLang === lang) return;
-    
     localStorage.setItem('TRUTH_DECODER_LANG', newLang);
     setLangState(newLang);
     window.dispatchEvent(new CustomEvent('EVENT_LANG_CHANGE', { detail: { lang: newLang } }));
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🟢 [模块_发起] -> 动作/参数: 切换全局语种至`, newLang.toUpperCase());
-    }
   }, [lang]);
 
-  return { lang, setLang };
+  // 🛡️ 架构师防线：在挂载前统一输出 'cn'，挂载后输出真实语言，完美规避 Hydration 撕裂
+  return { lang: isMounted ? lang : 'cn', setLang };
 }
