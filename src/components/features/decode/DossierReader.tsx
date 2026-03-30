@@ -56,49 +56,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     }
   }, [content, isStreaming]);
 
-  // 🚨 核心超载：支持处理原版加粗 + 独创的 [[词汇::注脚]] 语法
-  const parseInlineFormat = (text: string) => {
-    const tagRegex = /\[\[(.*?)::(.*?)\]\]/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    let chunkCounter = 0;
-
-    // 第一层：解析大模型特供的 [[词汇::深度注脚]] 语法
-    while ((match = tagRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        const beforeText = text.slice(lastIndex, match.index);
-        parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`));
-      }
-      
-      // 🚨 架构师防线：利用块级作用域锁定当前匹配值，切断闭包突变陷阱
-      const surfaceWord = match[1];
-      const deepInsight = match[2];
-
-      // 渲染高密度专属气泡
-      parts.push(
-        <span
-          key={`tag-${match.index}`}
-          onMouseEnter={(e) => {
-            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
-            // 使用块级常量，绝不读取处于突变状态的 match[2]
-            setHoverInfo({ text: deepInsight, x: safeX, y: rect.top });
-          }}
-          onMouseLeave={() => setHoverInfo(null)}
-          className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold"
-        >
-          {surfaceWord}
-        </span>
-      );
-      lastIndex = tagRegex.lastIndex;
-    }
-
-    if (lastIndex < text.length) {
-      parts.push(...parseBoldAndDict(text.slice(lastIndex), `chunk-${chunkCounter++}`));
-    }
-    return parts;
-  };
+  // 🚨 核心超载：支持处理原版加粗 + 独创的 [[词汇::注脚]] 语法 \n   const parseInlineFormat = (text: string) => { \n     // 🚀 核心修复 2：使用 [\\s\\S]*? 强行跨越多行回车匹配，兼容中文全角冒号 \n     const tagRegex = /\[\[([\\s\\S]*?)(?:::|：：)([\\s\\S]*?)\]\]/g; \n     const parts: React.ReactNode[] = []; \n     let lastIndex = 0; \n     let match; \n     let chunkCounter = 0; \n \n     // 第一层：解析大模型特供的 [[词汇::深度注脚]] 语法 \n     while ((match = tagRegex.exec(text)) !== null) { \n       if (match.index > lastIndex) { \n         const beforeText = text.slice(lastIndex, match.index); \n         parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`)); \n       } \n       \n       const surfaceWord = match[1].trim(); \n       const deepInsight = match[2].trim(); \n \n       // 渲染高密度专属气泡 \n       parts.push( \n         <span \n           key={`tag-${match.index}`} \n           onMouseEnter={(e) => { \n             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); \n             const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)); \n             setHoverInfo({ text: deepInsight, x: safeX, y: rect.top }); \n           }} \n           onMouseLeave={() => setHoverInfo(null)} \n           className=\"text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold\" \n         > \n           {surfaceWord} \n         </span> \n       ); \n       lastIndex = tagRegex.lastIndex; \n     } \n \n     if (lastIndex < text.length) { \n       parts.push(...parseBoldAndDict(text.slice(lastIndex), `chunk-${chunkCounter++}`)); \n     } \n     return parts; \n   };
 
   // 第二层：常规加粗和全局词典探测，强制接收 prefixKey
   const parseBoldAndDict = (text: string, prefixKey: string) => {

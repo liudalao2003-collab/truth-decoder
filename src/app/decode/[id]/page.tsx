@@ -7,7 +7,7 @@ import DossierReader from '@/components/features/decode/DossierReader';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal'; 
 import AuthModal from '@/components/features/auth/AuthModal'; 
-import { SignalRecord, BilingualData } from '@/types/database'; // 🛡️ 引入核心契约
+import { SignalRecord, BilingualData } from '@/types/database'; 
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { useDossierStream } from '@/hooks/useDossierStream';
 import { createClient } from '@/lib/supabase/client';
@@ -43,16 +43,31 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
      fetchSignal(); 
    }, [id]);
 
+  // 🚀 核心修复 1：注入真实强悍的字典构建引擎
   useEffect(() => {
     if (signal) {
-      // 🚀 核心修复：彻底废弃危险的 'as Record' 强转，改用安全的类型收缩
       const f = signal.fluff_words;
-      const cnFluffs = Array.isArray(f) ? f : (f as BilingualData).cn;
-      const enFluffs = Array.isArray(f) ? f : (f as BilingualData).en;
+      const cnFluffs = Array.isArray(f) ? f : (f as BilingualData)?.cn || [];
+      const enFluffs = Array.isArray(f) ? f : (f as BilingualData)?.en || [];
       const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
       
-      // 此处假设 buildDictionary 逻辑已在内部处理 [cite: 378]
       const dict: Record<string, string> = {}; 
+      
+      // 物理级解析大模型的 Fluff 数组
+      targetFluffs.forEach((item) => {
+        if (!item) return;
+        // 优先匹配 V5.6 契约的直角引号： 「词汇」解释
+        let match = item.match(/「(.*?)」([\s\S]*)/);
+        // 降级兼容旧版的双引号： “词汇”解释 或 "词汇"解释
+        if (!match) match = item.match(/["“](.*?)["”][:：]?([\s\S]*)/);
+        
+        if (match && match[1].trim()) {
+          const key = match[1].trim();
+          const insight = match[2].trim();
+          dict[key] = insight;
+        }
+      });
+      
       setDictionary(dict);
     }
   }, [signal, lang]);
@@ -91,9 +106,8 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
 
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
   
-  // 🚀 核心修复：对 hard_facts 执行同样的物理加固
   const h = signal.hard_facts;
-  const currentHardFacts = Array.isArray(h) ? h : (lang === 'en' ? (h as BilingualData).en : (h as BilingualData).cn);
+  const currentHardFacts = Array.isArray(h) ? h : (lang === 'en' ? (h as BilingualData)?.en : (h as BilingualData)?.cn) || [];
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
