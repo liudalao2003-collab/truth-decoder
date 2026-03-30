@@ -12,47 +12,43 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try { 
+  const handleLogin = async (e: React.FormEvent) => { 
+     e.preventDefault(); 
+     setLoading(true); 
+     setError(null); 
+ 
+     try { 
+       // 🚀 1. 强制先登出，清理所有旧的、可能带 'o' 的错误缓存 
+       await supabase.auth.signOut(); 
+ 
+       // 2. 发起正式认证 
        const { data, error: authError } = await supabase.auth.signInWithPassword({ 
-         email: email.trim(), // 🚀 自动修剪可能的空格 
+         email: email.trim().toLowerCase(), // 强制小写对齐 
          password: password, 
        }); 
  
-       if (authError) { 
-         // 🚨 探测 400 错误的真凶 
-         console.error('🔴 Auth 物理级报错:', authError); 
-         
-         let customMsg = authError.message; 
-         if (authError.message.includes('Invalid login credentials')) { 
-           customMsg = '认证令牌无效：邮箱或密码错误，请核对。'; 
-         } else if (authError.status === 400) { 
-           customMsg = '请求被拦截：请确认密码长度或字符合法性。'; 
-         } 
-         throw new Error(customMsg); 
+       if (authError) throw new Error(`身份核验失败: ${authError.message}`); 
+ 
+       // 3. 权限对齐检查 
+       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL; 
+       
+       // 🚨 调试探针：如果依然失败，请查看浏览器控制台 (F12) 看看这两个值到底是什么 
+       console.log('当前登录:', data.user?.email); 
+       console.log('系统要求:', adminEmail); 
+ 
+       if (data.user?.email?.toLowerCase() !== adminEmail?.toLowerCase()) { 
+         await supabase.auth.signOut(); 
+         throw new Error(`权限等级不足：您的邮箱与系统设定的指挥官标识不符。`); 
        } 
  
-       // ... 后续逻辑保持不变 ...
-       // 2. 权限隔离校验：非指挥官邮箱严禁入内
-      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-      if (data.user?.email !== adminEmail) {
-        // 如果邮箱不匹配，强制登出以销毁 Session
-        await supabase.auth.signOut();
-        throw new Error('权限等级不足：检测到非法指挥官标识。');
-      }
-
-      // 3. 权限通过，进入指挥部
-      router.push('/admin');
-    } catch (err: any) {
-      setError(err.message || '未知物理性故障');
-    } finally {
-      setLoading(false);
-    }
-  };
+       // 4. 成功后强制刷新进入 
+       window.location.href = '/admin'; 
+     } catch (err: any) { 
+       setError(err.message); 
+     } finally { 
+       setLoading(false); 
+     } 
+   };
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 selection:bg-red-950">
