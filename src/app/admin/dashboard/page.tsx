@@ -2,10 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { 
-  Power, Activity, Clock, BrainCircuit, Rocket, 
-  ShieldAlert, Settings2, Loader2, CheckCircle2, LogOut
-} from 'lucide-react';
+import { Power, Activity, Clock, BrainCircuit, Rocket, ShieldAlert, Loader2, CheckCircle2, LogOut } from 'lucide-react';
 
 export default function AdminDashboard() {
   // 🛡️ 新增防线：权限状态与路由
@@ -64,7 +61,7 @@ export default function AdminDashboard() {
   };
 
   // 📡 您原有的交互逻辑：精准轰入数据库
-  const saveConfig = async (id: string, value: any) => {
+  const saveConfig = async (id: string, value: unknown) => {
     setIsSaving(true);
     try {
       await fetch('/api/admin/config', {

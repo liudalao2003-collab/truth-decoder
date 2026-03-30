@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCcw, ShieldAlert } from "lucide-react";
-import { i18n } from "@/config/i18n";
+
 
 /**
  * 核心业务说明：

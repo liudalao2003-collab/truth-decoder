@@ -39,7 +39,7 @@ const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?
        } 
        return <span key={i}>{part}</span>; 
      }); 
-   } catch (e) { 
+   } catch (_e) { 
      return <>{text}</>; 
    } 
    

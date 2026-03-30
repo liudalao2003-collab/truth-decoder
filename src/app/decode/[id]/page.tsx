@@ -33,7 +33,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
          if (!res.ok) { setSignal(null); return; } 
          const json = await res.json(); 
          if (json.success) { setSignal(json.data); } else { setSignal(null); } 
-       } catch (e: unknown) { 
+       } catch (_e: unknown) { 
          if (process.env.NODE_ENV === 'development') {
            console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e instanceof Error ? e.message : e); 
          }
@@ -96,7 +96,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
       });
       const json = await res.json();
       if (json.success) { router.push('/'); } else { alert(`抹杀失败: ${json.error}`); }
-    } catch (e: unknown) { 
+    } catch (_e: unknown) { 
       alert("通信切断，无法执行抹杀。"); 
     } finally { setIsDeleting(false); }
   };

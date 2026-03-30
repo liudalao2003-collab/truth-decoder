@@ -42,12 +42,7 @@ const HighlightMark = React.memo(({
 
 HighlightMark.displayName = 'HighlightMark';
 
-export default function RawNarrative({ 
-  rawContent, 
-  fluffWords, 
-  lang = 'cn', 
-  dictionary = {} 
-}: RawNarrativeProps) {
+export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} }: RawNarrativeProps) {
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
 
   // 1. 物理隔离：预处理字典键值，进行降噪排序，防止“短词”切断“长词”

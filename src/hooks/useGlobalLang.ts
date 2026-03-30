@@ -8,8 +8,9 @@ export function useGlobalLang() {
   const [lang, setLangState] = useState<LangType>('cn');
   const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
+useEffect(() => {
     // 组件挂载后，安全提取本地缓存
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     const stored = localStorage.getItem('TRUTH_DECODER_LANG') as LangType;
     if (stored === 'cn' || stored === 'en') {

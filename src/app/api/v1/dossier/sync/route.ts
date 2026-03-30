@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       errorDetails = err.message;
     } else if (err && typeof err === 'object') {
       // 兼容 Supabase 等返回的普通对象错误
-      errorDetails = (err as any).message || (err as any).details || JSON.stringify(err);
+     errorDetails = (err as Record<string, unknown>).message || (err as Record<string, unknown>).details || JSON.stringify(err);
     }
     
     if (process.env.NODE_ENV === 'development') {

@@ -32,7 +32,7 @@ export async function DELETE(request: Request) {
     console.log(`[PURGE_SUCCESS] 资产已物理销毁: ${id}`);
     return NextResponse.json({ success: true, message: 'Asset Neutralized' });
 
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
