@@ -43,10 +43,10 @@ export default function AdminLoginPage() {
        // 4. 成功后强制刷新进入 
        window.location.href = '/admin';
        
-     } catch (err: unknown) { // 🚀 净化 any，强制使用 unknown 契约
-       const errMsg = err instanceof Error ? err.message : String(err);
-       setError(errMsg);
-     } finally { 
+     } catch (err: unknown) { 
+      const errMsg = err instanceof Error ? err.message : '未知认证异常 (物理级断联)'; 
+      setError(errMsg); 
+    } finally { 
        setLoading(false); 
      } 
    };

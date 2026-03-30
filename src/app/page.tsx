@@ -64,7 +64,7 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (_e) { 
+    } catch (e) { 
       const errMsg = e instanceof Error ? e.message : String(e);
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
@@ -163,7 +163,7 @@ export default function HomePage() {
         throw new Error(saveJson.error || '瞬时写入网关异常');
       }
 
-    } catch (_e) { 
+    } catch (err: unknown) { 
       const errMsg = err instanceof Error ? err.message : 'JSON 流破译失败';
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);

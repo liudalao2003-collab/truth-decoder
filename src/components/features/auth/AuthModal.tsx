@@ -54,7 +54,7 @@ export default function AuthModal({
       
       onClose();
       router.refresh(); // 强制刷新路由，让 Server Components 感知最新会话
-    } catch (err: unknown) {
+    } catch (err: any) {
       const errMsg = err instanceof Error ? err.message : '认证物理链路断裂';
       setError(errMsg);
       if (process.env.NODE_ENV === 'development') {
