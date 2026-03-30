@@ -17,21 +17,27 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError(null);
 
-    try {
-      // 1. 发起身份认证请求
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (authError) {
-        // 🚨 探针 1：如果是因为没点确认邮件，这里会显示 "Email not confirmed"
-        throw new Error(authError.message === 'Email not confirmed' 
-          ? '指挥官档案尚未激活：请在 Supabase 设置中关闭 Email Confirmation' 
-          : `身份核验失败: ${authError.message}`);
-      }
-
-      // 2. 权限隔离校验：非指挥官邮箱严禁入内
+    try { 
+       const { data, error: authError } = await supabase.auth.signInWithPassword({ 
+         email: email.trim(), // 🚀 自动修剪可能的空格 
+         password: password, 
+       }); 
+ 
+       if (authError) { 
+         // 🚨 探测 400 错误的真凶 
+         console.error('🔴 Auth 物理级报错:', authError); 
+         
+         let customMsg = authError.message; 
+         if (authError.message.includes('Invalid login credentials')) { 
+           customMsg = '认证令牌无效：邮箱或密码错误，请核对。'; 
+         } else if (authError.status === 400) { 
+           customMsg = '请求被拦截：请确认密码长度或字符合法性。'; 
+         } 
+         throw new Error(customMsg); 
+       } 
+ 
+       // ... 后续逻辑保持不变 ...
+       // 2. 权限隔离校验：非指挥官邮箱严禁入内
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
       if (data.user?.email !== adminEmail) {
         // 如果邮箱不匹配，强制登出以销毁 Session
