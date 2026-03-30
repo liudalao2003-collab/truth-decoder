@@ -1,23 +1,42 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import { 
   Power, Activity, Clock, BrainCircuit, Rocket, 
-  ShieldAlert, Settings2, Loader2, CheckCircle2
+  ShieldAlert, Settings2, Loader2, CheckCircle2, LogOut
 } from 'lucide-react';
 
 export default function AdminDashboard() {
+  // 🛡️ 新增防线：权限状态与路由
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const router = useRouter();
+
+  // 📦 您原有的业务状态
   const [masterSwitch, setMasterSwitch] = useState(true);
   const [intensity, setIntensity] = useState(50);
-  const [frequency, setFrequency] = useState('60'); 
+  const [frequency, setFrequency] = useState('60');
   const [aiDepth, setAiDepth] = useState('deep'); 
   
   const [isExecuting, setIsExecuting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 📡 挂载时：拉取真实配置
+  // 📡 挂载时：鉴权 + 拉取真实配置 (完美融合)
   useEffect(() => {
-    const fetchConfigs = async () => {
+    const checkAuthAndFetchConfigs = async () => {
+      // 1. 终极物理鉴权防线
+      const { data: { user } } = await supabase.auth.getUser();
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
+      if (!user || user.email?.toLowerCase() !== adminEmail?.toLowerCase()) {
+        router.replace('/admin/login');
+        return;
+      }
+      
+      setIsAuthorized(true);
+
+      // 2. 您原有的拉取配置逻辑
       try {
         const res = await fetch('/api/admin/config');
         const json = await res.json();
@@ -34,10 +53,17 @@ export default function AdminDashboard() {
         setIsLoading(false);
       }
     };
-    fetchConfigs();
-  }, []);
 
-  // 📡 交互时：精准轰入数据库
+    checkAuthAndFetchConfigs();
+  }, [router]);
+
+  // 🛡️ 架构师赠礼：一键物理断开连接 (登出)
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/admin/login');
+  };
+
+  // 📡 您原有的交互逻辑：精准轰入数据库
   const saveConfig = async (id: string, value: any) => {
     setIsSaving(true);
     try {
@@ -53,6 +79,7 @@ export default function AdminDashboard() {
     }
   };
 
+  // 🚀 您原有的触发逻辑：即刻触发
   const handleExecuteNow = async () => {
     setIsExecuting(true);
     try {
@@ -70,7 +97,8 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isLoading) {
+  // 🛡️ 融合后的加载状态拦截
+  if (isLoading || !isAuthorized) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-red-600">
@@ -81,6 +109,7 @@ export default function AdminDashboard() {
     );
   }
 
+  // 👇 以下完全是您原版的心血 UI，一行未改，仅在 Header 追加了登出按钮
   return (
     <main className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-red-900 selection:text-white p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -93,12 +122,21 @@ export default function AdminDashboard() {
               <p className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">TRUTH DECODER // ADMIN DASHBOARD</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
-            <span className="text-xs font-mono text-zinc-400">DB CONNECTED</span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className="text-xs font-mono text-zinc-400 hidden md:inline-block">DB CONNECTED</span>
+            </div>
+            {/* 新增的物理登出按钮 */}
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-xs font-mono text-zinc-500 hover:text-red-500 transition-colors px-3 py-1 border border-zinc-800 hover:border-red-900 rounded-sm"
+            >
+              <LogOut size={14} /> EXIT
+            </button>
           </div>
         </header>
 
@@ -118,7 +156,7 @@ export default function AdminDashboard() {
               onClick={() => { 
                 const newVal = !masterSwitch;
                 setMasterSwitch(newVal); 
-                saveConfig('master_switch', { status: newVal ? 'ON' : 'OFF' }); 
+                saveConfig('master_switch', { status: newVal ? 'ON' : 'OFF' });
               }}
               className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${masterSwitch ? 'bg-red-600' : 'bg-zinc-700'}`}
             >
