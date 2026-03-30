@@ -7,6 +7,7 @@ import AuthModal from '@/components/features/auth/AuthModal';
 import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
+import { type User } from '@supabase/supabase-js'; // 🚀 引入强类型契约
 
 /**
  * 核心业务说明：
@@ -17,7 +18,7 @@ export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); 
-  const [user, setUser] = useState<any>(null); 
+  const [user, setUser] = useState<User | null>(null); // 🚀 彻底净化 any
   const supabase = createClient(); 
  
   useEffect(() => { 
@@ -26,17 +27,16 @@ export default function HomePage() {
       setUser(user); 
     }; 
     getUser(); 
-  }, []); 
-  
+  }, [supabase]);
+
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
   const [feed, setFeed] = useState<SignalRecord[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
-  
+
   useEffect(() => {
     fetchFeed();
   }, []);
@@ -205,6 +205,7 @@ export default function HomePage() {
                   <UserIcon size={12} /> Login
                 </button>
               )}
+              
               <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
                 <Globe className="text-zinc-600 w-4 h-4 ml-2" />
                 <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>

@@ -1,6 +1,6 @@
 "use client";
-import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, EyeOff, CheckSquare, Target } from 'lucide-react';
+import { motion, AnimatePresence, Variants } from 'framer-motion'; // 🛡️ 引入 Variants 类型契约
+import { Zap, EyeOff, CheckSquare } from 'lucide-react';
 import { i18n } from '@/config/i18n';
 
 interface HardFactsProps {
@@ -10,8 +10,8 @@ interface HardFactsProps {
 }
 
 export default function HardFacts({ hardFacts, isErased, onErase }: HardFactsProps) {
-  // 赛博卡片升腾变体
-  const cardVariants = {
+  // 🚀 核心修复：显式锁定 Variants 类型，防止 ease 数组被误判为普通 number[]
+  const cardVariants: Variants = {
     hidden: { opacity: 0, y: 100, filter: "blur(10px)" },
     visible: { 
       opacity: 1, 
@@ -19,14 +19,13 @@ export default function HardFacts({ hardFacts, isErased, onErase }: HardFactsPro
       filter: "blur(0px)",
       transition: { 
         duration: 0.8,
-        ease: [0.17, 0.67, 0.83, 0.67],
-        staggerChildren: 0.2 // 子 facts 升腾延迟
+        ease: [0.17, 0.67, 0.83, 0.67], // 现在受到 Variants 契约保护
+        staggerChildren: 0.2 
       } 
     }
   };
 
-  // Fact 升腾变体
-  const factVariants = {
+  const factVariants: Variants = {
     hidden: { opacity: 0, x: 20 },
     visible: { opacity: 1, x: 0, transition: { duration: 0.7 } }
   };
@@ -72,7 +71,6 @@ export default function HardFacts({ hardFacts, isErased, onErase }: HardFactsPro
             <span className="text-6xl font-black text-zinc-900 group-hover:text-red-950 transition-colors font-mono select-none -translate-y-2">0{index + 1}</span>
             <div className="flex-1 space-y-3">
                 <p className="text-2xl font-bold leading-tight text-white tracking-tight">{fact}</p>
-                {/* 动态连线：模拟利益流转 */}
                 <motion.div 
                     initial={{ width: "0%" }}
                     animate={isErased ? { width: "100%" } : { width: "0%" }}

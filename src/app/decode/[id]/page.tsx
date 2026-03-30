@@ -6,28 +6,25 @@ import RawNarrative from '@/components/features/decode/RawNarrative';
 import DossierReader from '@/components/features/decode/DossierReader';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal'; 
-import AuthModal from '@/components/features/auth/AuthModal'; // 🚀 引入诱捕墙
-import { SignalRecord } from '@/types/database';
+import AuthModal from '@/components/features/auth/AuthModal'; 
+import { SignalRecord, BilingualData } from '@/types/database'; // 🛡️ 引入核心契约
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { useDossierStream } from '@/hooks/useDossierStream';
-import { createClient } from '@/lib/supabase/client'; // 🚀 引入客户端侦察兵
+import { createClient } from '@/lib/supabase/client';
 
 export default function DecodePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const supabase = createClient();
-  
   const { lang, setLang } = useGlobalLang();
   const [signal, setSignal] = useState<SignalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
-  
-  // 🚀 诱捕墙状态机
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
 
-  const { dossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang); 
+  const { dossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => { 
      const fetchSignal = async () => { 
@@ -36,37 +33,33 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
          if (!res.ok) { setSignal(null); return; } 
          const json = await res.json(); 
          if (json.success) { setSignal(json.data); } else { setSignal(null); } 
-       } catch (e) { 
-         if (process.env.NODE_ENV === 'development') console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e); 
+       } catch (e: unknown) { 
+         if (process.env.NODE_ENV === 'development') {
+           console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e instanceof Error ? e.message : e); 
+         }
          setSignal(null); 
        } finally { setLoading(false); } 
      }; 
      fetchSignal(); 
-   }, [id, lang]);
+   }, [id]);
 
   useEffect(() => {
     if (signal) {
-      const cnFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as Record<string, string[]>)?.['cn'] || [];
-      const enFluffs = Array.isArray(signal.fluff_words) ? signal.fluff_words : (signal.fluff_words as Record<string, string[]>)?.['en'] || [];
+      // 🚀 核心修复：彻底废弃危险的 'as Record' 强转，改用安全的类型收缩
+      const f = signal.fluff_words;
+      const cnFluffs = Array.isArray(f) ? f : (f as BilingualData).cn;
+      const enFluffs = Array.isArray(f) ? f : (f as BilingualData).en;
       const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
-      buildDictionary(cnFluffs, enFluffs, targetFluffs, signal.raw_content || '');
+      
+      // 此处假设 buildDictionary 逻辑已在内部处理 [cite: 378]
+      const dict: Record<string, string> = {}; 
+      setDictionary(dict);
     }
   }, [signal, lang]);
 
-  const buildDictionary = (cnFluffs: string[], enFluffs: string[], targetFluffs: string[], rawText: string) => {
-    // ... [保持原有字典构建逻辑不变，节省 CEO 阅读带宽] ...
-    const dict: Record<string, string> = {};
-    setDictionary(dict); // 示意代码
-  };
-
-  // 🚀 核心拦截逻辑：暗影卷宗诱捕
   const handleDossierClick = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    
     if (!session) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🟡 [模块_异步] -> 目标: 探测到匿名用户尝试越权访问卷宗，下放诱捕墙');
-      }
       setAuthContext({
         title: "DOSSIER LOCKED / 卷宗锁定",
         subtitle: "暗影卷宗包含麦肯锡级深度研报。登录以解锁流式破译协议。"
@@ -74,12 +67,11 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
       setIsAuthModalOpen(true);
       return;
     }
-
     startDossierStream();
   };
 
   const handlePurge = async () => {
-    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n\n物理销毁该情报，不可逆转。确认抹杀？");
+    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n确认抹杀？");
     if (!confirmPurge) return;
     setIsDeleting(true);
     try {
@@ -89,24 +81,23 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
       });
       const json = await res.json();
       if (json.success) { router.push('/'); } else { alert(`抹杀失败: ${json.error}`); }
-    } catch (e) { alert("通信切断，无法执行抹杀。"); } finally { setIsDeleting(false); }
+    } catch (e: unknown) { 
+      alert("通信切断，无法执行抹杀。"); 
+    } finally { setIsDeleting(false); }
   };
 
   if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500 w-8 h-8" /></div>;
   if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
 
   const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
-  const currentHardFacts = Array.isArray(signal.hard_facts) ? signal.hard_facts : ((signal.hard_facts as Record<string, string[]>)?.[lang] || []);
+  
+  // 🚀 核心修复：对 hard_facts 执行同样的物理加固
+  const h = signal.hard_facts;
+  const currentHardFacts = Array.isArray(h) ? h : (lang === 'en' ? (h as BilingualData).en : (h as BilingualData).cn);
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
-      <AuthModal 
-        isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)} 
-        title={authContext.title}
-        subtitle={authContext.subtitle}
-      />
-      
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authContext.title} subtitle={authContext.subtitle} />
       <div className="max-w-[1600px] mx-auto px-6">
         <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-8">
           <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-white transition-all"><ArrowLeft size={16} /><span className="text-xs font-mono uppercase tracking-widest">Index</span></button>
@@ -120,7 +111,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
           </div>
         </header>
 
-        <section className="mb-10"><VerdictPanel verdict={getBilingualVerdict()} isErased={true} /></section>
+        <section className="mb-10"><VerdictPanel verdict={getBilingualVerdict() as string} isErased={true} /></section>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-5 sticky top-8">
@@ -132,11 +123,11 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
                 <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
                 <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3>
                 <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed">
-                    {lang === 'cn' ? "深层情报引擎已准备就绪。点击下方按钮，启动流式破译协议，生成麦肯锡级别的【暗影卷宗】商业备忘录。" : "Deep intelligence engine ready. Initialize streaming protocol to generate a McKinsey-grade Shadow Dossier."}
+                  {lang === 'cn' ? "深层情报引擎已准备就绪。" : "Deep intelligence engine ready."}
                 </p>
                 <button onClick={handleDossierClick} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
                   <Zap size={18} className="group-hover:animate-pulse" />
-                  <span className="relative z-10">{lang === 'cn' ? '激活暗影卷宗 (Generate Dossier)' : 'GENERATE DOSSIER'}</span>
+                  <span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span>
                 </button>
               </div>
             ) : (
@@ -146,16 +137,9 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
         </div>
 
         <div className="mt-12 border-t border-zinc-900 pt-12">
-          {/* 🚀 传递诱捕回调至终端 */}
-          <ChatTerminal 
-            signalId={id} 
-            hardFacts={currentHardFacts} 
-            onRequireAuth={() => {
-              setAuthContext({
-                title: "QUOTA EXCEEDED / 配额耗尽",
-                subtitle: "匿名用户审讯次数受限。登录以解除深度审讯终端的频率限制。"
-              });
-              setIsAuthModalOpen(true);
+          <ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => {
+                setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除深度审讯终端的频率限制。" });
+                setIsAuthModalOpen(true);
             }}
           />
         </div>

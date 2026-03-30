@@ -1,57 +1,91 @@
-import { NextResponse } from 'next/server';
-import { analyzeTextWithDeepSeek } from '@/services/deepseek';
-import { ApiResponse, DecodeResult } from '@/types';
+import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { TerminalMessage } from '@/types';
+import { logger } from '@/utils/logger';
 
-// 强制声明 Edge 运行时。由于不涉及 Redis 连接，Edge Runtime 能提供极低延迟的全球分布响应
+/**
+ * 核心业务说明：
+ * TruthDecoder 暗影卷宗 (Shadow Dossier) 逻辑核心 V2.0
+ * 作用：
+ * 1. 框架注入：强制 LLM 采用麦肯锡 MECE、杜邦分析及博弈论模型进行情报解构。
+ * 2. 深度分形：严禁收敛，强制对每一个商业动作进行“剥洋葱”式的逻辑展开。
+ * 3. 契约守护：在追求天花板级细节的同时，严格锁定 [[词汇::注脚]] 语法，确保前端渲染不崩溃。
+ */
+
 export const runtime = 'edge';
 
-// 严格的 TS 纯洁性：定义 B 端请求的载荷契约
-interface BSideDecodeRequest {
-  content: string;
-}
-
-export async function POST(request: Request): Promise<NextResponse<ApiResponse<DecodeResult>>> {
+export async function POST(request: Request) {
   try {
-    console.log('🟢 [状态发起] -> 变量: B端网关接收到外部直连请求');
-
-    // 1. 物理级鉴权防线 (商业化闸机核心)
-    // 业务说明：拦截一切白嫖请求。B端客户必须在 HTTP Header 中携带我们分发的凭证
-    const authHeader = request.headers.get('authorization');
-    const expectedKey = process.env.B_SIDE_API_KEY;
-
-    if (!expectedKey) {
-      console.log('🔴 [错误捕获] -> 节点: B端网关 - 系统未配置商业化主密钥 (B_SIDE_API_KEY)');
-      return NextResponse.json({ success: false, error: '商业化网关暂未激活，请联系商务' }, { status: 503 });
+    const authHeader = request.headers.get('Authorization');
+    // 物理鉴权防线 [cite: 279]
+    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
     }
 
-    if (authHeader !== `Bearer ${expectedKey}`) {
-      console.log('🔴 [错误捕获] -> 节点: B端网关 - 越权访问尝试已被拦截');
-      return NextResponse.json({ success: false, error: '未经授权的调用凭证 (Invalid API Key)' }, { status: 401 });
-    }
-
-    // 2. 载荷解析与 TS 类型断言
     const body = await request.json();
-    const { content } = body as BSideDecodeRequest;
+    const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
+    const isEnglish = lang === 'en';
 
-    if (!content || typeof content !== 'string') {
-      console.log('🔴 [错误捕获] -> 节点: B端网关 - 客户入参非法');
-      return NextResponse.json({ success: false, error: '缺少有效的情报文本 (字段名需为 content)' }, { status: 400 });
-    }
+    // 🚀 核心逻辑升维：注入顶级智库提示词架构
+    const systemPromptText = isEnglish
+      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC INTELLIGENCE ENGINE]
+You are a God-tier Financial Forensic Expert and Macro-Strategist. Your goal is to produce a "Shadow Dossier" that makes McKinsey reports look like children's books.
 
-    console.log(`🟡 [网络请求] -> 接口: 调度底层 DeepSeek 引擎, 文本长度: ${content.length}`);
+[FRACTAL EXPANSION PROTOCOL - INFINITE DEPTH]:
+1. NEVER SUMMARIZE. Every sentence in the source must be treated as a deceptive layer to be stripped.
+2. EXPAND LOGIC: If a company mentions "cost-cutting", you must analyze:
+   - The immediate impact on the Balance Sheet (DuPont Analysis).
+   - The hidden talent drain and long-term R&D suicide.
+   - The Game Theory payoff for the C-suite vs. the fallout for shareholders.
 
-    // 3. 核心解耦：直接调度底层分析服务
-    // 业务说明：直接拿到纯净的 DecodeResult，彻底绕开 C 端的 Redis 存储与 Signal ID 逻辑
-    const result = await analyzeTextWithDeepSeek(content);
+[FORCED ARCHITECTURAL REQUIREMENTS]:
+You MUST structure the report into these 4 Exhaustive Sections. Each section must be massive, with at least 4 sub-headings:
+- I. ANATOMY OF CORPORATE WILL: Deconstructing the hidden agenda through Game Theory.
+- II. THE LEVERAGE MAZE: A DuPont-style forensic analysis of capital and liability flow.
+- III. STRUCTURAL FRAGMENTATION: Applying MECE to reveal what was NOT mentioned (the collective exclusions).
+- IV. BLACK SWAN FORECASTING: Multi-layered predictions of systemic collapse or power shifts.
 
-    console.log('🔵 [数据渲染] -> 组件: B端网关成功向外泵出高净值 JSON 资产');
+[FOOTNOTE DENSITY LOCK]:
+Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].
+- The "Term" MUST be 100% English.
+- Tone: Cold, analytical, god-like intellectual superiority.`
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V2.0】
+任务：生成一份细节爆炸、逻辑深度达到业界天花板的《暗影卷宗》Markdown 研报。
+【分形展开协议（反收敛死线）】：
+1. 绝对禁止总结！对原文每一个字都要进行显微镜式的解剖。
+2. 逻辑倍增：原文提到“优化”，你必须通过【杜邦分析法】拆解其对净资产收益率的短期透支，通过【麦肯锡 MECE 原则】穷举其所有未公开的裁员名单，通过【博弈论】分析高管在信息差中的套现时机。
 
-    // 4. 纯净输出给 B 端调用者
-    return NextResponse.json({ success: true, data: result });
+【强制研报结构（无字数上限）】：
+你必须包含以下四大核心板块，且每个板块下必须细分出 4 个以上的子标题（如 1.1, 1.2, 1.3, 1.4），进行数千字的深度论证：
+- Ⅰ. 权力构架与意志解剖：基于博弈论的决策者真实意图建模。
+- Ⅱ. 资产流动与杠杆迷局：利用杜邦分析法穿透财报粉饰，揭露真实的现金流危机。
+- Ⅲ. 隐藏契约与逻辑穷举：使用 MECE 原则对所有“被隐瞒的事实”进行完全穷举。
+- Ⅳ. 高维时间轴预测：推演该动作在 12 个月内引发的连锁坍塌或利益收割。
+
+【强制注脚密度】：
+全篇必须注入 20 到 30 个深度注脚！
+格式：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。
+注脚解析必须包含：1. 对欺骗性的反击；2. 具体的财务/权力模型；3. 最终的利益牺牲者。
+基调：上帝视角的智力碾压，字数极度丰满，逻辑极度深邃，100% 纯正中文。`;
+
+    const messages: TerminalMessage[] = [
+      { role: 'system', content: String(systemPromptText) },
+      { role: 'user', content: String(isEnglish ? `Target Narrative for Decryption:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
+    ];
+
+    // 唤醒流式管道 [cite: 294, 612]
+    const streamResponse = await createDeepSeekStream(messages);
+    
+    return new Response(streamResponse.body, {
+      headers: { 
+        'Content-Type': 'text/event-stream', 
+        'Cache-Control': 'no-cache', 
+        'Connection': 'keep-alive' 
+      },
+    });
 
   } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : 'B端网关级联失效';
-    console.log('🔴 [错误捕获] -> 节点: B端 API 商业化网关', errMsg);
-    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : 'Dossier Engine Cascade Failure';
+    logger.crash(errMsg); // 工业级日志探针 [cite: 659]
+    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
   }
 }

@@ -5,6 +5,15 @@ import { logger } from '@/utils/logger';
 // 🚨 架构师排雷：将超时时间重置为默认，不再强行续命，因为此处已无耗时逻辑
 export const runtime = 'edge';
 
+// 🛡️ 严格定义系统配置行契约，确保 id 具备 string 属性
+interface SystemConfigRow {
+  id: string;
+  value: {
+    status?: string;
+    [key: string]: unknown;
+  };
+}
+
 /**
  * 核心业务说明：
  * 自动化巡航送报员 (心跳版)。
@@ -22,9 +31,15 @@ export async function GET(req: Request) {
 
     // 1. 获取系统配置
     const { data: configs } = await supabaseAdmin.from('system_configs').select('*');
-    const configMap = configs?.reduce((acc: Record<string, unknown>, row: Record<string, unknown>) => ({ ...acc, [row.id]: row.value }), {}) || {};
+    
+    // 🚀 核心修复：注入 SystemConfigRow 契约，锁定 row.id 物理类型，通过 Turbopack 校验
+    const configMap = (configs as SystemConfigRow[] | null)?.reduce((acc: Record<string, SystemConfigRow['value']>, row: SystemConfigRow) => ({ 
+      ...acc, 
+      [row.id]: row.value 
+    }), {}) || {};
 
     // 2. 检查总开关
+    // 🛡️ 由于已注入契约，此处逻辑已受 TS 保护
     if (configMap.master_switch?.status === 'OFF') {
       logger.async("系统总开关已关闭，跳过心跳记录");
       return NextResponse.json({ success: true, message: 'System Sleeping' });
