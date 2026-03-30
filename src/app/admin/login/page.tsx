@@ -1,109 +1,121 @@
 "use client";
 import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, Terminal, Loader2, User } from 'lucide-react';
+import { ShieldAlert, Terminal, Loader2, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-/**
- * 核心业务说明：
- * Admin 中控台的物理门锁。
- * 已从单密码模式升级为标准的邮箱+密码体系，以对接 Supabase Auth。
- */
-export default function AdminLogin() {
+export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
-    
     setLoading(true);
-    setError(false);
+    setError(null);
 
     try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🟢 [模块_发起] -> 动作/参数:', '向网关发送授权请求');
-      }
-
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      // 1. 发起身份认证请求
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (res.ok) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 [模块_成功] -> 产物:', '门锁已物理开启，请求路由重定向');
-        }
-        // 门锁开启，前往中控台
-        router.push('/admin/dashboard');
-      } else {
-        throw new Error('授权被拒');
+      if (authError) {
+        // 🚨 探针 1：如果是因为没点确认邮件，这里会显示 "Email not confirmed"
+        throw new Error(authError.message === 'Email not confirmed' 
+          ? '指挥官档案尚未激活：请在 Supabase 设置中关闭 Email Confirmation' 
+          : `身份核验失败: ${authError.message}`);
       }
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', '门锁拒绝开启');
+
+      // 2. 权限隔离校验：非指挥官邮箱严禁入内
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      if (data.user?.email !== adminEmail) {
+        // 如果邮箱不匹配，强制登出以销毁 Session
+        await supabase.auth.signOut();
+        throw new Error('权限等级不足：检测到非法指挥官标识。');
       }
-      setError(true);
-      setPassword('');
+
+      // 3. 权限通过，进入指挥部
+      router.push('/admin');
+    } catch (err: any) {
+      setError(err.message || '未知物理性故障');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 selection:bg-red-900">
-      <div className="scanline" />
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-12">
-          <ShieldAlert className="text-red-600 w-16 h-16 mb-6" />
-          <h1 className="text-2xl font-black tracking-[0.3em] uppercase italic text-zinc-300">Command Center</h1>
-          <p className="text-[10px] font-mono text-red-600 tracking-[0.4em] mt-2">RESTRICTED AREA V2.0</p>
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 selection:bg-red-950">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md space-y-8"
+      >
+        <div className="text-center space-y-4">
+          <ShieldAlert className="w-16 h-16 text-red-600 mx-auto animate-pulse" />
+          <h1 className="text-4xl font-black tracking-[0.2em] uppercase italic italic">Command Center</h1>
+          <p className="text-[10px] font-mono text-red-900 tracking-[0.5em] uppercase">Restricted Area V2.0</p>
         </div>
 
-        <form onSubmit={handleLogin} className="relative group space-y-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-              <User className={`w-5 h-5 ${error ? 'text-red-500' : 'text-zinc-600 group-focus-within:text-red-500'} transition-colors`} />
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <Terminal className="text-red-900 group-focus-within:text-red-500 w-4 h-4 transition-colors" />
             </div>
             <input
               type="email"
+              placeholder="COMMANDER IDENTIFIER (EMAIL)"
+              className="w-full bg-black border border-red-900/30 p-4 pl-12 text-sm font-mono focus:border-red-600 outline-none transition-all placeholder:text-zinc-800"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              className={`w-full bg-zinc-950/50 border-2 ${error ? 'border-red-600 text-red-500' : 'border-zinc-800 focus:border-red-900'} p-4 pl-12 text-center text-sm font-mono tracking-widest outline-none transition-all placeholder:text-zinc-800 placeholder:tracking-normal`}
-              placeholder="COMMANDER IDENTIFIER (EMAIL)"
-              autoFocus
+              required
             />
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-              <Terminal className={`w-5 h-5 ${error ? 'text-red-500' : 'text-zinc-600 group-focus-within:text-red-500'} transition-colors`} />
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <span className="text-red-900 group-focus-within:text-red-500 font-mono text-lg transition-colors">{`>_`}</span>
             </div>
             <input
               type="password"
+              placeholder="ENCRYPTED PASSCODE"
+              className="w-full bg-black border border-red-900/30 p-4 pl-12 text-sm font-mono focus:border-red-600 outline-none transition-all placeholder:text-zinc-800"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              className={`w-full bg-zinc-950/50 border-2 ${error ? 'border-red-600 text-red-500' : 'border-zinc-800 focus:border-red-900'} p-4 pl-12 text-center text-lg font-mono tracking-widest outline-none transition-all placeholder:text-zinc-800 placeholder:tracking-normal`}
-              placeholder="ENCRYPTED PASSCODE"
+              required
             />
           </div>
-          
-          {error && <p className="absolute -bottom-8 left-0 w-full text-center text-xs font-mono text-red-500 tracking-widest uppercase">Unauthorized Access Detected</p>}
-          
-          <button type="submit" className="hidden">Submit</button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 bg-red-950/20 border border-red-900 text-red-500 font-black uppercase tracking-widest hover:bg-red-900 hover:text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : 'Execute Login'}
+          </button>
         </form>
 
-        {loading && (
-          <div className="mt-8 flex justify-center">
-            <Loader2 className="animate-spin text-red-600 w-6 h-6" />
-          </div>
-        )}
-      </div>
+        <AnimatePresence>
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="p-4 bg-red-950/10 border border-red-900/50 flex items-start gap-3 rounded-sm"
+            >
+              <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={16} />
+              <div>
+                <p className="text-[10px] font-mono text-red-500 uppercase tracking-widest mb-1">System Alert</p>
+                <p className="text-xs text-red-400 font-mono leading-relaxed uppercase">{error}</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </main>
   );
 }

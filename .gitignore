@@ -1,10 +1,11 @@
 # ==============================================================================
-# 🛡️ TRUTH DECODER - 绝对防御协议 V5.6
+# 🛡️ TRUTH DECODER - 终极防御协议 V5.7
 # 作用：物理隔离机密、状态、日志与系统废料
+# 适用：Next.js + Supabase + Python Scraper (Edge Runtime Friendly)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. 核心机密资产 (Secrets & Environment) - 【高等级隔离区】
+# 1. 核心机密资产 (Secrets & Environment) - 【红线禁区】
 # ------------------------------------------------------------------------------
 .env
 .env.*
@@ -13,11 +14,14 @@
 .env.test.local
 .env.production.local
 !.env.example
+
+# 证书与密钥凭证
 *.pem
 *.key
 *.cert
 secrets.json
 credentials.json
+service-account-file.json
 
 # ------------------------------------------------------------------------------
 # 2. 依赖黑洞 (Dependencies)
@@ -25,6 +29,8 @@ credentials.json
 node_modules/
 .pnp
 .pnp.js
+
+# Python 环境隔离
 __pycache__/
 *.py[cod]
 *$py.class
@@ -32,6 +38,12 @@ venv/
 .venv/
 env/
 pip-log.txt
+pip-delete-this-directory.txt
+.python-version
+.pdm.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # ------------------------------------------------------------------------------
 # 3. 框架编译与构建产物 (Builds & Frameworks)
@@ -46,11 +58,20 @@ dist/
 .turbo/
 
 # ------------------------------------------------------------------------------
-# 4. 业务状态与持久化数据 (Project Specific States) - 【🚨 针对 TruthDecoder 优化】
+# 4. 业务状态与持久化数据 (Project Specific States) - 【针对 TruthDecoder 深度优化】
 # ------------------------------------------------------------------------------
-# 拦截爬虫本地历史记录，防止数据污染 
+# 拦截爬虫本地历史记录，防止云端数据逻辑冲突
 seen_urls.txt
 truth_scraper/seen_urls.txt
+*.db
+*.sqlite
+*.sqlite-journal
+
+# 爬虫自动化浏览器缓存 (Playwright/Puppeteer)
+test-results/
+playwright-report/
+blob-report/
+playwright/.local-browsers
 
 # ------------------------------------------------------------------------------
 # 5. 运行日志与测试缓存 (Logs & Coverage)
@@ -66,7 +87,7 @@ coverage/
 .nyc_output/
 
 # ------------------------------------------------------------------------------
-# 6. 编辑器与操作系统 (OS & IDEs)
+# 6. 编辑器与操作系统 (OS & IDEs & Configs)
 # ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
@@ -79,11 +100,19 @@ Desktop.ini
 *.sln
 *.sw?
 
+# 屏蔽本地包管理器特定配置，防止覆盖云端镜像环境
+.npmrc
+.yarnrc
+
 # ------------------------------------------------------------------------------
 # 7. 媒体与临时资源缓存 (Temp Media/Assets)
 # ------------------------------------------------------------------------------
 *.mp4
 *.mkv
 *.mov
+*.jpg
+*.jpeg
+*.png
+*.gif
 tmp/
 temp/
