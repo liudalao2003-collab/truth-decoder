@@ -17,7 +17,6 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 🚀 核心修复：恢复完整 JSON 约束
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
@@ -25,12 +24,16 @@ export async function POST(req: Request) {
           role: "system", 
           content: `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
 你是一个让华尔街战栗的顶级做空分析师。
-请将输入的商业通稿解码为中英双语的 JSON，【绝对禁止中英夹杂】：
+请将输入的商业通稿解码为中英双语的 JSON。
+【格式红线】：
+1. 绝对禁止在 JSON 的值内部使用任何英文双引号 (")，全部替换为单引号 (')！
+2. 绝对禁止中英夹杂！
+
 {
   "facts": { "cn": ["纯中文事实，绝不夹杂英文"], "en": ["PURE ENGLISH facts ONLY"] },
   "fluff": { 
-    "cn": ["“原文具体诱导词”：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨必须是纯正中文！严禁在句中夹杂英文或用括号保留原词！50-100字，15-20条)"], 
-    "en": ["\\"Translated Quote\\": [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! NO CHINESE CHARACTERS! 50-100 words, 15-20 items)"] 
+    "cn": ["「原文具体诱导词」：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨严禁在句中夹杂英文！50-100字，15-20条)"], 
+    "en": ["「Translated Quote」: [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! 50-100 words, 15-20 items)"] 
   },
   "verdict": { "cn": "一句纯中文的犀利判决。", "en": "A ruthless, single-sentence pure English verdict." }
 }`

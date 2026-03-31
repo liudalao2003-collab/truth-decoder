@@ -53,8 +53,8 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e: unknown) { 
-      if (process.env.NODE_ENV === 'development') console.log('🔴 [FEED_CRASH]:', e);
+    } catch (err: unknown) { 
+      console.log('🔴 [FEED_CRASH]:', err);
     } finally { 
       setIsLoadingMore(false); 
       setIsInitialLoading(false); 
@@ -99,7 +99,6 @@ export default function HomePage() {
         }
       }
 
-      // 🚀 核心修复：工业级 JSON 洗涤逻辑
       let cleaned = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
       const first = cleaned.indexOf('{');
       const last = cleaned.lastIndexOf('}');
@@ -107,11 +106,27 @@ export default function HomePage() {
       
       let intel;
       try {
+        // 尝试解析大模型的输出
         intel = JSON.parse(cleaned);
       } catch (_e) {
-        // 🚨 二级保险：处理 AI 意外生成的内部换行符（不影响结构）
-        const repaired = cleaned.replace(/(?<=[:|,]\s*)"([^"]*)\n([^"]*)"/g, '"$1\\n$2"');
-        intel = JSON.parse(repaired);
+        // 🚨 终极核平防线：彻底解除日志屏蔽！无论是不是开发环境，只要 AI 犯蠢，立刻打印犯罪现场
+        console.error('==================================================');
+        console.error('🔴 致命解析错误：AI 输出了破坏 JSON 结构的非法字符');
+        console.error(cleaned);
+        console.error('==================================================');
+
+        // 🚨 强制兜底：绝对不弹红框卡死用户！构造一个强行放行的假数据
+        intel = {
+          verdict: {
+            cn: "⚠️ 引擎遭遇非法字符入侵（如原文包含未转义的双引号），格式解析降级。完整坏死数据已打印至按 F12 的 Console 控制台中。",
+            en: "⚠️ Engine encountered illegal characters. Format degraded. Check F12 Console."
+          },
+          facts: {
+            cn: ["数据格式被破坏，已启用降级模式保护系统。"],
+            en: ["Data corrupted."]
+          },
+          fluff: { cn: [], en: [] }
+        };
       }
 
       const saveRes = await fetch('/api/v1/ingest/save', {
@@ -139,7 +154,7 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.0 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.1 SECURE_GATE</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
