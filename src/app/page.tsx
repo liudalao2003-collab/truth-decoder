@@ -7,18 +7,17 @@ import AuthModal from '@/components/features/auth/AuthModal';
 import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
-import { type User } from '@supabase/supabase-js'; // 🚀 引入强类型契约
 
 /**
  * 核心业务说明：
- * TruthDecoder 首页总线。
- * 集成了“流式 JSON 解析”与“闪电入库”技术，专为 Vercel Hobby 版超时红线定制。
+ * TruthDecoder 首页总线 V5.7 (增强容错版)。
+ * 此次更新重点修复了 AI 流式输出中可能携带的非法换行符导致的 JSON 解析崩溃问题 [cite: 315-316]。
  */
 export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); 
-  const [user, setUser] = useState<User | null>(null); // 🚀 彻底净化 any
+  const [user, setUser] = useState<any>(null);
   const supabase = createClient(); 
  
   useEffect(() => { 
@@ -27,7 +26,7 @@ export default function HomePage() {
       setUser(user); 
     }; 
     getUser(); 
-  }, [supabase]);
+  }, [supabase.auth]);
 
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,11 +45,9 @@ export default function HomePage() {
     if (isLoadMore) setIsLoadingMore(true);
 
     const cursor = isLoadMore && feed.length > 0 ? feed[feed.length - 1].created_at : '';
-
     try {
       const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}`);
       const json = await res.json();
-
       if (json.success) {
         if (isLoadMore) {
           setFeed(prev => {
@@ -64,10 +61,9 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e) { 
-      const errMsg = e instanceof Error ? e.message : String(e);
+    } catch (e: unknown) { 
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
+        console.log('🔴 [模块_崩溃] -> 原因:', e instanceof Error ? e.message : String(e));
       }
     } finally { 
       setIsLoadingMore(false); 
@@ -85,7 +81,7 @@ export default function HomePage() {
         console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
       }
 
-      // 1. 发起流式请求，瞬间穿透 Vercel 10s 物理防线
+      // 1. 发起流式请求
       const res = await fetch('/api/v1/ingest', {
         method: 'POST',
         headers: { 
@@ -128,20 +124,36 @@ export default function HomePage() {
       }
 
       if (process.env.NODE_ENV === 'development') {
-        console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动格式化');
+        console.log('🟡 [模块_异步] -> 目标: 启动 JSON 物理洗涤，修复潜在语法断层');
       }
 
-      // 3. 剥离 Markdown 干扰符
-      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
+      // 3. 🚀 核心重构：加固型 JSON 清洗逻辑
+      let cleanedJsonString = rawJsonString
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
       const firstBrace = cleanedJsonString.indexOf('{');
       const lastBrace = cleanedJsonString.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
       }
       
-      const intel = JSON.parse(cleanedJsonString);
+      // 🛡️ 物理防御：将 AI 误输出的真实换行符转义，防止 JSON.parse 崩溃
+      cleanedJsonString = cleanedJsonString.replace(/\n/g, '\\n');
 
-      // 4. 闪电瞬时入库 (绕过所有超时检测)
+      let intel;
+      try {
+        intel = JSON.parse(cleanedJsonString);
+      } catch (e: unknown) {
+        const parseErr = e instanceof Error ? e.message : 'Unknown';
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔴 [模块_崩溃] -> 原始坏死数据:', cleanedJsonString);
+        }
+        throw new Error(`引擎破译断层 (JSON Syntax Error): ${parseErr}`);
+      }
+
+      // 4. 闪电瞬时入库 (绕过所有超时检测) [cite: 60]
       const saveRes = await fetch('/api/v1/ingest/save', {
         method: 'POST',
         headers: { 
@@ -150,7 +162,6 @@ export default function HomePage() {
         },
         body: JSON.stringify({ rawContent: input, intel })
       });
-
       const saveJson = await saveRes.json();
 
       if (saveJson.success && saveJson.data?.signalId) {
@@ -164,7 +175,7 @@ export default function HomePage() {
       }
 
     } catch (err: unknown) { 
-      const errMsg = err instanceof Error ? err.message : 'JSON 流破译失败';
+      const errMsg = err instanceof Error ? err.message : '破译链路未知崩塌';
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
@@ -187,7 +198,7 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.6 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.7 SECURE_GATE</p>
               </div>
             </div>
             
