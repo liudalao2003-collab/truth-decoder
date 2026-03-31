@@ -139,17 +139,10 @@ export default function HomePage() {
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1); 
       } 
       
-      /** * 🚨 V6.1 工业级 JSON 绝对防御装甲 
-       * 1. 物理剔除换行、回车、制表符 
-       * 2. 暴力修正非法双引号：修复键值对内部未经转义的双引号
+      /** * 🚨 V6.1 热修复：移除了引发误杀的双引号正则。
+       * 仅执行最基础的物理换行符剔除，信任后端 System Prompt 的纯洁性约束。
        */ 
-      cleanedJsonString = cleanedJsonString
-        .replace(/[\n\r\t]/g, '') // 剔除控制字符
-        .replace(/: "([\s\S]*?)"/g, (match, p1) => {
-          // 针对 Value 中的双引号进行内部单引号化处理
-          const fixedValue = p1.replace(/"/g, "'");
-          return `: "${fixedValue}"`;
-        });
+      cleanedJsonString = cleanedJsonString.replace(/[\n\r\t]/g, '');
       
       let intel; 
       try { 
@@ -158,7 +151,7 @@ export default function HomePage() {
         if (process.env.NODE_ENV === 'development') { 
           console.log('🔴 [模块_崩溃] -> JSON 结构损毁，触发逻辑降级:', cleanedJsonString); 
         } 
-        // 🚨 绝对防御：解析失败直接注入兜底 JSON [cite: 84]
+        // 🚨 绝对防御：解析失败直接注入兜底 JSON
         intel = { 
           verdict: { 
             cn: "AI 输出格式畸形，已启用物理层容灾截断。", 
