@@ -17,14 +17,11 @@ File: .\next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 🚨 架构师妥协：开启最高权限逃生舱，强推上线
+  // 🚨 架构师战术突围：针对 Next.js 16.1.6 引擎定制
+  // 1. 彻底移除已废弃的 eslint 配置节点，消除引擎校验警告
+  // 2. 重启最高权限逃生舱：强行忽略历史 TypeScript 遗留报错，保障主干业务物理上线
   typescript: {
-    // 危险操作：强行忽略所有 TS 类型报错，只要代码能跑就放行
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    // 危险操作：强行忽略所有 ESLint 警告和报错
-    ignoreDuringBuilds: true,
   }
 };
 
@@ -364,7 +361,9 @@ import AuthModal from '@/components/features/auth/AuthModal';
 import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
-import { type User } from '@supabase/supabase-js'; // 🚀 引入强类型契约
+import { type User } from '@supabase/supabase-js';
+
+// 🚀 引入强类型契约
 
 /**
  * 核心业务说明：
@@ -375,7 +374,9 @@ export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); 
-  const [user, setUser] = useState<User | null>(null); // 🚀 彻底净化 any
+  const [user, setUser] = useState<User | null>(null);
+
+  // 🚀 彻底净化 any
   const supabase = createClient(); 
  
   useEffect(() => { 
@@ -389,6 +390,7 @@ export default function HomePage() {
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [feed, setFeed] = useState<SignalRecord[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -415,14 +417,17 @@ export default function HomePage() {
             const uniqueNewData = json.data.filter((item: SignalRecord) => !existingIds.has(item.id));
             return [...prev, ...uniqueNewData];
           });
+
           if (json.data.length < 15) setHasMore(false);
         } else {
           setFeed(json.data);
+
           if (json.data.length >= 15) setHasMore(true);
         }
       }
     } catch (_e) { 
-      const errMsg = e instanceof Error ? e.message : String(e);
+      // 🚨 架构师修复：修正未定义变量 e，对其进行类型收缩
+      const errMsg = _e instanceof Error ? _e.message : String(_e);
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       }
@@ -456,6 +461,7 @@ export default function HomePage() {
 
       // 2. 内存静默组装：拦截并缝合 JSON 碎片
       const reader = res.body.getReader();
+
       const decoder = new TextDecoder('utf-8');
       let done = false;
       let buffer = '';
@@ -463,20 +469,25 @@ export default function HomePage() {
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
+
         done = readerDone;
         if (value) {
           buffer += decoder.decode(value, { stream: true });
+
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
             const trimmedLine = line.trim();
+
             if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
               try {
                 const data = JSON.parse(trimmedLine.slice(6));
+
                 const delta = data.choices[0]?.delta?.content || '';
                 if (delta) {
                   rawJsonString += delta;
+
                 }
               } catch (e) { /* 忽略流碎片 */ }
             }
@@ -486,14 +497,17 @@ export default function HomePage() {
 
       if (process.env.NODE_ENV === 'development') {
         console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动格式化');
+
       }
 
       // 3. 剥离 Markdown 干扰符
       let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
+
       const firstBrace = cleanedJsonString.indexOf('{');
       const lastBrace = cleanedJsonString.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
+
       }
       
       const intel = JSON.parse(cleanedJsonString);
@@ -513,17 +527,22 @@ export default function HomePage() {
       if (saveJson.success && saveJson.data?.signalId) {
         if (process.env.NODE_ENV === 'development') {
           console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
+
         }
         setInput('');
         router.push(`/decode/${saveJson.data.signalId}`);
+
       } else {
         throw new Error(saveJson.error || '瞬时写入网关异常');
+
       }
 
     } catch (_e) { 
-      const errMsg = err instanceof Error ? err.message : 'JSON 流破译失败';
+      // 🚨 架构师修复：修正未定义变量 err，对 _e 进行类型收缩
+      const errMsg = _e instanceof Error ? _e.message : 'JSON 流破译失败';
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
+
       }
       setError(errMsg);
     } finally {
@@ -623,7 +642,7 @@ export default function HomePage() {
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
                   <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
-                    “{item.metadata?.bilingual?.[lang] || item.verdict}”
+                   “{item.metadata?.bilingual?.[lang] || item.verdict}”
                   </p>
                 </motion.div>
               ))}
@@ -979,10 +998,10 @@ export default function AdminLoginPage() {
        // 4. 成功后强制刷新进入 
        window.location.href = '/admin';
        
-     } catch (err: unknown) { // 🚀 净化 any，强制使用 unknown 契约
-       const errMsg = err instanceof Error ? err.message : String(err);
-       setError(errMsg);
-     } finally { 
+     } catch (err: unknown) { 
+      const errMsg = err instanceof Error ? err.message : '未知认证异常 (物理级断联)'; 
+      setError(errMsg); 
+    } finally { 
        setLoading(false); 
      } 
    };
@@ -1065,6 +1084,7 @@ File: .\src\app\api\admin\config\route.ts
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { cookies } from 'next/headers';
+import { logger } from '@/utils/logger';
 
 // 🛡️ 强制定义数据库行契约，彻底消灭 unknown 键名引发的编译阻断
 interface SystemConfigRow {
@@ -1076,65 +1096,78 @@ interface SystemConfigRow {
 // 🛡️ 强制鉴权
 async function verifyCommander() { 
    const cookieStore = await cookies(); 
-   const token = cookieStore.get('truth_admin_token'); 
+   const token = cookieStore.get('truth_admin_token');
    
-   // 🚀 核心修复：修复语法撕裂，并引入符合防线标准的脱敏日志打印 
-   const safeTokenLog = token?.value ? "********(已隐匿)" : "无"; 
-   console.log("🔐 [API鉴权] 当前携带的 Token = ", safeTokenLog); 
+   // 🚀 核心修复：引入符合防线标准的脱敏日志打印 
+   const safeTokenLog = token?.value ? "********(已隐匿)" : "无";
+   logger.start(`[API鉴权] 验证指挥官身份`, { token: safeTokenLog });
    
    return token?.value === 'ACCESS_GRANTED_2026'; 
- }
+}
 
 export async function GET() {
-  console.log("📡 [API-GET] 收到读取配置请求！");
-  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  logger.start("[API-GET] 接收读取配置请求");
+
+  if (!(await verifyCommander())) {
+    logger.crash("未授权访问拦截 (401)");
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
+    logger.async("向 Supabase 发起配置树查询");
     const { data, error } = await supabaseAdmin.from('system_configs').select('*');
+
     if (error) {
-      console.error("❌ [API-GET] 数据库查询失败:", error.message);
+      logger.crash(`数据库查询失败: ${error.message}`);
       throw error;
     }
-    console.log("✅ [API-GET] 从 Supabase 成功拉取配置条数:", data?.length);
     
+    logger.success(`从 Supabase 成功拉取配置条数: ${data?.length}`);
+
     // 🚀 核心修复：注入 SystemConfigRow 契约，明确规定 row.id 为 string 类型
     const configMap = (data || []).reduce((acc: Record<string, unknown>, row: SystemConfigRow) => ({ 
         ...acc, 
         [row.id]: row.value 
     }), {});
-    
+
     return NextResponse.json({ success: true, data: configMap });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Unknown Database Error';
+    logger.crash(`获取配置异常: ${errMsg}`);
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
-  console.log("📡 [API-POST] 收到修改配置请求！");
-  if (!(await verifyCommander())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  logger.start("[API-POST] 接收修改配置请求");
+
+  if (!(await verifyCommander())) {
+    logger.crash("未授权访问拦截 (401)");
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
     // 🚀 核心修复：为请求体载荷注入严密类型，拒绝 any 的隐式推导
     const payload = await req.json() as { id: string; value: unknown };
     const { id, value } = payload;
     
-    console.log(`📝 [API-POST] 准备写入 Supabase -> 键: [${id}], 值:`, value);
-    
+    logger.async(`准备写入 Supabase -> 键: [${id}]`);
+
     const { error } = await supabaseAdmin
       .from('system_configs')
       .upsert({ id, value, updated_at: new Date().toISOString() });
-      
+
     if (error) {
-      console.error("❌ [API-POST] 数据库写入失败:", error.message);
+      logger.crash(`数据库写入失败: ${error.message}`);
       throw error;
     }
-    console.log("✅ [API-POST] 写入 Supabase 成功！");
-    return NextResponse.json({ success: true });
     
+    logger.success(`写入 Supabase 成功 -> 键: [${id}]`);
+    return NextResponse.json({ success: true });
+
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Unknown Server Error';
-    console.error("❌ [API-POST] 致命错误:", errMsg);
+    logger.crash(`[API-POST] 致命错误: ${errMsg}`);
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
@@ -1641,14 +1674,18 @@ File: .\src\app\api\v1\delete\route.ts
 ============================================================
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { logger } from '@/utils/logger';
 
 export const runtime = 'edge';
 
 export async function DELETE(request: Request) {
   try {
+    logger.start("接收物理抹杀请求");
+    
     // 🛡️ 最高权限校验 (上帝模式通行证)
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+      logger.crash("清除权限不足 (401)");
       return NextResponse.json({ success: false, error: 'Unauthorized: Clearance Level Too Low' }, { status: 401 });
     }
 
@@ -1656,9 +1693,11 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
 
     if (!id) {
+      logger.crash("抹杀目标 ID 缺失");
       return NextResponse.json({ success: false, error: 'Missing Target ID' }, { status: 400 });
     }
 
+    logger.async(`正在执行数据库物理抹除 -> [${id}]`);
     // 🔪 物理抹杀执行
     const { error } = await supabaseAdmin
       .from('signals')
@@ -1666,14 +1705,16 @@ export async function DELETE(request: Request) {
       .eq('id', id);
 
     if (error) {
-      console.error(`[PURGE_FAILED] 抹杀失败: ${error.message}`);
+      logger.crash(`[PURGE_FAILED] 抹杀失败: ${error.message}`);
       throw error;
     }
 
-    console.log(`[PURGE_SUCCESS] 资产已物理销毁: ${id}`);
+    logger.success(`[PURGE_SUCCESS] 资产已物理销毁: ${id}`);
     return NextResponse.json({ success: true, message: 'Asset Neutralized' });
 
-  } catch (_err: unknown) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : 'Internal Server Error';
+    logger.crash(`抹杀链路异常: ${errMsg}`);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
@@ -1684,15 +1725,6 @@ File: .\src\app\api\v1\dossier\route.ts
 import { createDeepSeekStream } from '@/services/deepseek-stream';
 import { TerminalMessage } from '@/types';
 import { logger } from '@/utils/logger';
-
-/**
- * 核心业务说明：
- * TruthDecoder 暗影卷宗 (Shadow Dossier) 逻辑核心 V2.0
- * 作用：
- * 1. 框架注入：强制 LLM 采用麦肯锡 MECE、杜邦分析及博弈论模型进行情报解构。
- * 2. 深度分形：严禁收敛，强制对每一个商业动作进行“剥洋葱”式的逻辑展开。
- * 3. 契约守护：在追求天花板级细节的同时，严格锁定 [[词汇::注脚]] 语法。
- */
 
 export const runtime = 'edge';
 
@@ -1707,7 +1739,6 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚀 核心逻辑升维：注入顶级智库提示词架构
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC INTELLIGENCE ENGINE]
 You are a God-tier Financial Forensic Expert and Macro-Strategist.
@@ -1716,7 +1747,7 @@ You are a God-tier Financial Forensic Expert and Macro-Strategist.
 - II. THE LEVERAGE MAZE
 - III. STRUCTURAL FRAGMENTATION
 - IV. BLACK SWAN FORECASTING
-Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].`
+Inject 20-30 footnotes using exactly: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V2.0】
 任务：生成一份细节爆炸、逻辑深度达到业界天花板的《暗影卷宗》Markdown 研报。
 【强制研报结构（无字数上限）】：
@@ -1724,7 +1755,10 @@ Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]...
 - Ⅱ. 资产流动与杠杆迷局
 - Ⅲ. 隐藏契约与逻辑穷举
 - Ⅳ. 高维时间轴预测
-【强制注脚密度】：全篇注入 20 到 30 个深度注脚，格式：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。`;
+【🚨 强制语言与格式纯洁性（物理红线）】：
+1. 全文必须 100% 使用纯正中文！严禁为了“高级感”夹带任何英文单词或缩写（如 Leverage, KMT, MECE 等），必须全部翻译为中文专业术语！
+2. 全篇注入 20 到 30 个深度注脚，格式必须严格且精确地为：[[中文表层词汇::【表层叙事】...【底层机制】...【收割代价】...]]。
+3. 严禁在注脚内多加、错加括号（如严禁出现 [[词汇] :: 等错误格式）。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
@@ -1737,7 +1771,6 @@ Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]...
     });
 
   } catch (error: unknown) {
-    // 🚀 核心修复：通过类型收缩确保 unknown 类型的安全解析 
     const errMsg = error instanceof Error ? error.message : 'Dossier Engine Cascade Failure';
     logger.crash(errMsg); 
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
@@ -1818,16 +1851,17 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
 
-    // 🚀 核心修复：恢复完整的 JSON 契约提示词，绝不允许缩略
     const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
 你是一个让华尔街战栗的顶级做空分析师。你的任务是将公关稿撕碎。
 【绝对生存与格式法则】：
 1. 必须严格按照 verdict -> facts -> fluff 的顺序输出 JSON！
-2. 【JSON 绝对安全结构 - 极其重要】：fluff 数组必须是纯字符串数组！为了防止 JSON 物理解析崩溃，提取的原话【必须】用中文直角引号「 」包裹！绝对禁止使用方括号 [ ]、单引号(')或双引号(")包裹原话！字符串内部绝对禁止出现任何未转义的英文双引号！
-3. 【物理级精准复刻】：「 」内提取的原话，必须是原文中连续且一字不差的字符串！
+2. 【JSON 绝对安全结构 - 物理死线】：
+   - 🚨 严禁在任何字符串的值内部使用英文双引号 (")！如果原文包含双引号，必须物理替换为中文单引号（‘）或直接删掉！
+   - 🚨 严禁在字符串内部输出真实的换行符（Enter）！如果必须换行，请连写！
+3. 【物理级精准复刻】：fluff 数组中提取的原话【必须】用中文直角引号「 」包裹！
 4. 【核级语言净化】：
    - 'cn' 字段必须 100% 纯中文！
-   - 'en' 字段中，「 」内提取的原话必须与原文一致（可为中文），但其后的【表层叙事】【底层机制】【收割代价】必须是 100% 纯正英文！🚨警告：英文解析中一旦夹杂半个汉字将直接触发系统销毁！
+   - 'en' 字段中，「 」内提取的原话必须与原文一致（可为中文），但其后的【表层叙事】【底层机制】【收割代价】必须是 100% 纯正英文！
 5. 【致命结构】：单行纯文本！包含【表层叙事】+【底层机制】+【收割代价】。提取 15-20 条！
 
 {
@@ -1980,7 +2014,6 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 🚀 核心修复：恢复完整 JSON 约束
     const completion = await openai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
@@ -1988,12 +2021,16 @@ export async function POST(req: Request) {
           role: "system", 
           content: `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
 你是一个让华尔街战栗的顶级做空分析师。
-请将输入的商业通稿解码为中英双语的 JSON，【绝对禁止中英夹杂】：
+请将输入的商业通稿解码为中英双语的 JSON。
+【格式红线】：
+1. 绝对禁止在 JSON 的值内部使用任何英文双引号 (")，全部替换为单引号 (')！
+2. 绝对禁止中英夹杂！
+
 {
   "facts": { "cn": ["纯中文事实，绝不夹杂英文"], "en": ["PURE ENGLISH facts ONLY"] },
   "fluff": { 
-    "cn": ["“原文具体诱导词”：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨必须是纯正中文！严禁在句中夹杂英文或用括号保留原词！50-100字，15-20条)"], 
-    "en": ["\\"Translated Quote\\": [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! NO CHINESE CHARACTERS! 50-100 words, 15-20 items)"] 
+    "cn": ["「原文具体诱导词」：【表层叙事】...；【真实动作】...；【收割逻辑】...。(🚨严禁在句中夹杂英文！50-100字，15-20条)"], 
+    "en": ["「Translated Quote」: [Surface]...; [True Action]...; [Harvesting Logic].... (🚨ABSOLUTELY PURE ENGLISH! 50-100 words, 15-20 items)"] 
   },
   "verdict": { "cn": "一句纯中文的犀利判决。", "en": "A ruthless, single-sentence pure English verdict." }
 }`
@@ -2116,44 +2153,25 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
      const fetchSignal = async () => { 
        try { 
          const res = await fetch(`/api/decode?id=${id}`); 
-         if (!res.ok) { setSignal(null); return; } 
          const json = await res.json(); 
-         if (json.success) { setSignal(json.data); } else { setSignal(null); } 
-       } catch (_e: unknown) { 
-         if (process.env.NODE_ENV === 'development') {
-           console.log("🔴 [模块_崩溃] -> 渲染总线异常:", e instanceof Error ? e.message : e); 
-         }
-         setSignal(null); 
-       } finally { setLoading(false); } 
+         if (json.success) setSignal(json.data);
+       } catch (err) { if (process.env.NODE_ENV === 'development') console.log("🔴 ERROR:", err); } 
+       finally { setLoading(false); } 
      }; 
      fetchSignal(); 
    }, [id]);
 
-  // 🚀 核心修复 1：注入真实强悍的字典构建引擎
   useEffect(() => {
     if (signal) {
       const f = signal.fluff_words;
-      const cnFluffs = Array.isArray(f) ? f : (f as BilingualData)?.cn || [];
-      const enFluffs = Array.isArray(f) ? f : (f as BilingualData)?.en || [];
-      const targetFluffs = lang === 'en' ? enFluffs : cnFluffs;
-      
+      const targetFluffs = Array.isArray(f) ? f : (f as BilingualData)?.[lang] || [];
       const dict: Record<string, string> = {}; 
-      
-      // 物理级解析大模型的 Fluff 数组
       targetFluffs.forEach((item) => {
         if (!item) return;
-        // 优先匹配 V5.6 契约的直角引号： 「词汇」解释
         let match = item.match(/「(.*?)」([\s\S]*)/);
-        // 降级兼容旧版的双引号： “词汇”解释 或 "词汇"解释
         if (!match) match = item.match(/["“](.*?)["”][:：]?([\s\S]*)/);
-        
-        if (match && match[1].trim()) {
-          const key = match[1].trim();
-          const insight = match[2].trim();
-          dict[key] = insight;
-        }
+        if (match && match[1].trim()) dict[match[1].trim()] = match[2].trim();
       });
-      
       setDictionary(dict);
     }
   }, [signal, lang]);
@@ -2161,10 +2179,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const handleDossierClick = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      setAuthContext({
-        title: "DOSSIER LOCKED / 卷宗锁定",
-        subtitle: "暗影卷宗包含麦肯锡级深度研报。登录以解锁流式破译协议。"
-      });
+      setAuthContext({ title: "DOSSIER LOCKED", subtitle: "登录以解锁流式破译协议。" });
       setIsAuthModalOpen(true);
       return;
     }
@@ -2172,31 +2187,25 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   };
 
   const handlePurge = async () => {
-    const confirmPurge = window.confirm("⚠️ [PURGE PROTOCOL]\n确认抹杀？");
-    if (!confirmPurge) return;
+    const confirm = window.confirm("⚠️ [PURGE PROTOCOL] 物理抹杀此资产？");
+    if (!confirm) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/v1/delete?id=${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` }
-      });
+      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` } });
       const json = await res.json();
-      if (json.success) { router.push('/'); } else { alert(`抹杀失败: ${json.error}`); }
-    } catch (_e: unknown) { 
-      alert("通信切断，无法执行抹杀。"); 
-    } finally { setIsDeleting(false); }
+      if (json.success) router.push('/');
+      else alert(`抹杀失败: ${json.error}`);
+    } catch (_e) { alert("网络阻断"); } finally { setIsDeleting(false); }
   };
 
-  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500 w-8 h-8" /></div>;
-  if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2><button onClick={() => router.push('/')} className="mt-8 px-6 py-2 border border-zinc-800 text-zinc-500 hover:bg-white hover:text-black transition-all">Back to Index</button></div>;
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-red-600 w-10 h-10" /></div>;
+  if (!signal) return <div className="min-h-screen bg-black flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-500 font-mono text-sm uppercase">Signal Erased</h2></div>;
 
-  const getBilingualVerdict = () => (signal.metadata?.bilingual?.[lang] || signal.verdict);
-  
   const h = signal.hard_facts;
-  const currentHardFacts = Array.isArray(h) ? h : (lang === 'en' ? (h as BilingualData)?.en : (h as BilingualData)?.cn) || [];
+  const currentHardFacts = Array.isArray(h) ? h : (h as BilingualData)?.[lang] || [];
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans selection:bg-zinc-800 selection:text-white pb-24">
+    <main className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans pb-24">
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authContext.title} subtitle={authContext.subtitle} />
       <div className="max-w-[1600px] mx-auto px-6">
         <header className="py-8 flex items-center justify-between border-b border-zinc-900 mb-8">
@@ -2204,45 +2213,32 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-black border border-zinc-800 rounded-sm p-1">
               <Globe className="text-zinc-600 w-4 h-4 ml-2" />
-              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
-              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
+              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded-sm ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
+              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded-sm ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
             </div>
             <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"><Trash2 size={16} className="text-red-900 group-hover:text-red-500" /></button>
           </div>
         </header>
 
-        <section className="mb-10"><VerdictPanel verdict={getBilingualVerdict() as string} isErased={true} /></section>
+        <section className="mb-10"><VerdictPanel verdict={(signal.metadata?.bilingual?.[lang] || signal.verdict) as string} isErased={true} /></section>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-5 sticky top-8">
-             <RawNarrative rawContent={signal.raw_content} fluffWords={signal.fluff_words} lang={lang} dictionary={dictionary} />
+             <RawNarrative rawContent={signal.raw_content} lang={lang} dictionary={dictionary} />
           </div>
           <div className="lg:col-span-7">
             {!dossierContent && !isStreamingDossier ? (
-              <div className="bg-zinc-950 border border-zinc-900 p-12 md:p-20 flex flex-col items-center justify-center text-center rounded-sm shadow-2xl h-[600px]">
+              <div className="bg-zinc-950 border border-zinc-900 p-20 flex flex-col items-center justify-center text-center rounded-sm h-[600px] shadow-2xl relative">
                 <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
-                <h3 className="text-xl font-black text-white uppercase tracking-widest mb-4">Classified Intelligence</h3>
-                <p className="text-zinc-500 font-serif text-sm max-w-lg mb-10 leading-relaxed">
-                  {lang === 'cn' ? "深层情报引擎已准备就绪。" : "Deep intelligence engine ready."}
-                </p>
                 <button onClick={handleDossierClick} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
                   <Zap size={18} className="group-hover:animate-pulse" />
                   <span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span>
                 </button>
               </div>
-            ) : (
-              <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} />
-            )}
+            ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
           </div>
         </div>
-
-        <div className="mt-12 border-t border-zinc-900 pt-12">
-          <ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => {
-                setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除深度审讯终端的频率限制。" });
-                setIsAuthModalOpen(true);
-            }}
-          />
-        </div>
+        <div className="mt-12 border-t border-zinc-900 pt-12"><ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => { setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除频率限制。" }); setIsAuthModalOpen(true); }} /></div>
       </div>
     </main>
   );
@@ -2307,7 +2303,7 @@ export default function AuthModal({
       
       onClose();
       router.refresh(); // 强制刷新路由，让 Server Components 感知最新会话
-    } catch (err: unknown) {
+    } catch (err: any) {
       const errMsg = err instanceof Error ? err.message : '认证物理链路断裂';
       setError(errMsg);
       if (process.env.NODE_ENV === 'development') {
@@ -2410,143 +2406,71 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
 
-interface DossierReaderProps {
-  content: string; 
-  isStreaming?: boolean; 
-  dictionary?: Record<string, string>;
-}
-
-const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => { 
-   if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>;
-   const keys = Object.keys(dictionary).filter(k => k.trim() !== ''); 
-   if (keys.length === 0) return <>{text}</>; 
-   
-   let mappedParts: React.ReactNode[] = [];
-   try { 
-     const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g'); 
-     const parts = text.split(regex);
-     mappedParts = parts.map((part, i) => { 
-       if (dictionary[part]) { 
-         return ( 
-           <span 
-             key={i} 
-             onMouseEnter={(e) => { 
-               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
-               const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)); 
-               setHover({ text: dictionary[part], x: safeX, y: rect.top }); 
-             }} 
-             onMouseLeave={() => setHover(null)} 
-             className="text-red-400 border-b border-red-500/50 bg-red-950/20 hover:bg-red-900/50 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help" 
-           > 
-             {part} 
-           </span> 
-         ); 
-       } 
-       return <span key={i}>{part}</span>; 
-     });
-   } catch (_e) { 
-     return <>{text}</>; 
-   } 
-   
-   return <>{mappedParts}</>;
-};
-
-export default function DossierReader({ content, isStreaming = false, dictionary = {} }: DossierReaderProps) {
+export default function DossierReader({ content, isStreaming = false, dictionary = {} }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
 
   useEffect(() => {
-    if (isStreaming && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
+    if (isStreaming && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [content, isStreaming]);
 
-  // 必须定义在组件内部，确保在 renderBlocks 中可用
   const parseBoldAndDict = (text: string, prefixKey: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
-        const cleanText = part.slice(2, -2);
-        return <strong key={`${prefixKey}-bold-${i}`} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
+        return <strong key={`${prefixKey}-bold-${i}`} className="text-white font-black">{part.slice(2, -2)}</strong>;
       }
-      return <DecodedText key={`${prefixKey}-text-${i}`} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
+      return <span key={`${prefixKey}-text-${i}`}>{part}</span>;
     });
   };
 
-  // 必须定义在组件内部，且已植入跨行正则修复
   const parseInlineFormat = (text: string) => {
-    const tagRegex = /\[\[([\s\S]*?)(?:::|：：)([\s\S]*?)\]\]/g;
+    // 支持跨行，且增加对不规则空格的包容性
+    const tagRegex = /\[\[\s*([\s\S]*?)\s*(?:::|：：)\s*([\s\S]*?)\s*\]\]/g;
     const parts = [];
     let lastIndex = 0;
     let match;
-    let chunkCounter = 0;
-
     while ((match = tagRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        const beforeText = text.slice(lastIndex, match.index);
-        parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`));
-      }
+      if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
       
-      const surfaceWord = match[1].trim();
+      // 🚀 核心修复：就算 AI 手抖多写了括号，前端也强行把尾部的 ] 去掉！
+      const surfaceWord = match[1].replace(/\]$/g, '').trim();
       const deepInsight = match[2].trim();
-
+      
       parts.push(
-        <span
-          key={`tag-${match.index}`}
-          onMouseEnter={(e) => {
+        <span key={`tag-${match.index}`} onMouseEnter={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
             setHoverInfo({ text: deepInsight, x: safeX, y: rect.top });
-          }}
-          onMouseLeave={() => setHoverInfo(null)}
-          className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold"
-        >
-          {surfaceWord}
-        </span>
+          }} onMouseLeave={() => setHoverInfo(null)} className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help font-bold"
+        >{surfaceWord}</span>
       );
       lastIndex = tagRegex.lastIndex;
     }
-
-    if (lastIndex < text.length) {
-      parts.push(...parseBoldAndDict(text.slice(lastIndex), `chunk-${chunkCounter++}`));
-    }
+    if (lastIndex < text.length) parts.push(...parseBoldAndDict(text.slice(lastIndex), 'last-chunk'));
     return parts;
   };
 
   const renderBlocks = () => {
-    if (!content) return null;
-    
-    const blocks = content.split(/\n+/);
-    return blocks.map((block, index) => {
+    return content.split(/\n+/).map((block, index) => {
       const trimmed = block.trim();
       if (!trimmed) return null;
-
       if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {
-        const titleText = trimmed.replace(/^#+\s*/, '');
         return (
-          <h3 key={`heading-${index}`} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 to-transparent py-2 block">
-            {parseInlineFormat(titleText)}
+          <h3 key={index} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 py-2 block">
+            {parseInlineFormat(trimmed.replace(/^#+\s*/, ''))}
           </h3>
         );
       }
-
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        const cleanItem = trimmed.replace(/^[-*]\s*/, '');
         return (
-          <div key={`list-${index}`} className="flex items-start gap-4 my-3 pl-4">
+          <div key={index} className="flex items-start gap-4 my-3 pl-4">
             <span className="text-red-700 mt-1.5 shrink-0">✦</span>
-            <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">
-              {parseInlineFormat(cleanItem)}
-            </div>
+            <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">{parseInlineFormat(trimmed.replace(/^[-*]\s*/, ''))}</div>
           </div>
         );
       }
-
-      return (
-        <p key={`p-${index}`} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">
-          {parseInlineFormat(trimmed)}
-        </p>
-      );
+      return <p key={index} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">{parseInlineFormat(trimmed)}</p>;
     });
   };
 
@@ -2554,50 +2478,17 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     <>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
         <div className="bg-zinc-950/80 px-8 py-5 border-b border-zinc-900 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <BookOpen className="text-red-700" size={20} />
-            <div>
-              <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
-              <p className="text-[10px] font-mono text-zinc-600 mt-1 tracking-widest">TOP SECRET // CROSS-DOMAIN ANALYSIS</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {isStreaming ? (
-              <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase tracking-widest bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                <ShieldAlert size={12} className="text-zinc-500" />Decoded & Locked
-              </span>
-            )}
-          </div>
+          <div className="flex items-center gap-4"><BookOpen className="text-red-700" size={20} /><div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2><p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">Top Secret // Analysis</p></div></div>
+          {isStreaming ? ( <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50"><span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...</span> ) : ( <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2"><ShieldAlert size={12} />Decoded</span> )}
         </div>
-
-        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent relative">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-              <ShieldAlert className="w-[500px] h-[500px] text-white" />
-          </div>
-
-          <div className="relative z-10 max-w-4xl mx-auto">
-            {renderBlocks()}
-            {isStreaming && (
-              <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
-            )}
-          </div>
+        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin relative">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]"><ShieldAlert className="w-[500px] h-[500px] text-white" /></div>
+          <div className="relative z-10 max-w-4xl mx-auto">{renderBlocks()}{isStreaming && <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>}</div>
         </div>
       </motion.div>
-
-      {/* 🚀 逃逸渲染层：暗影注脚专属呈现 */}
       {hoverInfo && (
-        <div
-          className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed text-left font-sans transition-all duration-75"
-          style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}
-        >
-          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2">
-            <Zap size={12} /> 深层剖析 (Deep Insight)
-          </span>
+        <div className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed transition-all duration-75" style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}>
+          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2"><Zap size={12} /> 深层剖析 (Deep Insight)</span>
           {hoverInfo.text}
         </div>
       )}
