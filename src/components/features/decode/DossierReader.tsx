@@ -3,194 +3,70 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
 
-interface DossierReaderProps {
-  content: string; 
-  isStreaming?: boolean; 
-  dictionary?: Record<string, string>;
-}
-
-const DecodedText = ({ text, dictionary, setHover }: { text: string, dictionary?: Record<string, string>, setHover: (info: {text: string, x: number, y: number} | null) => void }) => { 
-   if (!dictionary || Object.keys(dictionary).length === 0) return <>{text}</>;
-   const keys = Object.keys(dictionary).filter(k => k.trim() !== ''); 
-   if (keys.length === 0) return <>{text}</>; 
-   
-   let mappedParts: React.ReactNode[] = [];
-   try { 
-     const regex = new RegExp(`(${keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g'); 
-     const parts = text.split(regex);
-     mappedParts = parts.map((part, i) => { 
-       if (dictionary[part]) { 
-         return ( 
-           <span 
-             key={i} 
-             onMouseEnter={(e) => { 
-               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
-               const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)); 
-               setHover({ text: dictionary[part], x: safeX, y: rect.top }); 
-             }} 
-             onMouseLeave={() => setHover(null)} 
-             className="text-red-400 border-b border-red-500/50 bg-red-950/20 hover:bg-red-900/50 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help" 
-           > 
-             {part} 
-           </span> 
-         ); 
-       } 
-       return <span key={i}>{part}</span>; 
-     });
-   } catch (_e) { 
-     return <>{text}</>; 
-   } 
-   
-   return <>{mappedParts}</>;
-};
-
-export default function DossierReader({ content, isStreaming = false, dictionary = {} }: DossierReaderProps) {
+export default function DossierReader({ content, isStreaming = false, dictionary = {} }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
 
   useEffect(() => {
-    if (isStreaming && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
+    if (isStreaming && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [content, isStreaming]);
 
-  // 必须定义在组件内部，确保在 renderBlocks 中可用
   const parseBoldAndDict = (text: string, prefixKey: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
         const cleanText = part.slice(2, -2);
-        return <strong key={`${prefixKey}-bold-${i}`} className="text-white font-black"><DecodedText text={cleanText} dictionary={dictionary} setHover={setHoverInfo} /></strong>;
+        return <strong key={`${prefixKey}-bold-${i}`} className="text-white font-black">{cleanText}</strong>;
       }
-      return <DecodedText key={`${prefixKey}-text-${i}`} text={part} dictionary={dictionary} setHover={setHoverInfo} />;
+      return <span key={`${prefixKey}-text-${i}`}>{part}</span>;
     });
   };
 
-  // 必须定义在组件内部，且已植入跨行正则修复
+  // 🚀 核心修复：采用跨行正则，解决内容过长导致的气泡结构撕裂
   const parseInlineFormat = (text: string) => {
     const tagRegex = /\[\[([\s\S]*?)(?:::|：：)([\s\S]*?)\]\]/g;
     const parts = [];
     let lastIndex = 0;
     let match;
-    let chunkCounter = 0;
-
     while ((match = tagRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        const beforeText = text.slice(lastIndex, match.index);
-        parts.push(...parseBoldAndDict(beforeText, `chunk-${chunkCounter++}`));
-      }
-      
+      if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
       const surfaceWord = match[1].trim();
       const deepInsight = match[2].trim();
-
       parts.push(
-        <span
-          key={`tag-${match.index}`}
-          onMouseEnter={(e) => {
+        <span key={`tag-${match.index}`} onMouseEnter={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
-            setHoverInfo({ text: deepInsight, x: safeX, y: rect.top });
-          }}
-          onMouseLeave={() => setHoverInfo(null)}
-          className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help shadow-[0_0_10px_rgba(220,38,38,0.2)] font-bold"
-        >
-          {surfaceWord}
-        </span>
+            setHoverInfo({ text: deepInsight, x: rect.left + rect.width / 2, y: rect.top });
+          }} onMouseLeave={() => setHoverInfo(null)} className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all px-1 rounded-sm cursor-help font-bold"
+        >{surfaceWord}</span>
       );
       lastIndex = tagRegex.lastIndex;
     }
-
-    if (lastIndex < text.length) {
-      parts.push(...parseBoldAndDict(text.slice(lastIndex), `chunk-${chunkCounter++}`));
-    }
+    if (lastIndex < text.length) parts.push(...parseBoldAndDict(text.slice(lastIndex), 'last-chunk'));
     return parts;
   };
 
   const renderBlocks = () => {
-    if (!content) return null;
-    
-    const blocks = content.split(/\n+/);
-    return blocks.map((block, index) => {
+    return content.split(/\n+/).map((block, index) => {
       const trimmed = block.trim();
       if (!trimmed) return null;
-
-      if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {
-        const titleText = trimmed.replace(/^#+\s*/, '');
-        return (
-          <h3 key={`heading-${index}`} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 to-transparent py-2 block">
-            {parseInlineFormat(titleText)}
-          </h3>
-        );
-      }
-
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        const cleanItem = trimmed.replace(/^[-*]\s*/, '');
-        return (
-          <div key={`list-${index}`} className="flex items-start gap-4 my-3 pl-4">
-            <span className="text-red-700 mt-1.5 shrink-0">✦</span>
-            <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">
-              {parseInlineFormat(cleanItem)}
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <p key={`p-${index}`} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">
-          {parseInlineFormat(trimmed)}
-        </p>
-      );
+      if (trimmed.startsWith('# ')) return <h3 key={index} className="text-xl font-black text-white mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 py-2">{parseInlineFormat(trimmed.replace(/^#+\s*/, ''))}</h3>;
+      return <p key={index} className="text-zinc-400 font-serif leading-[2] mb-6 text-justify">{parseInlineFormat(trimmed)}</p>;
     });
   };
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <div className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-2xl">
         <div className="bg-zinc-950/80 px-8 py-5 border-b border-zinc-900 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <BookOpen className="text-red-700" size={20} />
-            <div>
-              <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
-              <p className="text-[10px] font-mono text-zinc-600 mt-1 tracking-widest">TOP SECRET // CROSS-DOMAIN ANALYSIS</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {isStreaming ? (
-              <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase tracking-widest bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                <ShieldAlert size={12} className="text-zinc-500" />Decoded & Locked
-              </span>
-            )}
-          </div>
+          <div className="flex items-center gap-4"><BookOpen className="text-red-700" size={20} /><div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2></div></div>
         </div>
-
-        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent relative">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-              <ShieldAlert className="w-[500px] h-[500px] text-white" />
-          </div>
-
-          <div className="relative z-10 max-w-4xl mx-auto">
-            {renderBlocks()}
-            {isStreaming && (
-              <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
-            )}
-          </div>
+        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin relative">
+          <div className="relative z-10 max-w-4xl mx-auto">{renderBlocks()}{isStreaming && <span className="inline-block w-3 h-6 bg-red-700 animate-pulse ml-2" />}</div>
         </div>
-      </motion.div>
-
-      {/* 🚀 逃逸渲染层：暗影注脚专属呈现 */}
+      </div>
       {hoverInfo && (
-        <div
-          className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed text-left font-sans transition-all duration-75"
-          style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}
-        >
-          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2">
-            <Zap size={12} /> 深层剖析 (Deep Insight)
-          </span>
+        <div className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed" style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}>
+          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase font-bold border-b border-red-900/50 pb-2"><Zap size={12} /> 深层剖析</span>
           {hoverInfo.text}
         </div>
       )}

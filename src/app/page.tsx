@@ -8,11 +8,6 @@ import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 
-/**
- * 核心业务说明：
- * TruthDecoder 首页总线 V5.7 (增强容错版)。
- * 此次更新重点修复了 AI 流式输出中可能携带的非法换行符导致的 JSON 解析崩溃问题 [cite: 315-316]。
- */
 export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
@@ -22,11 +17,11 @@ export default function HomePage() {
  
   useEffect(() => { 
     const getUser = async () => { 
-      const { data: { user } } = await supabase.auth.getUser(); 
-      setUser(user); 
+      const { data: { user: currentUser } } = await supabase.auth.getUser(); 
+      setUser(currentUser); 
     }; 
     getUser(); 
-  }, [supabase.auth]);
+  }, []);
 
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,14 +31,11 @@ export default function HomePage() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    fetchFeed();
-  }, []);
+  useEffect(() => { fetchFeed(); }, []);
 
   const fetchFeed = async (isLoadMore = false) => {
     if (isLoadMore && isLoadingMore) return;
     if (isLoadMore) setIsLoadingMore(true);
-
     const cursor = isLoadMore && feed.length > 0 ? feed[feed.length - 1].created_at : '';
     try {
       const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}`);
@@ -61,10 +53,8 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (e: unknown) { 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', e instanceof Error ? e.message : String(e));
-      }
+    } catch (err: unknown) { 
+      if (process.env.NODE_ENV === 'development') console.log('🔴 [模块_崩溃] ->', err);
     } finally { 
       setIsLoadingMore(false); 
       setIsInitialLoading(false); 
@@ -75,25 +65,14 @@ export default function HomePage() {
     if (!input.trim() || isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
-
     try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
-      }
-
-      // 1. 发起流式请求
       const res = await fetch('/api/v1/ingest', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` },
         body: JSON.stringify({ rawContent: input })
       });
-
       if (!res.ok || !res.body) throw new Error('流式引擎连接被拒');
 
-      // 2. 内存静默组装：拦截并缝合 JSON 碎片
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let done = false;
@@ -107,82 +86,50 @@ export default function HomePage() {
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
-
           for (const line of lines) {
             const trimmedLine = line.trim();
             if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
               try {
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
-                if (delta) {
-                  rawJsonString += delta;
-                }
+                if (delta) rawJsonString += delta;
               } catch (e) { /* 忽略流碎片 */ }
             }
           }
         }
       }
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🟡 [模块_异步] -> 目标: 启动 JSON 物理洗涤，修复潜在语法断层');
-      }
-
-      // 3. 🚀 核心重构：加固型 JSON 清洗逻辑
-      let cleanedJsonString = rawJsonString
-        .replace(/```json/gi, '')
-        .replace(/```/g, '')
-        .trim();
-
+      // 🚀 核心修复：精准剥离 Markdown 并修复内部非法换行符，而不破坏结构换行符
+      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
       const firstBrace = cleanedJsonString.indexOf('{');
       const lastBrace = cleanedJsonString.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
+      if (firstBrace !== -1 && lastBrace !== -1) {
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
       }
       
-      // 🛡️ 物理防御：将 AI 误输出的真实换行符转义，防止 JSON.parse 崩溃
-      cleanedJsonString = cleanedJsonString.replace(/\n/g, '\\n');
-
+      // 仅在 JSON 解析失败时尝试暴力洗涤 (Lazy Washing)
       let intel;
       try {
         intel = JSON.parse(cleanedJsonString);
-      } catch (e: unknown) {
-        const parseErr = e instanceof Error ? e.message : 'Unknown';
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔴 [模块_崩溃] -> 原始坏死数据:', cleanedJsonString);
-        }
-        throw new Error(`引擎破译断层 (JSON Syntax Error): ${parseErr}`);
+      } catch (e) {
+        // 尝试修复字符串内部未转义的换行符：定位在引号之间但不是以逗号/括号结尾的换行
+        const repaired = cleanedJsonString.replace(/([^\s,\[\{\:])\n\s*([^\s"\]\}])/g, '$1\\n$2');
+        intel = JSON.parse(repaired);
       }
 
-      // 4. 闪电瞬时入库 (绕过所有超时检测) [cite: 60]
       const saveRes = await fetch('/api/v1/ingest/save', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` },
         body: JSON.stringify({ rawContent: input, intel })
       });
       const saveJson = await saveRes.json();
-
       if (saveJson.success && saveJson.data?.signalId) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
-        }
         setInput('');
         router.push(`/decode/${saveJson.data.signalId}`);
-      } else {
-        throw new Error(saveJson.error || '瞬时写入网关异常');
-      }
-
+      } else { throw new Error(saveJson.error || '写入失败'); }
     } catch (err: unknown) { 
-      const errMsg = err instanceof Error ? err.message : '破译链路未知崩塌';
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
-      }
-      setError(errMsg);
-    } finally {
-      setIsSubmitting(false);
-    }
+      setError(err instanceof Error ? err.message : '破译链路未知崩塌');
+    } finally { setIsSubmitting(false); }
   };
 
   return (
@@ -190,18 +137,15 @@ export default function HomePage() {
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       <div className="scanline" />
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* 左侧控制台 */}
         <div className="lg:col-span-7 space-y-8">
           <header className="flex items-center justify-between border-b-2 border-red-900/30 pb-6">
             <div className="flex items-center gap-5">
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.7 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.8 SECURE_GATE</p>
               </div>
             </div>
-            
             <div className="flex items-center gap-4">
               {user ? (
                 <div className="flex items-center gap-2 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950">
@@ -209,14 +153,8 @@ export default function HomePage() {
                   <span className="text-[10px] font-mono text-zinc-500 uppercase">Commander_Active</span>
                 </div>
               ) : (
-                <button
-                  onClick={() => setIsAuthModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1 border border-red-900/50 rounded-sm bg-red-950/20 text-red-500 hover:bg-red-900 hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest"
-                >
-                  <UserIcon size={12} /> Login
-                </button>
+                <button onClick={() => setIsAuthModalOpen(true)} className="flex items-center gap-2 px-3 py-1 border border-red-900/50 rounded-sm bg-red-950/20 text-red-500 hover:bg-red-900 hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest"><UserIcon size={12} /> Login</button>
               )}
-              
               <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-sm p-1">
                 <Globe className="text-zinc-600 w-4 h-4 ml-2" />
                 <button onClick={() => setLang('cn')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm ${lang === 'cn' ? 'bg-red-900/40 text-red-500' : 'text-zinc-500 hover:text-white'}`}>CN</button>
@@ -224,61 +162,27 @@ export default function HomePage() {
               </div>
             </div>
           </header>
-
           <section className="bg-zinc-950 border border-zinc-900 p-8 rounded-sm relative overflow-hidden group min-h-[600px] flex flex-col">
-            <textarea 
-              className="flex-1 w-full bg-black/30 border border-zinc-900 p-8 text-lg font-serif outline-none focus:border-red-900/50 transition-all resize-none mb-8 placeholder:text-zinc-800"
-              placeholder={lang === 'cn' ? "请在此粘贴长篇大论的官方通稿..." : "Paste the official narrative here..."}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isSubmitting}
-            />
-            
-            <button 
-              onClick={handleStart}
-              disabled={!input.trim() || isSubmitting}
-              className={`w-full py-8 text-xl font-black uppercase tracking-[0.5em] flex items-center justify-center gap-4 transition-all border ${
-                !input.trim() || isSubmitting ? 'bg-transparent border-zinc-900 text-zinc-800 cursor-not-allowed' : 'bg-red-950/20 border-red-900 text-red-500 hover:bg-red-900 hover:text-white'
-              }`}
-            >
+            <textarea className="flex-1 w-full bg-black/30 border border-zinc-900 p-8 text-lg font-serif outline-none focus:border-red-900/50 transition-all resize-none mb-8 placeholder:text-zinc-800" placeholder={lang === 'cn' ? "请在此粘贴通稿..." : "Paste narrative..."} value={input} onChange={(e) => setInput(e.target.value)} disabled={isSubmitting} />
+            <button onClick={handleStart} disabled={!input.trim() || isSubmitting} className={`w-full py-8 text-xl font-black uppercase tracking-[0.5em] flex items-center justify-center gap-4 transition-all border ${!input.trim() || isSubmitting ? 'bg-transparent border-zinc-900 text-zinc-800 cursor-not-allowed' : 'bg-red-950/20 border-red-900 text-red-500 hover:bg-red-900 hover:text-white'}`}>
               {isSubmitting ? <Loader2 className="animate-spin" /> : <Sparkles />}
               {isSubmitting ? 'Securing Intelligence...' : (lang === 'cn' ? '载入去伪存真引擎' : 'INITIALIZE ENGINE')}
             </button>
-
-            <AnimatePresence>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-6 p-5 bg-red-950/30 border border-red-900 flex items-start gap-4 rounded-sm"
-                >
-                  <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
-                  <div>
-                    <h4 className="text-[10px] font-mono text-red-500 uppercase tracking-widest mb-1.5 font-bold">System Fault / 引擎驳回</h4>
-                    <p className="text-sm text-red-400 font-mono leading-relaxed">{error}</p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <AnimatePresence>{error && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-6 p-5 bg-red-950/30 border border-red-900 flex items-start gap-4 rounded-sm">
+                <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                <div><h4 className="text-[10px] font-mono text-red-500 uppercase tracking-widest mb-1.5 font-bold">System Fault / 引擎驳回</h4><p className="text-sm text-red-400 font-mono leading-relaxed">{error}</p></div>
+              </motion.div>
+            )}</AnimatePresence>
           </section>
         </div>
-
-        {/* 右侧情报流 */}
         <div className="lg:col-span-5 flex flex-col bg-zinc-950/20 border-l border-zinc-900 p-6 h-[90vh]">
           <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-900">
             <AnimatePresence mode='popLayout'>
               {feed.map((item) => (
-                <motion.div 
-                  key={item.id}
-                  layout
-                  onClick={() => router.push(`/decode/${item.id}`)}
-                  className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]"
-                >
+                <motion.div key={item.id} layout onClick={() => router.push(`/decode/${item.id}`)} className="group relative bg-black border border-zinc-900 p-6 hover:border-red-900/50 transition-all cursor-pointer overflow-hidden active:scale-[0.98]">
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
-                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
-                    “{item.metadata?.bilingual?.[lang] || item.verdict}”
-                  </p>
+                  <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">“{item.metadata?.bilingual?.[lang] || item.verdict}”</p>
                 </motion.div>
               ))}
             </AnimatePresence>
