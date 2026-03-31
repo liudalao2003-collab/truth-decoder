@@ -54,7 +54,7 @@ export default function HomePage() {
         }
       }
     } catch (err: unknown) { 
-      console.log('🔴 [FEED_CRASH]:', err);
+      if (process.env.NODE_ENV === 'development') console.log('🔴 [FEED_CRASH]:', err);
     } finally { 
       setIsLoadingMore(false); 
       setIsInitialLoading(false); 
@@ -99,32 +99,30 @@ export default function HomePage() {
         }
       }
 
+      // 🚀 终极物理洗涤：剥离格式
       let cleaned = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
       const first = cleaned.indexOf('{');
       const last = cleaned.lastIndexOf('}');
-      if (first !== -1 && last !== -1) cleaned = cleaned.substring(first, last + 1);
+      if (first !== -1 && last !== -1) {
+        cleaned = cleaned.substring(first, last + 1);
+      }
       
+      // 🚀 核心战术：拍平物理换行符与非法双引号！
+      // 1. 把 JSON 字符串内部所有物理回车替换成空格，这是导致 position 错误的最大元凶！
+      cleaned = cleaned.replace(/[\r\n]+/g, ' ');
+      // 2. 如果 AI 在中文间使用了英文双引号，强行替换成单引号，防止截断
+      cleaned = cleaned.replace(/([\u4e00-\u9fa5])"([\u4e00-\u9fa5])/g, "$1'$2");
+
       let intel;
       try {
-        // 尝试解析大模型的输出
         intel = JSON.parse(cleaned);
       } catch (_e) {
-        // 🚨 终极核平防线：彻底解除日志屏蔽！无论是不是开发环境，只要 AI 犯蠢，立刻打印犯罪现场
-        console.error('==================================================');
-        console.error('🔴 致命解析错误：AI 输出了破坏 JSON 结构的非法字符');
+        console.error('🔴 致命解析错误：AI 输出了破坏 JSON 结构的极端乱码');
         console.error(cleaned);
-        console.error('==================================================');
-
-        // 🚨 强制兜底：绝对不弹红框卡死用户！构造一个强行放行的假数据
+        // 降级兜底方案
         intel = {
-          verdict: {
-            cn: "⚠️ 引擎遭遇非法字符入侵（如原文包含未转义的双引号），格式解析降级。完整坏死数据已打印至按 F12 的 Console 控制台中。",
-            en: "⚠️ Engine encountered illegal characters. Format degraded. Check F12 Console."
-          },
-          facts: {
-            cn: ["数据格式被破坏，已启用降级模式保护系统。"],
-            en: ["Data corrupted."]
-          },
+          verdict: { cn: "⚠️ 引擎遭遇极端字符入侵，格式解析降级。请尝试重新生成。", en: "⚠️ Format degraded." },
+          facts: { cn: ["数据格式被破坏，已启用降级模式保护系统。"], en: ["Data corrupted."] },
           fluff: { cn: [], en: [] }
         };
       }
@@ -154,7 +152,7 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.1 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.2 SECURE_GATE</p>
               </div>
             </div>
             <div className="flex items-center gap-4">

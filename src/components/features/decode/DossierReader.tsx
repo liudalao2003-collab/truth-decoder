@@ -22,14 +22,18 @@ export default function DossierReader({ content, isStreaming = false, dictionary
   };
 
   const parseInlineFormat = (text: string) => {
-    const tagRegex = /\[\[([\s\S]*?)(?:::|：：)([\s\S]*?)\]\]/g;
+    // 支持跨行，且增加对不规则空格的包容性
+    const tagRegex = /\[\[\s*([\s\S]*?)\s*(?:::|：：)\s*([\s\S]*?)\s*\]\]/g;
     const parts = [];
     let lastIndex = 0;
     let match;
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
-      const surfaceWord = match[1].trim();
+      
+      // 🚀 核心修复：就算 AI 手抖多写了括号，前端也强行把尾部的 ] 去掉！
+      const surfaceWord = match[1].replace(/\]$/g, '').trim();
       const deepInsight = match[2].trim();
+      
       parts.push(
         <span key={`tag-${match.index}`} onMouseEnter={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();

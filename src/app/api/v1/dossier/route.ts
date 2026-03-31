@@ -2,15 +2,6 @@ import { createDeepSeekStream } from '@/services/deepseek-stream';
 import { TerminalMessage } from '@/types';
 import { logger } from '@/utils/logger';
 
-/**
- * 核心业务说明：
- * TruthDecoder 暗影卷宗 (Shadow Dossier) 逻辑核心 V2.0
- * 作用：
- * 1. 框架注入：强制 LLM 采用麦肯锡 MECE、杜邦分析及博弈论模型进行情报解构。
- * 2. 深度分形：严禁收敛，强制对每一个商业动作进行“剥洋葱”式的逻辑展开。
- * 3. 契约守护：在追求天花板级细节的同时，严格锁定 [[词汇::注脚]] 语法。
- */
-
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
@@ -24,7 +15,6 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚀 核心逻辑升维：注入顶级智库提示词架构
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC INTELLIGENCE ENGINE]
 You are a God-tier Financial Forensic Expert and Macro-Strategist.
@@ -33,7 +23,7 @@ You are a God-tier Financial Forensic Expert and Macro-Strategist.
 - II. THE LEVERAGE MAZE
 - III. STRUCTURAL FRAGMENTATION
 - IV. BLACK SWAN FORECASTING
-Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].`
+Inject 20-30 footnotes using exactly: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V2.0】
 任务：生成一份细节爆炸、逻辑深度达到业界天花板的《暗影卷宗》Markdown 研报。
 【强制研报结构（无字数上限）】：
@@ -41,7 +31,10 @@ Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]...
 - Ⅱ. 资产流动与杠杆迷局
 - Ⅲ. 隐藏契约与逻辑穷举
 - Ⅳ. 高维时间轴预测
-【强制注脚密度】：全篇注入 20 到 30 个深度注脚，格式：[[表层原文::【表层叙事】...【底层机制】...【收割代价】...]]。`;
+【🚨 强制语言与格式纯洁性（物理红线）】：
+1. 全文必须 100% 使用纯正中文！严禁为了“高级感”夹带任何英文单词或缩写（如 Leverage, KMT, MECE 等），必须全部翻译为中文专业术语！
+2. 全篇注入 20 到 30 个深度注脚，格式必须严格且精确地为：[[中文表层词汇::【表层叙事】...【底层机制】...【收割代价】...]]。
+3. 严禁在注脚内多加、错加括号（如严禁出现 [[词汇] :: 等错误格式）。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
@@ -54,7 +47,6 @@ Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]...
     });
 
   } catch (error: unknown) {
-    // 🚀 核心修复：通过类型收缩确保 unknown 类型的安全解析 
     const errMsg = error instanceof Error ? error.message : 'Dossier Engine Cascade Failure';
     logger.crash(errMsg); 
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
