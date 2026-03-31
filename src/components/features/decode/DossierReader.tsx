@@ -27,10 +27,10 @@ export default function DossierReader({ content, isStreaming = false, dictionary
     const parts = [];
     let lastIndex = 0;
     let match;
+
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
       
-      // 🚀 核心修复：就算 AI 手抖多写了括号，前端也强行把尾部的 ] 去掉！
       const surfaceWord = match[1].replace(/\]$/g, '').trim();
       const deepInsight = match[2].trim();
       
@@ -49,7 +49,13 @@ export default function DossierReader({ content, isStreaming = false, dictionary
   };
 
   const renderBlocks = () => {
-    return content.split(/\n+/).map((block, index) => {
+    // 🚨 V6.5 渲染容灾抢救：大模型如果漏掉了 [[ ]]，但写了 词汇::【，前端自动为其补全双括号！
+    let safeContent = content;
+    safeContent = safeContent.replace(/(?<!\[)\[([^\[\]]+?(?:::|：：)[\s\S]+?)\](?!\])/g, '[[$1]]'); // 修复单括号 [词汇::解释] -> [[词汇::解释]]
+    // 修复完全没括号，直接 词汇::【解释】 的极端情况（针对图2死因）
+    safeContent = safeContent.replace(/([^\s\[]+?)(?:::|：：)(\s*[【\[][\s\S]+?(?:。|\]|\n\n))/g, '[[$1::$2]]');
+
+    return safeContent.split(/\n+/).map((block, index) => {
       const trimmed = block.trim();
       if (!trimmed) return null;
       if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {

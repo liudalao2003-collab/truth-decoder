@@ -15,36 +15,39 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师重构 V6.4：强制封杀所有系统自检、字数统计等大模型幻觉废话
+    // 🚨 架构师 V6.5 重构：物理防漏括号、防占位符、防中英混杂
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - STRATEGIC ENGINE]
 You are a God-tier Financial Forensic Expert.
 The user provides a source text in CHINESE. Analyze it and generate a massive "Shadow Dossier" ENTIRELY IN ENGLISH.
 
 [CRITICAL RULES]:
-1. 100% PURE ENGLISH: Your entire response MUST be in English. NO CHINESE ALLOWED.
-2. NO REPETITION: Do NOT repeat the same sentences. Generate diverse analysis.
+1. 100% PURE ENGLISH: Your entire response MUST be in English. NO CHINESE CHARACTERS ALLOWED anywhere.
+2. EXTREME DEPTH: Use highly professional financial, geopolitical, and structural terminology. NO colloquial language.
 3. [FORCED STRUCTURE]:
    - I. ANATOMY OF CORPORATE WILL
    - II. THE LEVERAGE MAZE
    - III. STRUCTURAL FRAGMENTATION
    - IV. BLACK SWAN FORECASTING
-4. [HIGH DENSITY FOOTNOTES]: Inject at least 15 unique footnotes using this EXACT format: [[EnglishConcept::[Surface]... [Hidden]... [Fallout]...]].
-5. 🚨 ABSOLUTELY NO META-COMMENTARY: NEVER output self-checks, task verifications, footnote counts, or system messages like "System Check". Output the DOSSIER ONLY.
-Output ONLY Markdown text.`
-      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V6.4】
+4. [HIGH DENSITY FOOTNOTES - STRICT SYNTAX]: Inject at least 15 unique footnotes using EXACTLY this format: [[EnglishTerm::[Surface Narrative] write real deep analysis here... [Hidden Mechanism] write real deep analysis here... [Strategic Fallout] write real deep analysis here...]].
+   🚨 FATAL WARNING 1: You MUST wrap EVERY footnote in DOUBLE BRACKETS [[ and ]]. Do not omit them!
+   🚨 FATAL WARNING 2: Do NOT output literal placeholders like "[Surface Narrative]". You MUST replace them with ACTUAL, highly detailed analysis (50+ words per footnote)!
+5. NO META-COMMENTARY: NEVER output self-checks or verifications. Output ONLY Markdown text.`
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V6.5】
 任务：生成一份细节爆炸的《暗影卷宗》Markdown 研报。
 【分形展开协议】：
-1. 绝对禁止总结！严禁无意义的复读机循环！
-【强制研报结构】：
-- Ⅰ. 权力构架与意志解剖
-- Ⅱ. 资产流动与杠杆迷局
-- Ⅲ. 隐藏契约与逻辑穷举
-- Ⅳ. 高维时间轴预测
-【🚨 绝对生存法则（物理红线）】：
-1. 全文必须 100% 使用纯正中文！
-2. 全篇必须高密度地注入至少 15 个深度注脚，格式：[[中文词汇::【表层叙事】...【底层机制】...【收割代价】...]]。
-3. 🚨 严禁自作聪明：绝对禁止在文末或任何地方输出“系统自检”、“注脚数量核查”、“任务达标情况”等进度汇报废话！只允许输出纯粹的分析正文！违者抹杀！`;
+1. 语言纯洁：全文必须 100% 使用纯正中文（极其专业的投行/做空研报语境），严禁口水话，严禁中英混杂！
+2. 强制研报结构：
+   - Ⅰ. 权力构架与意志解剖
+   - Ⅱ. 资产流动与杠杆迷局
+   - Ⅲ. 隐藏契约与逻辑穷举
+   - Ⅳ. 高维时间轴预测
+【🚨 注脚物理死线】：
+1. 全篇必须高密度地注入至少 15 个深度注脚！
+2. 格式死令：必须严格为：[[专业词汇::【表层叙事】真实的深度分析...【底层机制】真实的深度分析...【收割代价】真实的深度分析...]]。
+   🚨 致命警告 1：必须用双中括号 [[ 和 ]] 包裹注脚，绝对不能漏掉任何一个括号！
+   🚨 致命警告 2：绝对禁止直接输出“【表层叙事】[表面现象]”这种占位符！必须填入你真实的、字数超过50字的深刻分析！
+3. 绝对禁止在文末或任何地方输出“系统自检”等废话！只允许输出分析正文！`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
