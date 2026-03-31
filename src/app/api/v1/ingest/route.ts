@@ -13,11 +13,11 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
 
-    // 🚨 架构师 V6.7 终极重构：采用绝对稳定的 "词汇::解析" 格式，根除气泡丢失问题
+    // 🚨 架构师 V6.8 致命修复：必须显式带上 "JSON" 关键字！否则 DeepSeek API 会直接拒绝握手导致 500 崩溃！
     const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
 你是一个极其深刻的顶级做空分析师。任务是将通稿撕碎。
 【绝对生存法则】：
-1. 严禁在字符串内部使用英文双引号和换行符！
+1. 必须严格按照结构输出 JSON 格式！严禁在字符串内部使用英文双引号和换行符！
 2. 【语言纯洁】：'cn' 字段 100% 纯正中文！'en' 字段 100% 纯正英文，绝对不允许夹杂中文拼音或汉字！
 3. 【格式与深度】：
    - fluff 数组中的每一项，必须严格采用 \`原文提取词汇::一段连贯的深度解析\` 格式！
@@ -48,6 +48,11 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '解剖引擎级联失效';
-    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
+    // 🚨 将真实的错误死因打印到 Vercel 日志中，拒绝静默死亡
+    console.error("🔴 [INGEST 500 崩溃] ->", errMsg);
+    return new Response(JSON.stringify({ error: errMsg }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
