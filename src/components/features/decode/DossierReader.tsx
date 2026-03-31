@@ -1,15 +1,34 @@
 "use client";
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
 
-export default function DossierReader({ content, isStreaming = false, dictionary = {} }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
+export default function DossierReader({ content, isStreaming = false }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number } | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
 
   useEffect(() => {
     if (isStreaming && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [content, isStreaming]);
+
+  // 🚨 架构师 V6.6 核心修复：右侧气泡防溢出智能定位算法
+  const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const maxW = 320; 
+    let safeX = rect.left + rect.width / 2;
+    if (safeX - maxW / 2 < 20) safeX = maxW / 2 + 20;
+    if (safeX + maxW / 2 > window.innerWidth - 20) safeX = window.innerWidth - maxW / 2 - 20;
+
+    let safeY = rect.top - 10;
+    let isAbove = true;
+    if (safeY < 150) {
+      safeY = rect.bottom + 10;
+      isAbove = false;
+    }
+    setHoverInfo({ text, x: safeX, y: safeY, isAbove });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => setHoverInfo(null), []);
 
   const parseBoldAndDict = (text: string, prefixKey: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -22,7 +41,6 @@ export default function DossierReader({ content, isStreaming = false, dictionary
   };
 
   const parseInlineFormat = (text: string) => {
-    // 支持跨行，且增加对不规则空格的包容性
     const tagRegex = /\[\[\s*([\s\S]*?)\s*(?:::|：：)\s*([\s\S]*?)\s*\]\]/g;
     const parts = [];
     let lastIndex = 0;
@@ -35,11 +53,7 @@ export default function DossierReader({ content, isStreaming = false, dictionary
       const deepInsight = match[2].trim();
       
       parts.push(
-        <span key={`tag-${match.index}`} onMouseEnter={(e) => {
-            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            const safeX = Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2));
-            setHoverInfo({ text: deepInsight, x: safeX, y: rect.top });
-          }} onMouseLeave={() => setHoverInfo(null)} className="text-red-400 border-b border-red-500 bg-red-950/30 hover:bg-red-900/60 transition-all duration-300 pb-0.5 px-1 rounded-sm cursor-help font-bold"
+        <span key={`tag-${match.index}`} onMouseEnter={(e) => handleMouseEnter(e, deepInsight)} onMouseLeave={handleMouseLeave} className="bg-red-900/40 text-red-400 px-1.5 rounded-[2px] border-b border-red-500/50 transition-all duration-300 hover:bg-red-800/80 hover:text-white hover:shadow-[0_0_10px_rgba(220,38,38,0.5)] cursor-crosshair font-bold"
         >{surfaceWord}</span>
       );
       lastIndex = tagRegex.lastIndex;
@@ -49,11 +63,13 @@ export default function DossierReader({ content, isStreaming = false, dictionary
   };
 
   const renderBlocks = () => {
-    // 🚨 V6.5 渲染容灾抢救：大模型如果漏掉了 [[ ]]，但写了 词汇::【，前端自动为其补全双括号！
     let safeContent = content;
-    safeContent = safeContent.replace(/(?<!\[)\[([^\[\]]+?(?:::|：：)[\s\S]+?)\](?!\])/g, '[[$1]]'); // 修复单括号 [词汇::解释] -> [[词汇::解释]]
-    // 修复完全没括号，直接 词汇::【解释】 的极端情况（针对图2死因）
-    safeContent = safeContent.replace(/([^\s\[]+?)(?:::|：：)(\s*[【\[][\s\S]+?(?:。|\]|\n\n))/g, '[[$1::$2]]');
+    // 🚨 废土拾荒清理：干掉 AI 智障一样的多层嵌套 [[[ 和 ]]]
+    safeContent = safeContent.replace(/\[{3,}/g, '[[').replace(/\]{3,}/g, ']]');
+    
+    // 如果 AI 漏掉括号，但写了 词汇::解释
+    safeContent = safeContent.replace(/(?<!\[)\[([^\[\]]+?(?:::|：：)[\s\S]+?)\](?!\])/g, '[[$1]]'); 
+    safeContent = safeContent.replace(/([^\s\[\*]+?)(?:::|：：)(\s*[【\[][\s\S]+?(?:。|\]|\n\n))/g, '[[$1::$2]]');
 
     return safeContent.split(/\n+/).map((block, index) => {
       const trimmed = block.trim();
@@ -69,11 +85,11 @@ export default function DossierReader({ content, isStreaming = false, dictionary
         return (
           <div key={index} className="flex items-start gap-4 my-3 pl-4">
             <span className="text-red-700 mt-1.5 shrink-0">✦</span>
-            <div className="text-zinc-400 font-serif leading-relaxed text-base md:text-lg">{parseInlineFormat(trimmed.replace(/^[-*]\s*/, ''))}</div>
+            <div className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg">{parseInlineFormat(trimmed.replace(/^[-*]\s*/, ''))}</div>
           </div>
         );
       }
-      return <p key={index} className="text-zinc-400 font-serif leading-[2] tracking-wide text-base md:text-lg mb-6 text-justify">{parseInlineFormat(trimmed)}</p>;
+      return <p key={index} className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg mb-6 text-justify">{parseInlineFormat(trimmed)}</p>;
     });
   };
 
@@ -89,10 +105,17 @@ export default function DossierReader({ content, isStreaming = false, dictionary
           <div className="relative z-10 max-w-4xl mx-auto">{renderBlocks()}{isStreaming && <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>}</div>
         </div>
       </motion.div>
+      
+      {/* 🚨 架构师 V6.6 终极气泡 UI：Hacker HUD 风格同步 */}
       {hoverInfo && (
-        <div className="fixed z-[9999] w-max max-w-[280px] bg-black border border-red-900 text-zinc-300 text-xs p-4 rounded-sm shadow-[0_0_40px_rgba(185,28,28,0.8)] pointer-events-none transform -translate-x-1/2 -translate-y-full leading-relaxed transition-all duration-75" style={{ left: hoverInfo.x, top: hoverInfo.y - 10 }}>
-          <span className="text-red-500 flex items-center gap-2 mb-2 font-mono uppercase tracking-widest font-bold border-b border-red-900/50 pb-2"><Zap size={12} /> 深层剖析 (Deep Insight)</span>
-          {hoverInfo.text}
+        <div
+          className={`fixed z-[9999] w-max max-w-[320px] bg-zinc-950/95 backdrop-blur-md border border-red-900/60 text-zinc-300 text-sm p-5 rounded-md shadow-[0_15px_40px_-10px_rgba(220,38,38,0.4)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          style={{ left: hoverInfo.x, top: hoverInfo.y }}
+        >
+          <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs">
+             <Zap size={14} className="animate-pulse" /> DEEP INSIGHT
+          </span>
+          <div className="text-justify">{hoverInfo.text}</div>
         </div>
       )}
     </>
