@@ -7,7 +7,7 @@ import DossierReader from '@/components/features/decode/DossierReader';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal'; 
 import AuthModal from '@/components/features/auth/AuthModal'; 
-import { SignalRecord, BilingualData } from '@/types/database'; 
+import { SignalRecord, BilingualData } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { useDossierStream } from '@/hooks/useDossierStream';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +17,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
   const router = useRouter();
   const supabase = createClient();
   const { lang, setLang } = useGlobalLang();
+
   const [signal, setSignal] = useState<SignalRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -35,19 +36,41 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
        } catch (err) { if (process.env.NODE_ENV === 'development') console.log("🔴 ERROR:", err); } 
        finally { setLoading(false); } 
      }; 
+ 
      fetchSignal(); 
    }, [id]);
 
+  /**
+   * 🚨 架构师重构：跨语种双轨词典映射引擎
+   * 无论当前是什么语言，提取原文词汇的“钥匙”必须永远来自 cn (原文)，
+   * 而气泡里展示的“内容”则来自当前的 lang (目标语言)。
+   */
   useEffect(() => {
     if (signal) {
       const f = signal.fluff_words;
+      // 原文锚点池 (永远是中文)
+      const cnFluffs = Array.isArray(f) ? f : (f as BilingualData)?.['cn'] || [];
+      // 翻译解释池 (跟随全局语言)
       const targetFluffs = Array.isArray(f) ? f : (f as BilingualData)?.[lang] || [];
+      
       const dict: Record<string, string> = {}; 
-      targetFluffs.forEach((item) => {
+      
+      cnFluffs.forEach((item, idx) => {
         if (!item) return;
-        let match = item.match(/「(.*?)」([\s\S]*)/);
-        if (!match) match = item.match(/["“](.*?)["”][:：]?([\s\S]*)/);
-        if (match && match[1].trim()) dict[match[1].trim()] = match[2].trim();
+        // 1. 从原文池提取匹配锚点
+        let matchCn = item.match(/「(.*?)」/);
+        if (!matchCn) matchCn = item.match(/["“](.*?)["”]/);
+
+        if (matchCn && matchCn[1].trim()) {
+          const key = matchCn[1].trim(); // 这是能在原文中找得到的物理字符
+          
+          // 2. 从翻译池提取解释（如果翻译池缺失，兜底用中文）
+          const targetItem = targetFluffs[idx] || item;
+          // 剔除前面引用的原文，只保留后面的解析部分
+          let explanation = targetItem.replace(/^[「"“].*?[」"”][:：]?\s*/, '');
+          
+          dict[key] = explanation.trim();
+        }
       });
       setDictionary(dict);
     }
@@ -115,6 +138,7 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
             ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
           </div>
         </div>
+ 
         <div className="mt-12 border-t border-zinc-900 pt-12"><ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => { setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除频率限制。" }); setIsAuthModalOpen(true); }} /></div>
       </div>
     </main>
