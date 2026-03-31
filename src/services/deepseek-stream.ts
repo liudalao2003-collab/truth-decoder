@@ -10,7 +10,7 @@ export async function createDeepSeekStream(messages: TerminalMessage[], isJson: 
   }
 
   console.log(`🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions (Stream, JSON_MODE: ${isJson}), 记忆链长度:`, messages.length);
-
+  
   // 防御性编程：强制拦截过长上下文，防止 Token 爆炸与恶意刷量
   if (messages.length > 20) {
     console.log('🔴 [错误捕获] -> 节点: 流式引擎层 - 上下文超载');
@@ -23,7 +23,10 @@ export async function createDeepSeekStream(messages: TerminalMessage[], isJson: 
     stream: true, 
     temperature: 0.3, 
     // 🚀 核心扩容：强行拉满单次输出 Token 上限，防止宏大叙事被腰斩
-    max_tokens: 8192 
+    max_tokens: 8192,
+    // 🚨 V6.3 物理级紧箍咒：彻底打断 LLM 的无限复读机幻觉
+    frequency_penalty: 0.4, 
+    presence_penalty: 0.4   
   };
 
   // 🛡️ 架构师防线：强制接管 AST 语法树，开启底层 JSON 规范校验
