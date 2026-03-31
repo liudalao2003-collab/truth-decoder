@@ -44,6 +44,9 @@ def check_manual_trigger():
             # 🚀 探针补强：如果状态码不是 200，立刻报警
             print(f"🔴 [雷达故障] 无法连接 Supabase: HTTP {resp.status_code} - {resp.text}")
 
+    except requests.exceptions.Timeout:
+        # 🚨 V6.1 防抖装甲：精准捕获网络超时，不引发红色恐慌
+        print("🟡 [雷达防抖] 网络瞬时拥塞，等待下一次心跳")
     except Exception as e:
         # 🚀 拒绝静默：暴露出真实的物理死因
         print(f"🔴 [连接崩塌] 雷达扫描中断: {str(e)}")
@@ -57,8 +60,8 @@ def run_hunter_killer():
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - AUTO PILOT V5.9")
-    print("      雷达持续扫描中 (心跳: 1s)...")
+    print("      TRUTH DECODER - AUTO PILOT V6.1")
+    print("      [+] 已挂载网络防抖装甲，雷达持续扫描中 (心跳: 1s)...")
     print("==================================================")
 
     if not SUPABASE_URL or not SUPABASE_KEY:

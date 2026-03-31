@@ -101,6 +101,7 @@ def extract_article_links(html, base_url):
          if '/news/' in href or '/m/' in href or '/articles/' in href: 
              full_url = href if href.startswith('http') else base_url.rstrip('/') + '/' + href.lstrip('/') 
              links.add(full_url) 
+ 
      return links
 
 def is_high_value_intel(content):
@@ -151,8 +152,8 @@ def route_and_extract(url, html):
 
 def main():
     print("==================================================")
-    print("      TRUTH DECODER - CORE ENGINE V6.0 (THROTTLED)")
-    print("      [+] 启用流式 JSON 缝合与云端限流管控...     ")
+    print("      TRUTH DECODER - CORE ENGINE V6.1 (RELENTLESS)")
+    print("      [+] 启用不死不休目标锁与 Token 熔断机制...   ")
     print("==================================================")
     
     seen_urls = load_seen_urls()
@@ -170,20 +171,30 @@ def main():
     fresh_targets = [url for url in all_targets if url not in seen_urls]
     
     # ==========================================
-    # 🚀 核心修复区：向云端控制台请示“抓取强度”
+    # 🚀 目标锁重构与防破产熔断器激活
     # ==========================================
     intensity_limit = get_scrape_intensity()
-    print(f"\n📡 [云端控制台] -> 当前下达的全局抓取限制为: {intensity_limit} 条/次")
+    max_scan_limit = intensity_limit * 5  # 🚨 绝对红线：最大扫描深度
+    
+    print(f"\n📡 [云端控制台] -> 当前下达的入库指标为: {intensity_limit} 条")
+    print(f"🛡️ [熔断器激活] -> 最大扫描深度限制为: {max_scan_limit} 条 (防止 Token 燃烧失控)\n")
 
-    if len(fresh_targets) > intensity_limit:
-        print(f"🟡 [限流阀激活] -> 发现 {len(fresh_targets)} 条新线索，强行截断至 {intensity_limit} 条！\n")
-        fresh_targets = fresh_targets[:intensity_limit]
-    else:
-        print(f"\n🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索\n")
+    print(f"🔵 [模块_成功] -> 产物: 锁定 {len(fresh_targets)} 条全新暗网线索池\n")
 
     success_count = 0
+    scan_count = 0
+
     for url in fresh_targets:
-        print(f"🟡 [模块_异步] -> 目标: {url[:60]}...")
+        # 1. 拦截器：检查是否达标或触发熔断
+        if success_count >= intensity_limit:
+            break
+        if scan_count >= max_scan_limit:
+            print("\n🔴 [防破产熔断] 已达最大扫描深度，强制休眠引擎！")
+            break
+
+        scan_count += 1
+        print(f"🟡 [模块_异步] -> 目标 ({scan_count}/{max_scan_limit}): {url[:60]}...")
+        
         html = fetch_html(url)
         if not html: 
             continue
@@ -248,7 +259,11 @@ def main():
                 signal_id = save_data.get('data', {}).get('signalId', 'UNKNOWN')
                 print(f"   🔵 [模块_成功] -> 产物: 致命裁决已落盘！(ID: {signal_id})")
                 save_seen_url(url)
+                
                 success_count += 1
+                if success_count >= intensity_limit:
+                    print(f"\n   🔵 [军令达成] -> 已实打实斩获 {intensity_limit} 条情报，立刻鸣金收兵！")
+                    break
             else:
                 print(f"   🔴 [入库崩溃] -> 原因: {save_data.get('error', '未知错误')}")
 
@@ -263,6 +278,7 @@ def main():
 
     print("\n==================================================")
     print(f"      🎉 引擎休眠！本次战役成功斩获并入库 {success_count} 条高维资产。")
+    print(f"      (共计消耗扫描深度: {scan_count})")
     print("==================================================")
 
 if __name__ == "__main__":
