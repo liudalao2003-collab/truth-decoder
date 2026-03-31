@@ -32,13 +32,12 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
          const res = await fetch(`/api/decode?id=${id}`); 
          const json = await res.json(); 
          if (json.success) setSignal(json.data);
-       } catch (e) { console.log("🔴 ERROR:", e); } 
+       } catch (err) { if (process.env.NODE_ENV === 'development') console.log("🔴 ERROR:", err); } 
        finally { setLoading(false); } 
      }; 
      fetchSignal(); 
    }, [id]);
 
-  // 🚀 核心修复：注入真实的字典构建引擎，解决左侧气泡缺失
   useEffect(() => {
     if (signal) {
       const f = signal.fluff_words;
@@ -64,8 +63,20 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
     startDossierStream();
   };
 
-  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><Loader2 className="animate-spin text-zinc-500 w-8 h-8" /></div>;
-  if (!signal) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-400 font-mono text-sm">Asset Neutralized</h2></div>;
+  const handlePurge = async () => {
+    const confirm = window.confirm("⚠️ [PURGE PROTOCOL] 物理抹杀此资产？");
+    if (!confirm) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` } });
+      const json = await res.json();
+      if (json.success) router.push('/');
+      else alert(`抹杀失败: ${json.error}`);
+    } catch (_e) { alert("网络阻断"); } finally { setIsDeleting(false); }
+  };
+
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-red-600 w-10 h-10" /></div>;
+  if (!signal) return <div className="min-h-screen bg-black flex flex-col items-center justify-center"><AlertCircle className="text-red-600 w-12 h-12 mb-4" /><h2 className="text-zinc-500 font-mono text-sm uppercase">Signal Erased</h2></div>;
 
   const h = signal.hard_facts;
   const currentHardFacts = Array.isArray(h) ? h : (h as BilingualData)?.[lang] || [];
@@ -79,9 +90,10 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-black border border-zinc-800 rounded-sm p-1">
               <Globe className="text-zinc-600 w-4 h-4 ml-2" />
-              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] transition-all rounded-sm ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600'}`}>CN</button>
-              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] transition-all rounded-sm ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600'}`}>EN</button>
+              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded-sm ${lang === 'cn' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>CN</button>
+              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded-sm ${lang === 'en' ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>EN</button>
             </div>
+            <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-black border border-red-900/30 hover:bg-red-950/40 hover:border-red-600 transition-all rounded-sm disabled:opacity-50"><Trash2 size={16} className="text-red-900 group-hover:text-red-500" /></button>
           </div>
         </header>
 
@@ -93,14 +105,17 @@ export default function DecodePage({ params }: { params: Promise<{ id: string }>
           </div>
           <div className="lg:col-span-7">
             {!dossierContent && !isStreamingDossier ? (
-              <div className="bg-zinc-950 border border-zinc-900 p-20 flex flex-col items-center justify-center text-center rounded-sm h-[600px]">
+              <div className="bg-zinc-950 border border-zinc-900 p-20 flex flex-col items-center justify-center text-center rounded-sm h-[600px] shadow-2xl relative">
                 <ShieldAlert className="w-16 h-16 text-zinc-800 mb-6" />
-                <button onClick={handleDossierClick} className="bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm"><Zap size={18} /><span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span></button>
+                <button onClick={handleDossierClick} className="group relative bg-red-950/30 border border-red-900 text-red-500 hover:bg-red-900 hover:text-white transition-all px-10 py-5 uppercase font-black tracking-widest text-sm flex items-center gap-3 rounded-sm shadow-[0_0_30px_rgba(153,27,27,0.2)]">
+                  <Zap size={18} className="group-hover:animate-pulse" />
+                  <span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span>
+                </button>
               </div>
             ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
           </div>
         </div>
-        <div className="mt-12 border-t border-zinc-900 pt-12"><ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => setIsAuthModalOpen(true)} /></div>
+        <div className="mt-12 border-t border-zinc-900 pt-12"><ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => { setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除频率限制。" }); setIsAuthModalOpen(true); }} /></div>
       </div>
     </main>
   );

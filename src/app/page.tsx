@@ -53,8 +53,8 @@ export default function HomePage() {
           if (json.data.length >= 15) setHasMore(true);
         }
       }
-    } catch (err: unknown) { 
-      if (process.env.NODE_ENV === 'development') console.log('🔴 [模块_崩溃] ->', err);
+    } catch (e: unknown) { 
+      if (process.env.NODE_ENV === 'development') console.log('🔴 [FEED_CRASH]:', e);
     } finally { 
       setIsLoadingMore(false); 
       setIsInitialLoading(false); 
@@ -93,27 +93,24 @@ export default function HomePage() {
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
                 if (delta) rawJsonString += delta;
-              } catch (e) { /* 忽略流碎片 */ }
+              } catch (_e) { /* 忽略碎片 */ }
             }
           }
         }
       }
 
-      // 🚀 核心修复：精准剥离 Markdown 并修复内部非法换行符，而不破坏结构换行符
-      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const firstBrace = cleanedJsonString.indexOf('{');
-      const lastBrace = cleanedJsonString.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
-      }
+      // 🚀 核心修复：工业级 JSON 洗涤逻辑
+      let cleaned = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const first = cleaned.indexOf('{');
+      const last = cleaned.lastIndexOf('}');
+      if (first !== -1 && last !== -1) cleaned = cleaned.substring(first, last + 1);
       
-      // 仅在 JSON 解析失败时尝试暴力洗涤 (Lazy Washing)
       let intel;
       try {
-        intel = JSON.parse(cleanedJsonString);
-      } catch (e) {
-        // 尝试修复字符串内部未转义的换行符：定位在引号之间但不是以逗号/括号结尾的换行
-        const repaired = cleanedJsonString.replace(/([^\s,\[\{\:])\n\s*([^\s"\]\}])/g, '$1\\n$2');
+        intel = JSON.parse(cleaned);
+      } catch (_e) {
+        // 🚨 二级保险：处理 AI 意外生成的内部换行符（不影响结构）
+        const repaired = cleaned.replace(/(?<=[:|,]\s*)"([^"]*)\n([^"]*)"/g, '"$1\\n$2"');
         intel = JSON.parse(repaired);
       }
 
@@ -124,7 +121,6 @@ export default function HomePage() {
       });
       const saveJson = await saveRes.json();
       if (saveJson.success && saveJson.data?.signalId) {
-        setInput('');
         router.push(`/decode/${saveJson.data.signalId}`);
       } else { throw new Error(saveJson.error || '写入失败'); }
     } catch (err: unknown) { 
@@ -143,7 +139,7 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v5.8 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.0 SECURE_GATE</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
