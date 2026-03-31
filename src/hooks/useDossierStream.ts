@@ -3,12 +3,10 @@ import { useState, useEffect } from 'react';
 import { SignalRecord } from '@/types/database';
 
 export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en') {
-  // 🚀 双轨闭包缓存，绝不污染全局状态
   const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
 
-  // 初始化：提取双语卷宗并注入本地缓存
   useEffect(() => {
     if (signal?.dossier_content) {
       if (typeof signal.dossier_content === 'string') {
@@ -22,7 +20,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
     }
   }, [signal?.dossier_content]);
 
-  // 🚀 核心防线：流式懒翻译与静默回写守护进程
   useEffect(() => {
     const triggerTranslation = async () => {
       if (!signal?.id || isStreamingDossier || isTranslating) return;
@@ -51,7 +48,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             throw new Error(errData.error || `网关物理阻断: HTTP ${res.status}`);
           }
 
-          // 🔪 流式接收：在内存中静默拼装字节流，不直接触发 UI 频发重绘
           const reader = res.body.getReader();
           const decoder = new TextDecoder('utf-8');
           let done = false;
@@ -74,29 +70,26 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                     const delta = data.choices[0]?.delta?.content || '';
                     if (delta) {
                       fullTranslatedText += delta;
+                      // 🚨 V6.2 核心修复：将状态更新移入循环内部，实现字符级 UI 穿透渲染！
+                      setCache((prev) => ({ ...prev, [lang]: fullTranslatedText }));
                     }
                   } catch (e) { /* 忽略流碎片 */ }
                 }
               }
             }
           }
-
-          // 1. 流式接收完毕，瞬间更新前端闭包缓存，消除骨架屏
-          const updatedCache = { ...cache, [lang]: fullTranslatedText };
-          setCache(updatedCache);
             
-          // 2. 异步发射脱壳请求，调用 Node.js 环境回写至 Supabase 进行双规持久化
+          // 流式接收完毕，异步发射双规持久化
           fetch('/api/v1/dossier/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
               'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
             },
-            body: JSON.stringify({ id: signal.id, dossier_content: updatedCache })
+            body: JSON.stringify({ id: signal.id, dossier_content: { ...cache, [lang]: fullTranslatedText } })
           }).catch(e => {
              if (process.env.NODE_ENV === 'development') console.log('🔴 [同步失败] ->', e);
           });
-          
         } catch (err: unknown) {
            if (process.env.NODE_ENV === 'development') console.log('🔴 [翻译崩塌] ->', err);
         } finally {
@@ -108,7 +101,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
     triggerTranslation();
   }, [lang, cache, signal?.id, isTranslating, isStreamingDossier]);
 
-  // 初次生成流式引擎
   const startDossierStream = async () => {
     if (!signal?.raw_content || isStreamingDossier) return;
     setIsStreamingDossier(true);

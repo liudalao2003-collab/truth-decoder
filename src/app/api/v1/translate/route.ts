@@ -11,17 +11,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { content, targetLang } = body as { content: string, targetLang: 'cn'|'en' };
     
-    // 🚀 核心修复：恢复纯血协议
+    // 🚨 V6.2 修复：替换掉触发 AI 安全机制的敏感词汇，使用最高效的专业翻译指令
     const systemPromptText = targetLang === 'en'
-      ? `[CRITICAL DIRECTIVE]: TOTAL ERADICATION OF CHINESE CHARACTERS.
-You are a top-tier financial translator translating a "Shadow Dossier" into English.
-RULES:
-1. [SYNTAX LOCK]: Preserve exactly all [[Word::Insight]] footnotes. DO NOT add spaces around brackets or colons.
-2. [TOTAL ERADICATION]: TRANSLATE EVERY SINGLE CHINESE CHARACTER INTO ENGLISH. 🚨 The anchor "Word" MUST be translated into English too!
-   BAD CASE: \`[[裁员::[Surface] Cost cutting...]]\`
-   GOOD CASE: \`[[Layoffs::[Surface] Cost cutting...]]\`
-3. WARNING: If I find a SINGLE Chinese character (e.g., 提示牌, 植入, 推行) in your output, the system will crash. Destroy all Chinese characters!
-4. Output ONLY Markdown text. No JSON.`
+      ? `You are an elite financial translator. Translate the provided "Shadow Dossier" strictly into English.
+【CRITICAL RULES】:
+1. FULL TRANSLATION: You must translate the entire text comprehensively. Do not stop halfway.
+2. 100% ENGLISH: The output must be purely English. Absolutely NO Chinese characters allowed in the final output.
+3. FOOTNOTE FORMAT: Strictly preserve the exact formatting of footnotes: [[TranslatedWord::TranslatedInsight]]. Do NOT add spaces around the double colons.
+4. Output raw Markdown text only. No JSON.`
       : `【系统最高权限指令：极限语言纯洁性与符号锚定】
 你是一名顶级的金融翻译官。请将“暗影卷宗”翻译为 100% 纯正的中文。
 【死命令】：

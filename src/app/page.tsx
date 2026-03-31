@@ -9,11 +9,6 @@ import { SignalRecord } from '@/types/database';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { type User } from '@supabase/supabase-js';
 
-/**
- * 核心业务说明：
- * TruthDecoder 首页总线。
- * 集成了“工业级 JSON 防御装甲”与“流式缝合技术”，确保在极端坏账数据下 UI 绝不崩溃。
- */
 export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
@@ -135,31 +130,50 @@ export default function HomePage() {
       let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim(); 
       const firstBrace = cleanedJsonString.indexOf('{'); 
       const lastBrace = cleanedJsonString.lastIndexOf('}'); 
+      
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1); 
-      } 
-      
-      /** * 🚨 V6.1 热修复：移除了引发误杀的双引号正则。
-       * 仅执行最基础的物理换行符剔除，信任后端 System Prompt 的纯洁性约束。
-       */ 
-      cleanedJsonString = cleanedJsonString.replace(/[\n\r\t]/g, '');
+      } else if (firstBrace !== -1) {
+        // 🚨 探测到物理截断：只找到了开头，没找到结尾
+        cleanedJsonString = cleanedJsonString.substring(firstBrace);
+      }
       
       let intel; 
       try { 
-        intel = JSON.parse(cleanedJsonString); 
+        // 尝试剔除控制字符并进行标准解析
+        const sanitized = cleanedJsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+        intel = JSON.parse(sanitized); 
       } catch (parseError) { 
         if (process.env.NODE_ENV === 'development') { 
-          console.log('🔴 [模块_崩溃] -> JSON 结构损毁，触发逻辑降级:', cleanedJsonString); 
+          console.log('🔴 [模块_崩溃] -> JSON 结构损毁或截断，启动正则暴力抢救...'); 
         } 
-        // 🚨 绝对防御：解析失败直接注入兜底 JSON
+        
+        // 🚨 V6.1 终极容灾：正则暴力拾荒者协议
         intel = { 
-          verdict: { 
-            cn: "AI 输出格式畸形，已启用物理层容灾截断。", 
-            en: "AI format corrupted. Physical disaster recovery enabled." 
-          }, 
+          verdict: { cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。", en: "Stream Truncated. Rescue protocol engaged." }, 
           facts: { cn: [], en: [] }, 
           fluff: { cn: [], en: [] } 
         }; 
+
+        try {
+          // 抢救 Verdict
+          const vMatch = cleanedJsonString.match(/"verdict"[\s\S]*?"cn"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/);
+          if (vMatch) intel.verdict.cn = vMatch[1];
+
+          // 抢救 Facts
+          const fMatch = cleanedJsonString.match(/"facts"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
+          if (fMatch) {
+            intel.facts.cn = fMatch[1].split('",').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+          }
+
+          // 抢救 Fluff (气泡字典的生命线)
+          const flMatch = cleanedJsonString.match(/"fluff"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
+          if (flMatch) {
+            intel.fluff.cn = flMatch[1].split('",').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+          }
+        } catch (rescueErr) {
+          console.log('🔴 [模块_崩溃] -> 抢救失败:', rescueErr);
+        }
       } 
 
       // 4. 闪电瞬时入库 
@@ -206,7 +220,7 @@ export default function HomePage() {
               <ShieldAlert className="text-red-600 w-12 h-12" />
               <div>
                 <h1 className="text-3xl font-black tracking-tighter uppercase italic">Truth Decoder</h1>
-                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.1 SECURE_GATE</p>
+                <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.2 SECURE_GATE</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
