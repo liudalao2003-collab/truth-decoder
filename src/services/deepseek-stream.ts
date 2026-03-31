@@ -24,7 +24,7 @@ export async function createDeepSeekStream(messages: TerminalMessage[], isJson: 
     temperature: 0.3, 
     // 🚀 核心扩容：强行拉满单次输出 Token 上限，防止宏大叙事被腰斩
     max_tokens: 8192,
-    // 🚨 V6.3 物理级紧箍咒：彻底打断 LLM 的无限复读机幻觉
+    // 🚨 V6.3 物理级紧箍咒：彻底打断 LLM 的无限复读机幻觉 (解决中文无限重复)
     frequency_penalty: 0.4, 
     presence_penalty: 0.4   
   };

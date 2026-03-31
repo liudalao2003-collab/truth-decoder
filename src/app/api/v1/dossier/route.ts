@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师重构 V6.3：强迫高密度注脚，并警告不得进入死循环
+    // 🚨 架构师重构 V6.3：强迫高密度注脚，并严厉警告不得进入死循环
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - STRATEGIC ENGINE]
 You are a God-tier Financial Forensic Expert.
