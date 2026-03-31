@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Zap } from 'lucide-react';
 import { BilingualData } from '@/types/database';
 
@@ -26,6 +27,10 @@ HighlightMark.displayName = 'HighlightMark';
 
 export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} }: RawNarrativeProps) {
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // 确保 Portals 只在客户端渲染时挂载
+  useEffect(() => setMounted(true), []);
 
   const sortedKeys = useMemo(() => {
     return Object.keys(dictionary)
@@ -40,7 +45,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
     return rawContent.split(regex);
   }, [rawContent, sortedKeys]);
 
-  // 🚨 架构师 V6.6 核心修复：防溢出智能定位算法
+  // 🚨 架构师 V6.8 核心修复：防溢出智能定位算法
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const maxW = 320; // 气泡最大宽度
@@ -50,10 +55,10 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
     if (safeX - maxW / 2 < 20) safeX = maxW / 2 + 20;
     if (safeX + maxW / 2 > window.innerWidth - 20) safeX = window.innerWidth - maxW / 2 - 20;
 
-    // Y 轴智能翻转：如果上面空间不足 150px，就显示在下方
+    // Y 轴智能翻转：如果上面空间不足，就显示在下方 (留出 200px 缓冲)
     let safeY = rect.top - 10;
     let isAbove = true;
-    if (safeY < 150) {
+    if (safeY < 200) {
       safeY = rect.bottom + 10;
       isAbove = false;
     }
@@ -93,17 +98,18 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
         </div>
       </div>
 
-      {/* 🚨 架构师 V6.6 终极气泡 UI：Hacker HUD 风格 */}
-      {hoverInfo && (
+      {/* 🚨 架构师 V6.8 终极气泡 UI：使用 Portals 将气泡挂载到 Body 最顶层，彻底无视父组件的 z-index 陷阱！ */}
+      {mounted && hoverInfo && createPortal(
         <div
-          className={`fixed z-[9999] w-max max-w-[320px] bg-zinc-950/95 backdrop-blur-md border border-red-900/60 text-zinc-300 text-sm p-5 rounded-md shadow-[0_15px_40px_-10px_rgba(220,38,38,0.4)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          className={`fixed z-[2147483647] w-max max-w-[320px] bg-zinc-950/98 backdrop-blur-xl border border-red-900/80 text-zinc-300 text-sm p-5 rounded-md shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
           style={{ left: hoverInfo.x, top: hoverInfo.y }}
         >
           <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs">
-             <Zap size={14} className="animate-pulse" /> {lang === 'cn' ? '深层剖析 (DEEP INSIGHT)' : 'DECODED MOTIVE'}
+             <Zap size={14} className="animate-pulse" /> {lang === 'cn' ? '深层剖析 (DEEP INSIGHT)' : 'DEEP INSIGHT'}
           </span>
-          <div className="text-justify">{hoverInfo.text}</div>
-        </div>
+          <div className="text-justify whitespace-pre-wrap">{hoverInfo.text}</div>
+        </div>,
+        document.body
       )}
     </>
   );

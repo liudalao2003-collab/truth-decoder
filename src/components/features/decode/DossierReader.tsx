@@ -1,17 +1,20 @@
 "use client";
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
 
 export default function DossierReader({ content, isStreaming = false }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (isStreaming && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [content, isStreaming]);
 
-  // 🚨 架构师 V6.6 核心修复：右侧气泡防溢出智能定位算法
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const maxW = 320; 
@@ -21,7 +24,7 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
     let safeY = rect.top - 10;
     let isAbove = true;
-    if (safeY < 150) {
+    if (safeY < 200) {
       safeY = rect.bottom + 10;
       isAbove = false;
     }
@@ -64,10 +67,7 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
   const renderBlocks = () => {
     let safeContent = content;
-    // 🚨 废土拾荒清理：干掉 AI 智障一样的多层嵌套 [[[ 和 ]]]
     safeContent = safeContent.replace(/\[{3,}/g, '[[').replace(/\]{3,}/g, ']]');
-    
-    // 如果 AI 漏掉括号，但写了 词汇::解释
     safeContent = safeContent.replace(/(?<!\[)\[([^\[\]]+?(?:::|：：)[\s\S]+?)\](?!\])/g, '[[$1]]'); 
     safeContent = safeContent.replace(/([^\s\[\*]+?)(?:::|：：)(\s*[【\[][\s\S]+?(?:。|\]|\n\n))/g, '[[$1::$2]]');
 
@@ -106,17 +106,17 @@ export default function DossierReader({ content, isStreaming = false }: { conten
         </div>
       </motion.div>
       
-      {/* 🚨 架构师 V6.6 终极气泡 UI：Hacker HUD 风格同步 */}
-      {hoverInfo && (
+      {mounted && hoverInfo && createPortal(
         <div
-          className={`fixed z-[9999] w-max max-w-[320px] bg-zinc-950/95 backdrop-blur-md border border-red-900/60 text-zinc-300 text-sm p-5 rounded-md shadow-[0_15px_40px_-10px_rgba(220,38,38,0.4)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          className={`fixed z-[2147483647] w-max max-w-[320px] bg-zinc-950/98 backdrop-blur-xl border border-red-900/80 text-zinc-300 text-sm p-5 rounded-md shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
           style={{ left: hoverInfo.x, top: hoverInfo.y }}
         >
           <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs">
              <Zap size={14} className="animate-pulse" /> DEEP INSIGHT
           </span>
-          <div className="text-justify">{hoverInfo.text}</div>
-        </div>
+          <div className="text-justify whitespace-pre-wrap">{hoverInfo.text}</div>
+        </div>,
+        document.body
       )}
     </>
   );
