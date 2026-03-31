@@ -44,8 +44,7 @@ export default function DecodePage() {
    }, [id]);
 
   /**
-   * 🚨 架构师 V6.4 终极防御：物理强制锚定词典引擎
-   * 彻底解决 AI 幻觉导致词汇与原文不匹配、气泡丢失的问题
+   * 🚨 架构师 V6.7 终极字典解析：适配 Word::Analysis 双冒号切割法
    */
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -59,44 +58,23 @@ export default function DecodePage() {
       cnFluffs.forEach((item, idx) => {
         if (!item || typeof item !== 'string') return;
         
-        let key = "";
-        
-        // 1. 尝试提取括号内的词
-        let matchCn = item.match(/[「"“](.*?)[」"”]/);
-        if (matchCn && matchCn[1].trim()) {
-          key = matchCn[1].trim();
-        } else {
-          // 2. 暴力降级：切分冒号或序号
-          const cleanItem = item.replace(/^\d+[\.、\s]*/, ''); 
-          const splitMatch = cleanItem.split(/[:：【\[]/);
-          if (splitMatch.length > 0 && splitMatch[0].trim().length > 0) {
-            key = splitMatch[0].trim();
-          }
-        }
-
-        // 终极清洗：干掉所有导致正则失败的非法标点
-        key = key.replace(/[「」"“”'*]/g, '').trim();
-
-        if (key) {
+        // 按照新的双冒号协议一刀切
+        const parts = item.split(/(?:::|：：)/);
+        if (parts.length >= 2) {
+          const key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
+          
           const targetItem = targetFluffs[idx] || item;
-          let explanation = targetItem;
-          
-          // 锁定气泡解释的正文，抛弃复读的原词
-          const startIdx = targetItem.search(/[【\[]/);
-          if (startIdx !== -1) {
-              explanation = targetItem.substring(startIdx);
-          } else {
-              explanation = targetItem.replace(new RegExp(`^.*?${key}[:：]?\\s*`), '');
-          }
-          
-          // 🚨 物理锚定：确保词汇真真切切存在于左侧原文中，否则强行降级裁剪
-          if (rawText.includes(key)) {
-            dict[key] = explanation.trim();
-          } else {
-            // AI 可能加上了无意义的前后缀，我们只取前 4 个字进行“废土拾荒匹配”
+          const targetParts = targetItem.split(/(?:::|：：)/);
+          // 目标语言的解析部分
+          const explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
+
+          if (key && rawText.includes(key)) {
+            dict[key] = explanation;
+          } else if (key) {
+            // 物理降级匹配：只要前4个字对得上就高亮
             const shortKey = key.substring(0, 4);
             if (shortKey.length >= 2 && rawText.includes(shortKey)) {
-              dict[shortKey] = explanation.trim();
+              dict[shortKey] = explanation;
             }
           }
         }

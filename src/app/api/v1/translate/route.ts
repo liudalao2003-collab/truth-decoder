@@ -11,21 +11,20 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { content, targetLang } = body as { content: string, targetLang: 'cn'|'en' };
     
-    // 🚨 V6.5 修复：绝对语言隔离墙
+    // 🚨 架构师 V6.7：断绝大模型翻译时夹带私货的本能
     const systemPromptText = targetLang === 'en'
-      ? `You are an elite financial translator. Translate the provided "Shadow Dossier" strictly into English.
-【CRITICAL RULES】:
-1. FULL TRANSLATION: Translate the ENTIRE text. Do not stop halfway.
-2. 100% PURE ENGLISH: The output MUST be entirely in English. If you leave a SINGLE Chinese character in the output, the system will crash. Even the terms inside footnotes MUST be translated.
-3. FOOTNOTE FORMAT: Strictly preserve the exact formatting of footnotes: [[TranslatedWord::TranslatedInsight]]. Do NOT add spaces around the double colons.
-4. Output raw Markdown text only.`
+      ? `You are an elite financial translator. Translate the text into 100% FLUENT, NATIVE ENGLISH.
+
+[CRITICAL RULES]:
+1. NO CHINESE CHARACTERS: Translate every single word into English. Do not leave ANY Chinese characters or Pinyin in your output.
+2. FOOTNOTE SYNTAX: Preserve the footnote syntax EXACTLY as [[TranslatedTerm::TranslatedAnalysis]]. Keep the double brackets and double colons.
+3. Output raw Markdown text only.`
       : `【系统最高权限指令：极限语言纯洁性与符号锚定】
 你是一名顶级的金融翻译官。请将“暗影卷宗”翻译为 100% 纯正的中文。
 【死命令】：
 1. 绝对保留 [[ ]] 和 :: 的无空格连接格式！
-2. 彻底翻译所有内容为中文。绝对禁止在译文中出现任何一个英文字母！
-3. 绝对禁止在译文中用括号保留英文原词。
-4. 严禁输出 JSON，只输出 Markdown 纯文本。`;
+2. 彻底翻译所有内容为中文。绝对禁止在译文中出现英文字母！
+3. 严禁输出 JSON，只输出 Markdown 纯文本。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
