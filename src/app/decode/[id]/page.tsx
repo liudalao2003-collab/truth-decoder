@@ -13,7 +13,6 @@ import { useDossierStream } from '@/hooks/useDossierStream';
 import { createClient } from '@/lib/supabase/client';
 
 export default function DecodePage() {
-  // 🚨 架构师 V6.3 核心修复：废弃 use(params)，采用纯客户端钩子，彻底消灭 SSR 序列化崩溃
   const params = useParams();
   const id = params?.id as string;
 
@@ -45,46 +44,61 @@ export default function DecodePage() {
    }, [id]);
 
   /**
-   * 🚨 架构师重构 V6.3：废土拾荒级词典引擎
-   * 无论 AI 是否遵守格式输出「词汇」，前端必须强行将其撕裂提取，恢复所有气泡！
+   * 🚨 架构师 V6.4 终极防御：物理强制锚定词典引擎
+   * 彻底解决 AI 幻觉导致词汇与原文不匹配、气泡丢失的问题
    */
   useEffect(() => {
-    if (signal) {
+    if (signal && signal.raw_content) {
       const f = signal.fluff_words;
       const cnFluffs = Array.isArray(f) ? f : (f as BilingualData)?.['cn'] || [];
       const targetFluffs = Array.isArray(f) ? f : (f as BilingualData)?.[lang] || [];
       
       const dict: Record<string, string> = {}; 
+      const rawText = signal.raw_content;
       
       cnFluffs.forEach((item, idx) => {
-        if (!item) return;
+        if (!item || typeof item !== 'string') return;
         
         let key = "";
         
-        // 1. 标准动作：尝试提取被引号包裹的核心词
-        let matchCn = item.match(/「(.*?)」/);
-        if (!matchCn) matchCn = item.match(/["“](.*?)["”]/);
-
+        // 1. 尝试提取括号内的词
+        let matchCn = item.match(/[「"“](.*?)[」"”]/);
         if (matchCn && matchCn[1].trim()) {
           key = matchCn[1].trim();
         } else {
-          // 2. 暴力降级：AI 没写括号？直接找冒号切分，强制抓取词汇
-          const cleanItem = item.replace(/^\d+\.\s*/, ''); // 剔除标号
+          // 2. 暴力降级：切分冒号或序号
+          const cleanItem = item.replace(/^\d+[\.、\s]*/, ''); 
           const splitMatch = cleanItem.split(/[:：【\[]/);
-          if (splitMatch.length > 1 && splitMatch[0].trim().length > 0) {
+          if (splitMatch.length > 0 && splitMatch[0].trim().length > 0) {
             key = splitMatch[0].trim();
           }
         }
 
+        // 终极清洗：干掉所有导致正则失败的非法标点
+        key = key.replace(/[「」"“”'*]/g, '').trim();
+
         if (key) {
           const targetItem = targetFluffs[idx] || item;
-          // 锁定真正解释的起点（找【或[），抛弃前面复读的原词
           let explanation = targetItem;
+          
+          // 锁定气泡解释的正文，抛弃复读的原词
           const startIdx = targetItem.search(/[【\[]/);
           if (startIdx !== -1) {
               explanation = targetItem.substring(startIdx);
+          } else {
+              explanation = targetItem.replace(new RegExp(`^.*?${key}[:：]?\\s*`), '');
           }
-          dict[key] = explanation.trim();
+          
+          // 🚨 物理锚定：确保词汇真真切切存在于左侧原文中，否则强行降级裁剪
+          if (rawText.includes(key)) {
+            dict[key] = explanation.trim();
+          } else {
+            // AI 可能加上了无意义的前后缀，我们只取前 4 个字进行“废土拾荒匹配”
+            const shortKey = key.substring(0, 4);
+            if (shortKey.length >= 2 && rawText.includes(shortKey)) {
+              dict[shortKey] = explanation.trim();
+            }
+          }
         }
       });
       setDictionary(dict);

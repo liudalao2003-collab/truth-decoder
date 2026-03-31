@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师重构 V6.3：强迫高密度注脚，并严厉警告不得进入死循环
+    // 🚨 架构师重构 V6.4：强制封杀所有系统自检、字数统计等大模型幻觉废话
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - STRATEGIC ENGINE]
 You are a God-tier Financial Forensic Expert.
@@ -23,28 +23,28 @@ The user provides a source text in CHINESE. Analyze it and generate a massive "S
 
 [CRITICAL RULES]:
 1. 100% PURE ENGLISH: Your entire response MUST be in English. NO CHINESE ALLOWED.
-2. NO REPETITION: Do NOT repeat the same sentences or phrases endlessly. Generate diverse, insightful analysis.
+2. NO REPETITION: Do NOT repeat the same sentences. Generate diverse analysis.
 3. [FORCED STRUCTURE]:
    - I. ANATOMY OF CORPORATE WILL
    - II. THE LEVERAGE MAZE
    - III. STRUCTURAL FRAGMENTATION
    - IV. BLACK SWAN FORECASTING
-4. [HIGH DENSITY FOOTNOTES]: You MUST inject at least 15 unique footnotes throughout the text using this EXACT format: [[EnglishConcept::[Surface]... [Hidden]... [Fallout]...]]. 
-   Make sure you use different concepts for every footnote.
+4. [HIGH DENSITY FOOTNOTES]: Inject at least 15 unique footnotes using this EXACT format: [[EnglishConcept::[Surface]... [Hidden]... [Fallout]...]].
+5. 🚨 ABSOLUTELY NO META-COMMENTARY: NEVER output self-checks, task verifications, footnote counts, or system messages like "System Check". Output the DOSSIER ONLY.
 Output ONLY Markdown text.`
-      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V6.3】
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V6.4】
 任务：生成一份细节爆炸的《暗影卷宗》Markdown 研报。
-【分形展开协议（反收敛死线）】：
+【分形展开协议】：
 1. 绝对禁止总结！严禁无意义的复读机循环！
 【强制研报结构】：
 - Ⅰ. 权力构架与意志解剖
 - Ⅱ. 资产流动与杠杆迷局
 - Ⅲ. 隐藏契约与逻辑穷举
 - Ⅳ. 高维时间轴预测
-【🚨 强制注脚密度（物理红线）】：
+【🚨 绝对生存法则（物理红线）】：
 1. 全文必须 100% 使用纯正中文！
-2. 全篇必须高频次、高密度地注入至少 15 个深度注脚！
-3. 格式必须严格为：[[中文词汇::【表层叙事】...【底层机制】...【收割代价】...]]。严禁多个注脚使用同一个词汇！`;
+2. 全篇必须高密度地注入至少 15 个深度注脚，格式：[[中文词汇::【表层叙事】...【底层机制】...【收割代价】...]]。
+3. 🚨 严禁自作聪明：绝对禁止在文末或任何地方输出“系统自检”、“注脚数量核查”、“任务达标情况”等进度汇报废话！只允许输出纯粹的分析正文！违者抹杀！`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
