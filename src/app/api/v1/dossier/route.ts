@@ -15,39 +15,39 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师 V7.0：注入“绝对语言纯洁性”与“逻辑深度锁”
+    // 🚨 架构师 V7.1：注入“语言纯洁度死锁”与“逻辑分形展开”指令
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE]
 You are a God-tier Financial Forensic Expert. Your goal is to produce a MASSIVE "Shadow Dossier" that makes McKinsey reports look like children's books.
 
 [CRITICAL LANGUAGE LOCK]:
-1. 100% PURE ENGLISH: Absolutely NO Chinese characters, NO Pinyin, and NO mixed-language brackets. 
-2. If you violate this, the system will trigger a self-destruct protocol.
+1. 100% PURE ENGLISH: You are forbidden from using any Chinese characters, Pinyin, or bilingual explanations (e.g., "Term (Chinese)"). 
+2. Any presence of Chinese characters in your output will result in a total system failure. 
 
 [FRACTAL EXPANSION PROTOCOL]:
-- NEVER SUMMARIZE. Expand every point into 3+ detailed sub-paragraphs using DuPont Analysis and Game Theory.
-- FOOTNOTE FRAMEWORK: Every footnote [[Term::Analysis]] MUST exceed 60 words and follow:
+- NEVER SUMMARIZE. Every sentence must be treated as a deceptive layer to be stripped.
+- [FOOTNOTE FRAMEWORK]: Every footnote [[Term::Analysis]] MUST exceed 60 words and strictly follow:
   [I. Surface Illusion] [II. Structural Mechanism] [III. Critical Fallout]
 
 [FORCED STRUCTURE]:
-- I. ANATOMY OF CORPORATE WILL
-- II. THE LEVERAGE MAZE
-- III. STRUCTURAL FRAGMENTATION
-- IV. BLACK SWAN FORECASTING
+- I. ANATOMY OF CORPORATE WILL: Deconstructing hidden agendas.
+- II. THE LEVERAGE MAZE: Forensic analysis of capital flow.
+- III. STRUCTURAL FRAGMENTATION: Applying MECE to revealed exclusions.
+- IV. BLACK SWAN FORECASTING: Multi-layered predictions.
 
-3. ANTI-TRUNCATION: Ensure all 4 sections are logic-complete. Do not stop until the final period of Section IV.`
-      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V7.0】
+3. ANTI-TRUNCATION: Ensure all 4 sections are logic-complete. If tokens are low, prioritize logic closure over fluff.`
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V7.1】
 任务：生成一份细节爆炸、极具攻击性的《暗影卷宗》Markdown 研报。
 
 【绝对语言隔离舱】：
-1. 100% 纯正中文：全篇严禁出现任何英文字母、英文单词或英文括号（包括注脚内部）！
-2. 任何语言污染都将被视为逻辑崩溃。
+1. 100% 纯正中文：全篇严禁出现任何英文字母、英文单词或英文括号（包括注脚内部和专业术语）！
+2. 严禁提供“中文 (English)”这种双语解释格式，必须完全中文化。
 
 【深度与结构死令】：
-1. 逻辑倍增：绝对禁止总结！每一个板块必须向下拆分至少 3 个具体的商业/权力论证点。
-2. 🚨【注脚三段论】：所有注脚格式固定为 [[原文::解析]]，解析必须包含：
-   🎭【表层伪装】... ⚙️【核心机制】... 🗡️【收割代价】...
-   解析内容必须丰满，单条严禁少于 80 字！
+1. 逻辑倍增：绝对禁止总结！利用【杜邦分析法】和【博弈论】对每一个商业动作进行深度拆解。
+2. 🚨【注脚三段论】：所有注脚格式固定为 [[原文词汇::解析内容]]。
+   解析内容必须包含：🎭【表层伪装】... ⚙️【核心机制】... 🗡️【收割代价】...
+   单条解析字数必须突破 80 字，严禁口水话。
 
 【强制研报结构】：
 - Ⅰ. 权力构架与意志解剖
@@ -59,12 +59,10 @@ You are a God-tier Financial Forensic Expert. Your goal is to produce a MASSIVE 
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
-      { role: 'user', content: String(isEnglish ? `Analyze exhaustively in 100% PURE ENGLISH:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
+      { role: 'user', content: String(isEnglish ? `Target Narrative for Decryption:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
     ];
 
     const streamResponse = await createDeepSeekStream(messages);
-    
-    // 🛡️ 边缘端响应增强：保持连接存活
     return new Response(streamResponse.body, {
       headers: { 
         'Content-Type': 'text/event-stream', 

@@ -38,7 +38,8 @@ export default function DecodePage() {
          if (json.success) setSignal(json.data);
        } catch (err) { 
          if (process.env.NODE_ENV === 'development') {
-           console.log("🔴 [模块_崩溃] -> 原因: 信号抓取失败", err); 
+           const errMsg = err instanceof Error ? err.message : String(err);
+           console.log("🔴 [模块_崩溃] -> 原因: 信号抓取失败", errMsg); 
          }
        } finally { 
          setLoading(false); 
@@ -49,9 +50,9 @@ export default function DecodePage() {
    }, [id]);
 
   /**
-   * 🚨 架构师 V7.0 终极字典解析：双轨容灾提取算法
+   * 🚨 架构师 V7.1 终极字典解析：双轨容灾提取算法
    * 作用：解析大模型生成的 fluff 数组，将其转化为 { "原文": "解析" } 的映射字典。
-   * 容灾：即使大模型遗漏了双冒号，也能通过捕捉第一个中文方括号【 来强行切分数据。
+   * 容灾：即使大模型遗漏了双冒号，也能通过捕捉第一个中文或英文方括号【 / [ 来强行切分数据。
    */
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -80,12 +81,12 @@ export default function DecodePage() {
         // 2. 物理容灾路径：大模型忘记冒号，寻找第一个方括号【 或 [
         else {
           const bracketMatch = item.match(/[【\[]/);
-          if (bracketMatch && bracketMatch.index && bracketMatch.index > 0) {
+          if (bracketMatch && bracketMatch.index !== undefined && bracketMatch.index > 0) {
              key = item.substring(0, bracketMatch.index).replace(/[「」"“”'*\[\]]/g, '').trim();
              
              // 目标语言可能也没有冒号
              const targetBracketMatch = targetItem.match(/[【\[]/);
-             if (targetBracketMatch && targetBracketMatch.index && targetBracketMatch.index > 0) {
+             if (targetBracketMatch && targetBracketMatch.index !== undefined && targetBracketMatch.index > 0) {
                  explanation = targetItem.substring(targetBracketMatch.index).trim();
              } else {
                  explanation = targetItem;
@@ -93,11 +94,19 @@ export default function DecodePage() {
           }
         }
 
-        // 3. 字典入库与降级匹配
+        // 3. 拦截大模型的“原文字面量”幻觉（兜底防御）
+        if (key === '原文' || key === '原文提取词汇' || key === 'EnglishWord' || key.length < 2) {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('🟡 [模块_异步] -> 目标: 拦截到大模型字面量幻觉，已阻断脏 Key 入库:', key);
+            }
+            return;
+        }
+
+        // 4. 字典入库与降级匹配
         if (key && rawText.includes(key)) {
           dict[key] = explanation;
         } else if (key) {
-          // 物理降级匹配：只要前 4 个字对得上就强行高亮
+          // 物理降级匹配：只要前 4 个字符对得上就强行高亮
           const shortKey = key.substring(0, 4);
           if (shortKey.length >= 2 && rawText.includes(shortKey)) {
             dict[shortKey] = explanation;
@@ -130,8 +139,11 @@ export default function DecodePage() {
     try {
       const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` } });
       const json = await res.json();
-      if (json.success) router.push('/');
-      else alert(`抹杀失败: ${json.error}`);
+      if (json.success) {
+        router.push('/');
+      } else {
+        alert(`抹杀失败: ${json.error}`);
+      }
     } catch (_e) { 
       alert("网络阻断"); 
     } finally { 

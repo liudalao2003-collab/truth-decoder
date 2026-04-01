@@ -28,7 +28,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
   const [mounted, setMounted] = useState(false);
   
-  // 🛡️ 架构师装甲：气泡防闪烁延迟锁
+  // 🛡️ 架构师装甲：气泡防闪烁延迟锁，允许鼠标平滑移入气泡内部进行滚动
   const hoverTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => setMounted(true), []);
@@ -47,7 +47,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
   }, [rawContent, sortedKeys]);
 
   /**
-   * 🚨 架构师 V7.0：防溢出智能定位算法与交互桥梁
+   * 🚨 架构师 V7.1：防溢出智能定位算法与交互桥梁
    */
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -116,7 +116,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
         </div>
       </div>
 
-      {/* 🚨 架构师 V7.0 终极装甲：移除 pointer-events-none，注入 max-h 与暗黑滚动条，允许深度阅读。 */}
+      {/* 🚨 架构师 V7.1 终极装甲：移除 pointer-events-none，注入 max-h 与暗黑滚动条，允许深度阅读。 */}
       {mounted && hoverInfo && createPortal(
         <div
           onMouseEnter={handlePortalMouseEnter}
