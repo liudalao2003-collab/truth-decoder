@@ -1,18 +1,20 @@
 import { createBrowserClient } from '@supabase/ssr';
 
-/**
- * 核心业务说明：
- * C端浏览器环境的 Supabase 客户端。
- * 负责在客户端组件 (如 "use client" 的页面) 中维持用户的登录态。
- * 它的底层逻辑会自动在浏览器的 Cookie 中寻找并携带 JWT 令牌。
- */
+// 🚨 架构师 V6.9 终极防线：绝对单例模式 (Singleton)
+// 物理锁定客户端实例，防止 React 疯狂重渲染导致内存爆炸
+let browserClient: ReturnType<typeof createBrowserClient> | undefined;
+
 export function createClient() {
+  if (browserClient) return browserClient;
+
   if (process.env.NODE_ENV === 'development') {
-    console.log('🟢 [模块_发起] -> 动作/参数:', '唤醒 Browser Supabase 客户端');
+    console.log('🟢 [模块_发起] -> 动作/参数:', '初始化物理级唯一 Browser Supabase 客户端');
   }
   
-  return createBrowserClient(
+  browserClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  return browserClient;
 }
