@@ -27,7 +27,6 @@ export default function DecodePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
 
-  // 🚨 动作三缝合点：解构出 isTruncated 状态
   const { dossierContent, isStreamingDossier, isTruncated, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => { 
@@ -50,9 +49,6 @@ export default function DecodePage() {
      fetchSignal(); 
    }, [id]);
 
-  /**
-   * 🚨 动作二逻辑保留：反幻觉清洗与绝对精准匹配
-   */
   useEffect(() => {
     if (signal && signal.raw_content) {
       const f = signal.fluff_words;
@@ -71,13 +67,11 @@ export default function DecodePage() {
         const parts = item.split(/(?:::|：：)/);
         const targetItem = targetFluffs[idx] || item;
 
-        // 1. 标准双冒号切割路径
         if (parts.length >= 2) {
           key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
           const targetParts = targetItem.split(/(?:::|：：)/);
           explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
         } 
-        // 2. 物理容灾路径：寻找第一个方括号
         else {
           const bracketMatch = item.match(/[【\[]/);
           if (bracketMatch && bracketMatch.index !== undefined && bracketMatch.index > 0) {
@@ -91,7 +85,6 @@ export default function DecodePage() {
           }
         }
 
-        // 3. 反幻觉清洗墙：拦截无意义短词与大模型字面量幻觉
         const INVALID_KEYS = ['原文', '原文提取词汇', 'EnglishWord', '词汇', '提取词汇'];
         if (key.length < 2 || INVALID_KEYS.includes(key)) {
             if (process.env.NODE_ENV === 'development') {
@@ -100,7 +93,6 @@ export default function DecodePage() {
             return;
         }
 
-        // 4. 绝对精准入库与去重防线
         if (!dict[key] && rawText.includes(key)) {
           dict[key] = explanation;
         } else if (process.env.NODE_ENV === 'development') {
@@ -179,7 +171,6 @@ export default function DecodePage() {
                 </button>
               </div>
             ) : ( 
-              {/* 🚨 动作三缝合点：将 isTruncated 注入 DossierReader */}
               <DossierReader 
                 content={dossierContent} 
                 isStreaming={isStreamingDossier} 
