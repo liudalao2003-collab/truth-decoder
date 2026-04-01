@@ -22,7 +22,9 @@ export default function DossierReader({
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (isStreaming && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    if (isStreaming && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
   }, [content, isStreaming]);
 
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
@@ -53,52 +55,101 @@ export default function DossierReader({
     });
   };
 
-  const parseInlineFormat = (text: string) => {
-    const tagRegex = /\[\[\s*([\s\S]*?)\s*(?:::|：：)\s*([\s\S]*?)\s*\]\]/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+  // 🚨 架构师防御矩阵 V2.0：工业级栈式词法解析器 (Stack-based Tokenizer)
+  // 彻底免疫大模型幻觉、半截断括号、缺失冒号等物理破坏
+  const parseInlineFormat = (text: string, blockIndex: number) => {
+    const tokens = [];
+    let current = 0;
 
-    while ((match = tagRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
-      const surfaceWord = match[1].replace(/\]$/g, '').trim();
-      const deepInsight = match[2].trim();
+    while (current < text.length) {
+      const startIdx = text.indexOf('[[', current);
       
-      parts.push(
-        <span key={`tag-${match.index}`} onMouseEnter={(e) => handleMouseEnter(e, deepInsight)} onMouseLeave={handleMouseLeave} className="bg-red-900/40 text-red-400 px-1.5 rounded-[2px] border-b border-red-500/50 transition-all duration-300 hover:bg-red-800/80 hover:text-white hover:shadow-[0_0_10px_rgba(220,38,38,0.5)] cursor-crosshair font-bold"
-        >{surfaceWord}</span>
-      );
-      lastIndex = tagRegex.lastIndex;
+      if (startIdx === -1) {
+        // 没有更多的标记，将剩余文本推入
+        tokens.push(...parseBoldAndDict(text.slice(current), `b${blockIndex}-chunk-${current}`));
+        break;
+      }
+
+      // 推入 `[[` 之前的正常文本
+      if (startIdx > current) {
+        tokens.push(...parseBoldAndDict(text.slice(current, startIdx), `b${blockIndex}-chunk-${current}`));
+      }
+
+      const endIdx = text.indexOf(']]', startIdx + 2);
+      
+      if (endIdx === -1) {
+        // 探测到物理截断：有开头没结尾，启动降级容灾，直接作为普通文本渲染
+        tokens.push(...parseBoldAndDict(text.slice(startIdx), `b${blockIndex}-chunk-${startIdx}`));
+        break;
+      }
+
+      // 成功捕获完整括号内容
+      const innerContent = text.slice(startIdx + 2, endIdx);
+      const separatorIdx = innerContent.indexOf('::') !== -1 ? innerContent.indexOf('::') : innerContent.indexOf('：：');
+
+      if (separatorIdx !== -1) {
+        // 标准格式：[[词汇::解析]]
+        const surfaceWord = innerContent.slice(0, separatorIdx).trim();
+        const deepInsight = innerContent.slice(separatorIdx + 2).trim();
+
+        tokens.push(
+          <span 
+            key={`b${blockIndex}-tag-${startIdx}`} 
+            onMouseEnter={(e) => handleMouseEnter(e, deepInsight)} 
+            onMouseLeave={handleMouseLeave} 
+            className="bg-red-900/40 text-red-400 px-1.5 rounded-[2px] border-b border-red-500/50 transition-all duration-300 hover:bg-red-800/80 hover:text-white hover:shadow-[0_0_10px_rgba(220,38,38,0.5)] cursor-crosshair font-bold"
+          >
+            {surfaceWord}
+          </span>
+        );
+      } else {
+        // 格式畸变：没有冒号。物理降级渲染。
+        tokens.push(<span key={`b${blockIndex}-malformed-${startIdx}`}>[[{innerContent}]]</span>);
+      }
+
+      current = endIdx + 2;
     }
-    if (lastIndex < text.length) parts.push(...parseBoldAndDict(text.slice(lastIndex), 'last-chunk'));
-    return parts;
+
+    return tokens;
   };
 
+  // 🚨 物理流切割引擎，摒弃所有粗暴的 string.replace
   const renderBlocks = () => {
-    let safeContent = content;
-    safeContent = safeContent.replace(/\[{3,}/g, '[[').replace(/\]{3,}/g, ']]');
-    safeContent = safeContent.replace(/(?<!\[)\[([^\[\]]+?(?:::|：：)[\s\S]+?)\](?!\])/g, '[[$1]]'); 
-    safeContent = safeContent.replace(/([^\s\[\*]+?)(?:::|：：)(\s*[【\[][\s\S]+?(?:。|\]|\n\n))/g, '[[$1::$2]]');
+    // 强制过滤掉所有无意义的空行，防止 DOM 节点臃肿
+    const blocks = content.split(/\n+/).filter(b => b.trim().length > 0);
 
-    return safeContent.split(/\n+/).map((block, index) => {
+    return blocks.map((block, index) => {
       const trimmed = block.trim();
-      if (!trimmed) return null;
-      if (trimmed.startsWith('# ') || trimmed.startsWith('## ')) {
+      
+      // 捕获 Markdown 标题
+      if (trimmed.startsWith('# ') || trimmed.startsWith('## ') || trimmed.startsWith('### ')) {
+        const cleanTitle = trimmed.replace(/^#+\s*/, '');
         return (
-          <h3 key={index} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 py-2 block">
-            {parseInlineFormat(trimmed.replace(/^#+\s*/, ''))}
+          <h3 key={`heading-${index}`} className="text-xl md:text-2xl font-black text-white tracking-wider uppercase mt-12 mb-6 border-l-4 border-red-700 pl-4 bg-gradient-to-r from-red-950/20 py-2 block">
+            {parseInlineFormat(cleanTitle, index)}
           </h3>
         );
       }
+      
+      // 捕获 Markdown 列表
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const cleanListItem = trimmed.replace(/^[-*]\s*/, '');
         return (
-          <div key={index} className="flex items-start gap-4 my-3 pl-4">
+          <div key={`list-${index}`} className="flex items-start gap-4 my-3 pl-4">
             <span className="text-red-700 mt-1.5 shrink-0">✦</span>
-            <div className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg">{parseInlineFormat(trimmed.replace(/^[-*]\s*/, ''))}</div>
+            <div className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg w-full">
+              {parseInlineFormat(cleanListItem, index)}
+            </div>
           </div>
         );
       }
-      return <p key={index} className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg mb-6 text-justify">{parseInlineFormat(trimmed)}</p>;
+      
+      // 常规段落渲染
+      return (
+        <p key={`p-${index}`} className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg mb-6 text-justify">
+          {parseInlineFormat(trimmed, index)}
+        </p>
+      );
     });
   };
 
@@ -130,6 +181,7 @@ export default function DossierReader({
           </div>
           <div className="relative z-10 max-w-4xl mx-auto">
             {renderBlocks()}
+            
             {isStreaming && (
               <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
             )}

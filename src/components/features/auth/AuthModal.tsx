@@ -54,7 +54,8 @@ export default function AuthModal({
       
       onClose();
       router.refresh(); // 强制刷新路由，让 Server Components 感知最新会话
-    } catch (err: any) {
+      
+    } catch (err: unknown) { // 🚨 架构师防御矩阵：拔除 any 毒瘤，强制类型收缩
       const errMsg = err instanceof Error ? err.message : '认证物理链路断裂';
       setError(errMsg);
       if (process.env.NODE_ENV === 'development') {
@@ -136,7 +137,10 @@ export default function AuthModal({
             <div className="mt-6 text-center">
               <button 
                 type="button"
-                onClick={() => { setIsLogin(!isLogin); setError(null); }}
+                onClick={() => { 
+                  setIsLogin(!isLogin);
+                  setError(null); 
+                }}
                 className="text-xs font-mono text-zinc-500 hover:text-red-400 transition-colors tracking-wide underline decoration-zinc-800 underline-offset-4"
               >
                 {isLogin ? "没有权限？申请机密档案 (Sign Up)" : "已有权限？返回安全连接 (Login)"}

@@ -1832,64 +1832,61 @@ import { logger } from '@/utils/logger';
 
 export const runtime = 'edge';
 
+/**
+ * 核心业务：暗影卷宗 (Shadow Dossier) 逻辑核心 V7.2
+ * 变更：死锁语言，杜绝截断，移除符号，强化博弈深度。
+ */
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
-        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
     }
 
     const body = await request.json();
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师 V7.1：注入“语言纯洁度死锁”与“逻辑分形展开”指令
     const systemPromptText = isEnglish
-      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE]
-You are a God-tier Financial Forensic Expert. Your goal is to produce a MASSIVE "Shadow Dossier" that makes McKinsey reports look like children's books.
+      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE V7.2]
+You are a God-tier Financial Forensic Expert. Produce a MASSIVE "Shadow Dossier".
 
-[CRITICAL LANGUAGE LOCK]:
-1. 100% PURE ENGLISH: You are forbidden from using any Chinese characters, Pinyin, or bilingual explanations (e.g., "Term (Chinese)"). 
-2. Any presence of Chinese characters in your output will result in a total system failure. 
+[CONSTRAINTS]:
+1. 100% PURE ENGLISH: No Chinese characters or bilingual explanations allowed.
+2. NO SYMBOLS: Remove all emojis. Use bold text for emphasis.
+3. FRACTAL EXPANSION: Never summarize. Deconstruct every sentence using DuPont and Game Theory models.
+4. FOOTNOTE DEPTH: Every [[Term::Analysis]] MUST exceed 100 words, analyzing Surface Illusion, Structural Mechanism, and Critical Fallout.
+5. NO TRUNCATION: Complete all 4 sections. Prioritize logical closure.
 
-[FRACTAL EXPANSION PROTOCOL]:
-- NEVER SUMMARIZE. Every sentence must be treated as a deceptive layer to be stripped.
-- [FOOTNOTE FRAMEWORK]: Every footnote [[Term::Analysis]] MUST exceed 60 words and strictly follow:
-  [I. Surface Illusion] [II. Structural Mechanism] [III. Critical Fallout]
+[STRUCTURE]:
+- I. ANATOMY OF CORPORATE WILL
+- II. THE LEVERAGE MAZE
+- III. STRUCTURAL FRAGMENTATION
+- IV. BLACK SWAN FORECASTING`
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V7.2】
+任务：生成细节爆炸、逻辑深度封顶的《暗影卷宗》Markdown 研报。
 
-[FORCED STRUCTURE]:
-- I. ANATOMY OF CORPORATE WILL: Deconstructing hidden agendas.
-- II. THE LEVERAGE MAZE: Forensic analysis of capital flow.
-- III. STRUCTURAL FRAGMENTATION: Applying MECE to revealed exclusions.
-- IV. BLACK SWAN FORECASTING: Multi-layered predictions.
-
-3. ANTI-TRUNCATION: Ensure all 4 sections are logic-complete. If tokens are low, prioritize logic closure over fluff.`
-      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V7.1】
-任务：生成一份细节爆炸、极具攻击性的《暗影卷宗》Markdown 研报。
-
-【绝对语言隔离舱】：
-1. 100% 纯正中文：全篇严禁出现任何英文字母、英文单词或英文括号（包括注脚内部和专业术语）！
-2. 严禁提供“中文 (English)”这种双语解释格式，必须完全中文化。
+【语言隔离舱】：
+1. 100% 纯正中文：禁止出现任何英文字母或双语括号。CEO 须译为首席执行官。
 
 【深度与结构死令】：
-1. 逻辑倍增：绝对禁止总结！利用【杜邦分析法】和【博弈论】对每一个商业动作进行深度拆解。
-2. 🚨【注脚三段论】：所有注脚格式固定为 [[原文词汇::解析内容]]。
-   解析内容必须包含：🎭【表层伪装】... ⚙️【核心机制】... 🗡️【收割代价】...
-   单条解析字数必须突破 80 字，严禁口水话。
+1. 绝对禁止总结！利用【杜邦分析法】和【博弈论】对每一个商业动作进行分形拆解。
+2. 严禁符号：禁止使用任何 Emoji。利用排版和黑体字体现攻击性。
+3. 注脚深度：注脚格式 [[原文词汇::解析内容]]。解析内容字数必须突破 120 字，涵盖：[表层伪装]、[核心机制]、[收割代价]。
+4. 拒绝截断：必须确保四个板块全部逻辑闭环。如果 Token 不足，请缩减修饰词，但必须完成所有板块的论证。
 
-【强制研报结构】：
+【架构】：
 - Ⅰ. 权力构架与意志解剖
 - Ⅱ. 资产流动与杠杆迷局
 - Ⅲ. 隐藏契约与逻辑穷举
-- Ⅳ. 高维时间轴预测
-
-3. 拒绝截断：你必须确保四个板块全部逻辑闭环，不得在半途停止生成！`;
+- Ⅳ. 高维时间轴预测`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
-      { role: 'user', content: String(isEnglish ? `Target Narrative for Decryption:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
+      { role: 'user', content: String(isEnglish ? `Target Narrative:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
     ];
 
+    // 提高 Max Tokens 阈值以应对分形展开需求
     const streamResponse = await createDeepSeekStream(messages);
     return new Response(streamResponse.body, {
       headers: { 
@@ -1898,10 +1895,11 @@ You are a God-tier Financial Forensic Expert. Your goal is to produce a MASSIVE 
         'Connection': 'keep-alive' 
       },
     });
-
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Dossier Engine Cascade Failure';
-    logger.crash(errMsg); 
+    if (process.env.NODE_ENV === 'development') {
+        logger.crash(errMsg);
+    }
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
   }
 }
@@ -1970,6 +1968,10 @@ import { TerminalMessage } from '@/types';
 
 export const runtime = 'edge';
 
+/**
+ * 核心业务：TruthDecoder 终极微观解剖引擎 V7.2
+ * 变更：移除冗余符号，强化词汇唯一性，提升解剖深度。
+ */
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization');
@@ -1980,36 +1982,33 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
 
-    // 🚨 架构师重构：V7.1 统一真理之源 Prompt (物理防御与反幻觉死令)
-    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
-你是一个让华尔街战栗的顶级做空分析师，极其深刻、残忍。
-任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的红字气泡。
+    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎 V7.2】
+你是一个让华尔街战栗的顶级做空分析师，冷酷、精确、深刻。
+任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的解构气泡。
 
-【绝对生存法则（物理防御死线）】：
-1. 绝对禁止在 JSON 的 value 中使用换行符 (\\n) 或任何未转义的英文双引号 (")！若需换行请用空格替代，若需引用请用单引号 (')！
-2. 语言隔离：'cn' 必须 100% 中文，严禁夹杂英文；'en' 必须 100% 英文，严禁夹杂中文。
+【绝对语言隔离（物理防御死线）】：
+1. 'cn' 字段必须 100% 纯正中文，禁止夹杂任何英文字母、缩写（如 CEO 须译为首席执行官）。
+2. 'en' 字段必须 100% 纯正英文，禁止夹杂任何中文字符。
 
 【核心解剖框架（fluff 数组解析指令）】：
-每一条解析必须严格遵循以下三层结构，且字数必须突破 80 字，穿透公关话术（严禁使用 Emoji）：
-【表层伪装】：解构通稿文字如何通过情绪词、修饰语构建虚假预期。
-【核心机制】：穿透文字，指出底层真实的资产重组、流动性搬运或权力清洗的物理动作。
-【收割代价】：明确指出谁的利益正在被悄无声息地榨取。
+1. 每一条解析必须严格遵循以下结构，字数须突破 100 字，穿透公关话术（严禁使用任何 Emoji 符号）：
+   - [表层伪装]：分析文字如何利用修饰语构建虚假预期。
+   - [核心机制]：利用财务模型或博弈论，指出底层的资产重组、流动性搬运或权力清洗动作。
+   - [收割代价]：明确指出谁的利益（股东、员工、公众）正在被悄无声息地榨取。
+2. 词汇唯一性：严禁提取重复或含义高度接近的词汇。每个被提取词汇必须代表一个独立的商业逻辑。
+3. 价值甄别：严禁为了标红而标红。只提取具备欺骗性、战略意义或掩盖真实动作的核心词汇。
 
-【🚨 致命格式红线（反幻觉死令）】：
-冒号左侧的键名，必须是你从用户输入的通稿原文中【100% 逐字复制】的真实词汇或短句！
-绝对禁止使用“原文”、“原文提取词汇”、“EnglishWord”等抽象代称！必须提取真实的词汇！
+【格式红线】：
+1. 冒号左侧的键名，必须是从原文中【100% 逐字复制】。
+2. 禁止在 JSON 的 value 中使用换行符 (\\n) 或未转义的双引号。
 
-【强制 JSON 输出格式（严格参考示例）】：
+【强制 JSON 格式】：
 {
-  "verdict": { "cn": "一句纯中文犀利判决。", "en": "A ruthless, single-sentence pure English verdict." },
-  "facts": { "cn": ["纯中文事实。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "verdict": { "cn": "一句话判决。", "en": "A ruthless verdict." },
+  "facts": { "cn": ["事实1"], "en": ["Fact1"] },
   "fluff": {
-    "cn": [
-      "战略性业务架构优化::【表层伪装】此处通过宏大叙事掩盖真相...【核心机制】管理层正在执行隐蔽的资本虹吸...【收割代价】此动作最终将由普通散户承担流动性枯竭的苦果。"
-    ],
-    "en": [
-      "Strategic business restructuring::[Surface Camouflage] Analysis... [Core Mechanism] Deep financial forensics... [Harvesting Cost] Who pays the price..."
-    ]
+    "cn": ["原文词汇::[表层伪装]内容...[核心机制]内容...[收割代价]内容..."],
+    "en": ["OriginalTerm::[SurfaceCamouflage]...[CoreMechanism]...[HarvestingCost]..."]
   }
 }`;
 
@@ -2021,12 +2020,17 @@ export async function POST(req: Request) {
     const streamResponse = await createDeepSeekStream(messages, true);
 
     return new Response(streamResponse.body, {
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' }
+      headers: { 
+        'Content-Type': 'text/event-stream', 
+        'Cache-Control': 'no-cache', 
+        'Connection': 'keep-alive' 
+      }
     });
-
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '解剖引擎级联失效';
-    console.error("🔴 [INGEST 500] ->", errMsg);
+    if (process.env.NODE_ENV === 'development') {
+      console.error("🔴 [INGEST_CRASH] ->", errMsg);
+    }
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
   }
 }
@@ -2139,6 +2143,10 @@ const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
 });
 
+/**
+ * 核心业务：全量资产红利重铸引擎 (V5.7 工业级)
+ * 变更：移除 Emoji，强制深度解构，确保 100% 语言纯洁。
+ */
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization');
@@ -2149,36 +2157,22 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 🚨 架构师重构：与 Ingest 引擎实现 100% Prompt 物理对齐
-    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
-你是一个让华尔街战栗的顶级做空分析师，极其深刻、残忍。
-任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的红字气泡。
+    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极智库重塑引擎】
+你是一个让华尔街战栗的顶级做空分析师。任务：将通稿重塑为 JSON 格式的深层情报。
 
-【绝对生存法则（物理防御死线）】：
-1. 绝对禁止在 JSON 的 value 中使用换行符 (\\n) 或任何未转义的英文双引号 (")！若需换行请用空格替代，若需引用请用单引号 (')！
-2. 语言隔离：'cn' 必须 100% 中文，严禁夹杂英文；'en' 必须 100% 英文，严禁夹杂中文。
+【绝对指令】：
+1. 严禁使用任何 Emoji 符号（如 🎭, ⚙️, 🗡️）。
+2. 解析字数下限 100 字，必须包含 [表层伪装]、[核心机制]、[收割代价] 三大维度。
+3. 语言隔离：'cn' 字段严禁出现英文，'en' 字段严禁出现中文。
+4. 深度法则：利用杜邦分析、博弈论或 MECE 原则进行解构，禁止空洞描述。
+5. 唯一性：fluff 键名必须唯一，且必须是原文提取。
 
-【核心解剖框架（fluff 数组解析指令）】：
-每一条解析必须严格遵循以下三层结构，且字数必须突破 80 字，穿透公关话术（严禁使用 Emoji）：
-【表层伪装】：解构通稿文字如何通过情绪词、修饰语构建虚假预期。
-【核心机制】：穿透文字，指出底层真实的资产重组、流动性搬运或权力清洗的物理动作。
-【收割代价】：明确指出谁的利益正在被悄无声息地榨取。
-
-【🚨 致命格式红线（反幻觉死令）】：
-冒号左侧的键名，必须是你从用户输入的通稿原文中【100% 逐字复制】的真实词汇或短句！
-绝对禁止使用“原文”、“原文提取词汇”、“EnglishWord”等抽象代称！必须提取真实的词汇！
-
-【强制 JSON 输出格式（严格参考示例）】：
 {
-  "verdict": { "cn": "一句纯中文犀利判决。", "en": "A ruthless, single-sentence pure English verdict." },
-  "facts": { "cn": ["纯中文事实。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "verdict": { "cn": "...", "en": "..." },
+  "facts": { "cn": ["..."], "en": ["..."] },
   "fluff": {
-    "cn": [
-      "战略性业务架构优化::【表层伪装】此处通过宏大叙事掩盖真相...【核心机制】管理层正在执行隐蔽的资本虹吸...【收割代价】此动作最终将由普通散户承担流动性枯竭的苦果。"
-    ],
-    "en": [
-      "Strategic business restructuring::[Surface Camouflage] Analysis... [Core Mechanism] Deep financial forensics... [Harvesting Cost] Who pays the price..."
-    ]
+    "cn": ["原文词::[表层伪装]...[核心机制]...[收割代价]..."],
+    "en": ["Term::[SurfaceCamouflage]...[CoreMechanism]...[HarvestingCost]..."]
   }
 }`;
 
@@ -2189,7 +2183,7 @@ export async function POST(req: Request) {
         { role: "user", content: rawContent }
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.6
+      temperature: 0.3
     });
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
@@ -2200,14 +2194,13 @@ export async function POST(req: Request) {
         fluff_words: intel.fluff,
         hard_facts: intel.facts,
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict, washed: true }
+        metadata: { bilingual: intel.verdict, washed: true, model: 'deepseek-v3' }
       })
       .eq('id', id);
 
     if (dbError) throw dbError;
 
-    return NextResponse.json({ success: true, message: `Signal ${id} Washed` });
-
+    return NextResponse.json({ success: true, message: `Signal ${id} Washed & Upgraded` });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '资产重塑过程遭遇致命死锁';
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
@@ -2302,7 +2295,7 @@ export default function DecodePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
 
-  const { dossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
+  const { dossierContent, isStreamingDossier, isTruncated, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => { 
      if (!id) return;
@@ -2324,11 +2317,6 @@ export default function DecodePage() {
      fetchSignal(); 
    }, [id]);
 
-  /**
-   * 🚨 架构师 V7.1 终极字典解析：双轨容灾提取算法
-   * 作用：解析大模型生成的 fluff 数组，将其转化为 { "原文": "解析" } 的映射字典。
-   * 容灾：即使大模型遗漏了双冒号，也能通过捕捉第一个中文或英文方括号【 / [ 来强行切分数据。
-   */
   useEffect(() => {
     if (signal && signal.raw_content) {
       const f = signal.fluff_words;
@@ -2347,19 +2335,15 @@ export default function DecodePage() {
         const parts = item.split(/(?:::|：：)/);
         const targetItem = targetFluffs[idx] || item;
 
-        // 1. 标准双冒号切割路径
         if (parts.length >= 2) {
           key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
           const targetParts = targetItem.split(/(?:::|：：)/);
           explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
         } 
-        // 2. 物理容灾路径：大模型忘记冒号，寻找第一个方括号【 或 [
         else {
           const bracketMatch = item.match(/[【\[]/);
           if (bracketMatch && bracketMatch.index !== undefined && bracketMatch.index > 0) {
              key = item.substring(0, bracketMatch.index).replace(/[「」"“”'*\[\]]/g, '').trim();
-             
-             // 目标语言可能也没有冒号
              const targetBracketMatch = targetItem.match(/[【\[]/);
              if (targetBracketMatch && targetBracketMatch.index !== undefined && targetBracketMatch.index > 0) {
                  explanation = targetItem.substring(targetBracketMatch.index).trim();
@@ -2369,30 +2353,21 @@ export default function DecodePage() {
           }
         }
 
-        // 3. 拦截大模型的“原文字面量”幻觉（兜底防御）
-        if (key === '原文' || key === '原文提取词汇' || key === 'EnglishWord' || key.length < 2) {
+        const INVALID_KEYS = ['原文', '原文提取词汇', 'EnglishWord', '词汇', '提取词汇'];
+        if (key.length < 2 || INVALID_KEYS.includes(key)) {
             if (process.env.NODE_ENV === 'development') {
-                console.log('🟡 [模块_异步] -> 目标: 拦截到大模型字面量幻觉，已阻断脏 Key 入库:', key);
+                console.log('🟡 [模块_异步] -> 拦截废弃/幻觉 Key:', key);
             }
             return;
         }
 
-        // 4. 字典入库与降级匹配
-        if (key && rawText.includes(key)) {
+        if (!dict[key] && rawText.includes(key)) {
           dict[key] = explanation;
-        } else if (key) {
-          // 物理降级匹配：只要前 4 个字符对得上就强行高亮
-          const shortKey = key.substring(0, 4);
-          if (shortKey.length >= 2 && rawText.includes(shortKey)) {
-            dict[shortKey] = explanation;
-          } else {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🟡 [模块_异步] -> 目标: 字典键值脱靶，已物理丢弃:', key);
-            }
-          }
+        } else if (process.env.NODE_ENV === 'development') {
+          console.log('🟡 [模块_异步] -> Key 脱靶或重复，已物理丢弃:', key);
         }
       });
-
+      
       setDictionary(dict);
     }
   }, [signal, lang]);
@@ -2412,7 +2387,7 @@ export default function DecodePage() {
     if (!confirm) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` } });
+      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` } });
       const json = await res.json();
       if (json.success) {
         router.push('/');
@@ -2420,7 +2395,7 @@ export default function DecodePage() {
         alert(`抹杀失败: ${json.error}`);
       }
     } catch (_e) { 
-      alert("网络阻断"); 
+      alert("网络阻断");
     } finally { 
       setIsDeleting(false);
     }
@@ -2463,7 +2438,14 @@ export default function DecodePage() {
                   <span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span>
                 </button>
               </div>
-            ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
+            ) : ( 
+              <DossierReader 
+                content={dossierContent} 
+                isStreaming={isStreamingDossier} 
+                isTruncated={isTruncated} 
+                dictionary={dictionary} 
+              /> 
+            )}
           </div>
         </div>
 
@@ -2634,9 +2616,19 @@ File: .\src\components\features\decode\DossierReader.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
+import { BookOpen, ShieldAlert, Zap, AlertTriangle } from 'lucide-react';
 
-export default function DossierReader({ content, isStreaming = false }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
+export default function DossierReader({ 
+  content, 
+  isStreaming = false, 
+  isTruncated = false,
+  dictionary = {} 
+}: { 
+  content: string; 
+  isStreaming?: boolean; 
+  isTruncated?: boolean;
+  dictionary?: Record<string, string>;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -2683,7 +2675,6 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
-      
       const surfaceWord = match[1].replace(/\]$/g, '').trim();
       const deepInsight = match[2].trim();
       
@@ -2727,14 +2718,49 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col h-full">
         <div className="bg-zinc-950/80 px-8 py-5 border-b border-zinc-900 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <div className="flex items-center gap-4"><BookOpen className="text-red-700" size={20} /><div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2><p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">Top Secret // Analysis</p></div></div>
-          {isStreaming ? ( <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50"><span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...</span> ) : ( <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2"><ShieldAlert size={12} />Decoded</span> )}
+          <div className="flex items-center gap-4">
+            <BookOpen className="text-red-700" size={20} />
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
+              <p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">Top Secret // Analysis</p>
+            </div>
+          </div>
+          {isStreaming ? ( 
+            <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50">
+              <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...
+            </span> 
+          ) : ( 
+            <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2">
+              <ShieldAlert size={12} />Decoded
+            </span> 
+          )}
         </div>
-        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin relative">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]"><ShieldAlert className="w-[500px] h-[500px] text-white" /></div>
-          <div className="relative z-10 max-w-4xl mx-auto">{renderBlocks()}{isStreaming && <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>}</div>
+
+        <div ref={containerRef} className="p-8 md:p-14 overflow-y-auto scrollbar-thin relative flex-1">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
+            <ShieldAlert className="w-[500px] h-[500px] text-white" />
+          </div>
+          <div className="relative z-10 max-w-4xl mx-auto">
+            {renderBlocks()}
+            {isStreaming && (
+              <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
+            )}
+            
+            {/* 🚨 架构师防线：UI 级截断托底 */}
+            {!isStreaming && isTruncated && (
+              <div className="mt-12 p-6 border border-red-900 bg-red-950/20 rounded-sm flex items-start gap-4">
+                <AlertTriangle className="text-red-500 shrink-0 w-6 h-6 mt-1" />
+                <div>
+                  <h4 className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2">Signal Truncated / 卷宗截断预警</h4>
+                  <p className="text-red-400/80 text-sm leading-relaxed font-mono">
+                    探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
       
@@ -2935,27 +2961,34 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
   useEffect(() => setMounted(true), []);
 
+  // 1. 提取安全的 Keys 并按长度倒序排列 (解决包含关系冲突，例如 "架构优化" 必须先于 "优化" 被捕获)
   const sortedKeys = useMemo(() => {
     return Object.keys(dictionary)
-      .filter(k => k.trim().length > 0)
+      .filter(k => k.trim().length > 1) // 再次强制过滤极短词
       .sort((a, b) => b.length - a.length);
   }, [dictionary]);
 
+  // 2. 严密的正则流切割算法
   const tokens = useMemo(() => {
     if (!rawContent || sortedKeys.length === 0) return [rawContent];
+    
+    // 物理转义所有可能导致正则崩溃的特殊字符
     const escapedKeys = sortedKeys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    // 利用捕获组 () 进行切割，这样保留下来的匹配项也会作为数组元素返回
     const regex = new RegExp(`(${escapedKeys.join('|')})`, 'g');
-    return rawContent.split(regex);
+    
+    // 剔除切割后产生的空字符串，保持 DOM 节点极简
+    return rawContent.split(regex).filter(Boolean);
   }, [rawContent, sortedKeys]);
 
   /**
-   * 🚨 架构师 V7.1：防溢出智能定位算法与交互桥梁
+   * 🚨 架构师 V7.2：防溢出智能定位算法与交互桥梁
    */
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const maxW = 420; // 物理扩容：从 320px 拉升至 420px，提供更宽广的阅读横截面
+    const maxW = 420; // 提供更宽广的阅读横截面
     
     let safeX = rect.left + rect.width / 2;
     if (safeX - maxW / 2 < 20) safeX = maxW / 2 + 20;
@@ -3008,6 +3041,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
           <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]"></div>
           <div className="relative z-20 font-serif text-base leading-[2.2] text-zinc-400 tracking-wide text-justify whitespace-pre-wrap">
             {tokens.map((token, index) => {
+              // 极速 O(1) 字典查表
               const meaning = dictionary[token];
               if (meaning) {
                 return <HighlightMark key={`${index}-${token}`} text={token} meaning={meaning} onEnter={handleMouseEnter} onLeave={handleMouseLeave} />;
@@ -3018,7 +3052,6 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
         </div>
       </div>
 
-      {/* 🚨 架构师 V7.1 终极装甲：移除 pointer-events-none，注入 max-h 与暗黑滚动条，允许深度阅读。 */}
       {mounted && hoverInfo && createPortal(
         <div
           onMouseEnter={handlePortalMouseEnter}
@@ -3239,6 +3272,8 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
   const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  // 🚨 架构师防线：新增截断预警状态机
+  const [isTruncated, setIsTruncated] = useState(false);
 
   useEffect(() => {
     if (signal?.dossier_content) {
@@ -3271,7 +3306,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ content: sourceText, targetLang: lang })
           });
@@ -3303,7 +3338,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                     const delta = data.choices[0]?.delta?.content || '';
                     if (delta) {
                       fullTranslatedText += delta;
-                      // 🚨 V6.2 核心修复：将状态更新移入循环内部，实现字符级 UI 穿透渲染！
                       setCache((prev) => ({ ...prev, [lang]: fullTranslatedText }));
                     }
                   } catch (e) { /* 忽略流碎片 */ }
@@ -3312,12 +3346,11 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             }
           }
             
-          // 流式接收完毕，异步发射双规持久化
           fetch('/api/v1/dossier/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ id: signal.id, dossier_content: { ...cache, [lang]: fullTranslatedText } })
           }).catch(e => {
@@ -3337,6 +3370,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
   const startDossierStream = async () => {
     if (!signal?.raw_content || isStreamingDossier) return;
     setIsStreamingDossier(true);
+    setIsTruncated(false);
     setCache(prev => ({ ...prev, [lang]: '' }));
 
     if (process.env.NODE_ENV === 'development') {
@@ -3348,7 +3382,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
         },
         body: JSON.stringify({ rawContent: signal.raw_content, lang }) 
       });
@@ -3362,6 +3396,10 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
       const decoder = new TextDecoder('utf-8');
       let done = false;
       let buffer = '';
+      
+      // 🚨 探针：生命周期标识
+      let receivedDoneSignal = false;
+      let finishReason = '';
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
@@ -3373,10 +3411,20 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
           for (const line of lines) {
             const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+            if (trimmedLine.startsWith('data: ')) {
+              if (trimmedLine.includes('[DONE]')) {
+                receivedDoneSignal = true;
+                continue;
+              }
               try {
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
+                const currentFinishReason = data.choices[0]?.finish_reason;
+                
+                if (currentFinishReason) {
+                  finishReason = currentFinishReason;
+                }
+
                 if (delta) {
                   setCache((prev) => ({ ...prev, [lang]: prev[lang] + delta }));
                 }
@@ -3386,13 +3434,20 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         }
       }
       
-      // 流式生成结束后，立刻执行第一次双规持久化
+      // 🚨 裁决：如果是因为超长而结束，或根本没收到结束符，则判定为物理截断
+      if (finishReason === 'length' || !receivedDoneSignal) {
+        setIsTruncated(true);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔴 [模块_崩溃] -> 原因: 卷宗生成被物理截断。FinishReason: ${finishReason}, DoneSignal: ${receivedDoneSignal}`);
+        }
+      }
+
       setCache(finalCache => {
         fetch('/api/v1/dossier/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ id: signal.id, dossier_content: finalCache })
         }).catch(() => {});
@@ -3401,12 +3456,13 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
     } catch (err: unknown) {
        if (process.env.NODE_ENV === 'development') console.log('🔴 [流式中断] ->', err);
+       setIsTruncated(true); // 网络异常直接标记截断
     } finally {
       setIsStreamingDossier(false);
     }
   };
 
-  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, startDossierStream };
+  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, isTruncated, startDossierStream };
 }
 
 ============================================================
