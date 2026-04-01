@@ -27,7 +27,8 @@ export default function DecodePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
 
-  const { dossierContent, isStreamingDossier, startDossierStream } = useDossierStream(signal, lang);
+  // 🚨 动作三缝合点：解构出 isTruncated 状态
+  const { dossierContent, isStreamingDossier, isTruncated, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => { 
      if (!id) return;
@@ -50,9 +51,7 @@ export default function DecodePage() {
    }, [id]);
 
   /**
-   * 🚨 架构师 V7.1 终极字典解析：双轨容灾提取算法
-   * 作用：解析大模型生成的 fluff 数组，将其转化为 { "原文": "解析" } 的映射字典。
-   * 容灾：即使大模型遗漏了双冒号，也能通过捕捉第一个中文或英文方括号【 / [ 来强行切分数据。
+   * 🚨 动作二逻辑保留：反幻觉清洗与绝对精准匹配
    */
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -78,13 +77,11 @@ export default function DecodePage() {
           const targetParts = targetItem.split(/(?:::|：：)/);
           explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
         } 
-        // 2. 物理容灾路径：大模型忘记冒号，寻找第一个方括号【 或 [
+        // 2. 物理容灾路径：寻找第一个方括号
         else {
           const bracketMatch = item.match(/[【\[]/);
           if (bracketMatch && bracketMatch.index !== undefined && bracketMatch.index > 0) {
              key = item.substring(0, bracketMatch.index).replace(/[「」"“”'*\[\]]/g, '').trim();
-             
-             // 目标语言可能也没有冒号
              const targetBracketMatch = targetItem.match(/[【\[]/);
              if (targetBracketMatch && targetBracketMatch.index !== undefined && targetBracketMatch.index > 0) {
                  explanation = targetItem.substring(targetBracketMatch.index).trim();
@@ -94,30 +91,23 @@ export default function DecodePage() {
           }
         }
 
-        // 3. 拦截大模型的“原文字面量”幻觉（兜底防御）
-        if (key === '原文' || key === '原文提取词汇' || key === 'EnglishWord' || key.length < 2) {
+        // 3. 反幻觉清洗墙：拦截无意义短词与大模型字面量幻觉
+        const INVALID_KEYS = ['原文', '原文提取词汇', 'EnglishWord', '词汇', '提取词汇'];
+        if (key.length < 2 || INVALID_KEYS.includes(key)) {
             if (process.env.NODE_ENV === 'development') {
-                console.log('🟡 [模块_异步] -> 目标: 拦截到大模型字面量幻觉，已阻断脏 Key 入库:', key);
+                console.log('🟡 [模块_异步] -> 拦截废弃/幻觉 Key:', key);
             }
             return;
         }
 
-        // 4. 字典入库与降级匹配
-        if (key && rawText.includes(key)) {
+        // 4. 绝对精准入库与去重防线
+        if (!dict[key] && rawText.includes(key)) {
           dict[key] = explanation;
-        } else if (key) {
-          // 物理降级匹配：只要前 4 个字符对得上就强行高亮
-          const shortKey = key.substring(0, 4);
-          if (shortKey.length >= 2 && rawText.includes(shortKey)) {
-            dict[shortKey] = explanation;
-          } else {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🟡 [模块_异步] -> 目标: 字典键值脱靶，已物理丢弃:', key);
-            }
-          }
+        } else if (process.env.NODE_ENV === 'development') {
+          console.log('🟡 [模块_异步] -> Key 脱靶或重复，已物理丢弃:', key);
         }
       });
-
+      
       setDictionary(dict);
     }
   }, [signal, lang]);
@@ -137,7 +127,7 @@ export default function DecodePage() {
     if (!confirm) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` } });
+      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` } });
       const json = await res.json();
       if (json.success) {
         router.push('/');
@@ -145,7 +135,7 @@ export default function DecodePage() {
         alert(`抹杀失败: ${json.error}`);
       }
     } catch (_e) { 
-      alert("网络阻断"); 
+      alert("网络阻断");
     } finally { 
       setIsDeleting(false);
     }
@@ -188,7 +178,15 @@ export default function DecodePage() {
                   <span>{lang === 'cn' ? '激活暗影卷宗' : 'GENERATE DOSSIER'}</span>
                 </button>
               </div>
-            ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
+            ) : ( 
+              {/* 🚨 动作三缝合点：将 isTruncated 注入 DossierReader */}
+              <DossierReader 
+                content={dossierContent} 
+                isStreaming={isStreamingDossier} 
+                isTruncated={isTruncated} 
+                dictionary={dictionary} 
+              /> 
+            )}
           </div>
         </div>
 

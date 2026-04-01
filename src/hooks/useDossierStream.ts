@@ -6,6 +6,8 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
   const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  // 🚨 架构师防线：新增截断预警状态机
+  const [isTruncated, setIsTruncated] = useState(false);
 
   useEffect(() => {
     if (signal?.dossier_content) {
@@ -38,7 +40,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ content: sourceText, targetLang: lang })
           });
@@ -70,7 +72,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                     const delta = data.choices[0]?.delta?.content || '';
                     if (delta) {
                       fullTranslatedText += delta;
-                      // 🚨 V6.2 核心修复：将状态更新移入循环内部，实现字符级 UI 穿透渲染！
                       setCache((prev) => ({ ...prev, [lang]: fullTranslatedText }));
                     }
                   } catch (e) { /* 忽略流碎片 */ }
@@ -79,12 +80,11 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             }
           }
             
-          // 流式接收完毕，异步发射双规持久化
           fetch('/api/v1/dossier/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ id: signal.id, dossier_content: { ...cache, [lang]: fullTranslatedText } })
           }).catch(e => {
@@ -104,6 +104,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
   const startDossierStream = async () => {
     if (!signal?.raw_content || isStreamingDossier) return;
     setIsStreamingDossier(true);
+    setIsTruncated(false);
     setCache(prev => ({ ...prev, [lang]: '' }));
 
     if (process.env.NODE_ENV === 'development') {
@@ -115,7 +116,7 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
         },
         body: JSON.stringify({ rawContent: signal.raw_content, lang }) 
       });
@@ -129,6 +130,10 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
       const decoder = new TextDecoder('utf-8');
       let done = false;
       let buffer = '';
+      
+      // 🚨 探针：生命周期标识
+      let receivedDoneSignal = false;
+      let finishReason = '';
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
@@ -140,10 +145,20 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
           for (const line of lines) {
             const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
+            if (trimmedLine.startsWith('data: ')) {
+              if (trimmedLine.includes('[DONE]')) {
+                receivedDoneSignal = true;
+                continue;
+              }
               try {
                 const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || '';
+                const currentFinishReason = data.choices[0]?.finish_reason;
+                
+                if (currentFinishReason) {
+                  finishReason = currentFinishReason;
+                }
+
                 if (delta) {
                   setCache((prev) => ({ ...prev, [lang]: prev[lang] + delta }));
                 }
@@ -153,13 +168,20 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         }
       }
       
-      // 流式生成结束后，立刻执行第一次双规持久化
+      // 🚨 裁决：如果是因为超长而结束，或根本没收到结束符，则判定为物理截断
+      if (finishReason === 'length' || !receivedDoneSignal) {
+        setIsTruncated(true);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔴 [模块_崩溃] -> 原因: 卷宗生成被物理截断。FinishReason: ${finishReason}, DoneSignal: ${receivedDoneSignal}`);
+        }
+      }
+
       setCache(finalCache => {
         fetch('/api/v1/dossier/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` 
             },
             body: JSON.stringify({ id: signal.id, dossier_content: finalCache })
         }).catch(() => {});
@@ -168,10 +190,11 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
     } catch (err: unknown) {
        if (process.env.NODE_ENV === 'development') console.log('🔴 [流式中断] ->', err);
+       setIsTruncated(true); // 网络异常直接标记截断
     } finally {
       setIsStreamingDossier(false);
     }
   };
 
-  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, startDossierStream };
+  return { dossierContent: cache[lang], isStreamingDossier, isTranslating, isTruncated, startDossierStream };
 }

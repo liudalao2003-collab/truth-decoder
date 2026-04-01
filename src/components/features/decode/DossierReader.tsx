@@ -2,9 +2,19 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, ShieldAlert, Zap } from 'lucide-react';
+import { BookOpen, ShieldAlert, Zap, AlertTriangle } from 'lucide-react';
 
-export default function DossierReader({ content, isStreaming = false }: { content: string, isStreaming?: boolean, dictionary?: Record<string, string> }) {
+export default function DossierReader({ 
+  content, 
+  isStreaming = false, 
+  isTruncated = false,
+  dictionary = {} 
+}: { 
+  content: string; 
+  isStreaming?: boolean; 
+  isTruncated?: boolean;
+  dictionary?: Record<string, string>;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -51,7 +61,6 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
     while ((match = tagRegex.exec(text)) !== null) {
       if (match.index > lastIndex) parts.push(...parseBoldAndDict(text.slice(lastIndex, match.index), `chunk-${match.index}`));
-      
       const surfaceWord = match[1].replace(/\]$/g, '').trim();
       const deepInsight = match[2].trim();
       
@@ -95,14 +104,49 @@ export default function DossierReader({ content, isStreaming = false }: { conten
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#050505] border border-zinc-900 rounded-sm relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col h-full">
         <div className="bg-zinc-950/80 px-8 py-5 border-b border-zinc-900 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <div className="flex items-center gap-4"><BookOpen className="text-red-700" size={20} /><div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2><p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">Top Secret // Analysis</p></div></div>
-          {isStreaming ? ( <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50"><span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...</span> ) : ( <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2"><ShieldAlert size={12} />Decoded</span> )}
+          <div className="flex items-center gap-4">
+            <BookOpen className="text-red-700" size={20} />
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">Shadow Dossier</h2>
+              <p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase">Top Secret // Analysis</p>
+            </div>
+          </div>
+          {isStreaming ? ( 
+            <span className="flex items-center gap-2 text-[10px] font-mono text-red-500 uppercase bg-red-950/30 px-3 py-1.5 rounded-sm border border-red-900/50">
+              <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />Intercepting...
+            </span> 
+          ) : ( 
+            <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2">
+              <ShieldAlert size={12} />Decoded
+            </span> 
+          )}
         </div>
-        <div ref={containerRef} className="p-8 md:p-14 max-h-[800px] overflow-y-auto scrollbar-thin relative">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]"><ShieldAlert className="w-[500px] h-[500px] text-white" /></div>
-          <div className="relative z-10 max-w-4xl mx-auto">{renderBlocks()}{isStreaming && <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>}</div>
+
+        <div ref={containerRef} className="p-8 md:p-14 overflow-y-auto scrollbar-thin relative flex-1">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
+            <ShieldAlert className="w-[500px] h-[500px] text-white" />
+          </div>
+          <div className="relative z-10 max-w-4xl mx-auto">
+            {renderBlocks()}
+            {isStreaming && (
+              <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-3 h-6 bg-red-700 ml-2 align-middle"/>
+            )}
+            
+            {/* 🚨 架构师防线：UI 级截断托底 */}
+            {!isStreaming && isTruncated && (
+              <div className="mt-12 p-6 border border-red-900 bg-red-950/20 rounded-sm flex items-start gap-4">
+                <AlertTriangle className="text-red-500 shrink-0 w-6 h-6 mt-1" />
+                <div>
+                  <h4 className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2">Signal Truncated / 卷宗截断预警</h4>
+                  <p className="text-red-400/80 text-sm leading-relaxed font-mono">
+                    探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
       

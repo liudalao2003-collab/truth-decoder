@@ -33,27 +33,34 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
   useEffect(() => setMounted(true), []);
 
+  // 1. 提取安全的 Keys 并按长度倒序排列 (解决包含关系冲突，例如 "架构优化" 必须先于 "优化" 被捕获)
   const sortedKeys = useMemo(() => {
     return Object.keys(dictionary)
-      .filter(k => k.trim().length > 0)
+      .filter(k => k.trim().length > 1) // 再次强制过滤极短词
       .sort((a, b) => b.length - a.length);
   }, [dictionary]);
 
+  // 2. 严密的正则流切割算法
   const tokens = useMemo(() => {
     if (!rawContent || sortedKeys.length === 0) return [rawContent];
+    
+    // 物理转义所有可能导致正则崩溃的特殊字符
     const escapedKeys = sortedKeys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    // 利用捕获组 () 进行切割，这样保留下来的匹配项也会作为数组元素返回
     const regex = new RegExp(`(${escapedKeys.join('|')})`, 'g');
-    return rawContent.split(regex);
+    
+    // 剔除切割后产生的空字符串，保持 DOM 节点极简
+    return rawContent.split(regex).filter(Boolean);
   }, [rawContent, sortedKeys]);
 
   /**
-   * 🚨 架构师 V7.1：防溢出智能定位算法与交互桥梁
+   * 🚨 架构师 V7.2：防溢出智能定位算法与交互桥梁
    */
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const maxW = 420; // 物理扩容：从 320px 拉升至 420px，提供更宽广的阅读横截面
+    const maxW = 420; // 提供更宽广的阅读横截面
     
     let safeX = rect.left + rect.width / 2;
     if (safeX - maxW / 2 < 20) safeX = maxW / 2 + 20;
@@ -106,6 +113,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
           <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]"></div>
           <div className="relative z-20 font-serif text-base leading-[2.2] text-zinc-400 tracking-wide text-justify whitespace-pre-wrap">
             {tokens.map((token, index) => {
+              // 极速 O(1) 字典查表
               const meaning = dictionary[token];
               if (meaning) {
                 return <HighlightMark key={`${index}-${token}`} text={token} meaning={meaning} onEnter={handleMouseEnter} onLeave={handleMouseLeave} />;
@@ -116,7 +124,6 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
         </div>
       </div>
 
-      {/* 🚨 架构师 V7.1 终极装甲：移除 pointer-events-none，注入 max-h 与暗黑滚动条，允许深度阅读。 */}
       {mounted && hoverInfo && createPortal(
         <div
           onMouseEnter={handlePortalMouseEnter}

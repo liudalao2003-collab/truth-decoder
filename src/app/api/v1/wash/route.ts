@@ -7,6 +7,10 @@ const openai = new OpenAI({
   baseURL: 'https://api.deepseek.com',
 });
 
+/**
+ * 核心业务：全量资产红利重铸引擎 (V5.7 工业级)
+ * 变更：移除 Emoji，强制深度解构，确保 100% 语言纯洁。
+ */
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization');
@@ -17,36 +21,22 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    // 🚨 架构师重构：与 Ingest 引擎实现 100% Prompt 物理对齐
-    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极智库引擎】
-你是一个让华尔街战栗的顶级做空分析师，极其深刻、残忍。
-任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的红字气泡。
+    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极智库重塑引擎】
+你是一个让华尔街战栗的顶级做空分析师。任务：将通稿重塑为 JSON 格式的深层情报。
 
-【绝对生存法则（物理防御死线）】：
-1. 绝对禁止在 JSON 的 value 中使用换行符 (\\n) 或任何未转义的英文双引号 (")！若需换行请用空格替代，若需引用请用单引号 (')！
-2. 语言隔离：'cn' 必须 100% 中文，严禁夹杂英文；'en' 必须 100% 英文，严禁夹杂中文。
+【绝对指令】：
+1. 严禁使用任何 Emoji 符号（如 🎭, ⚙️, 🗡️）。
+2. 解析字数下限 100 字，必须包含 [表层伪装]、[核心机制]、[收割代价] 三大维度。
+3. 语言隔离：'cn' 字段严禁出现英文，'en' 字段严禁出现中文。
+4. 深度法则：利用杜邦分析、博弈论或 MECE 原则进行解构，禁止空洞描述。
+5. 唯一性：fluff 键名必须唯一，且必须是原文提取。
 
-【核心解剖框架（fluff 数组解析指令）】：
-每一条解析必须严格遵循以下三层结构，且字数必须突破 80 字，穿透公关话术（严禁使用 Emoji）：
-【表层伪装】：解构通稿文字如何通过情绪词、修饰语构建虚假预期。
-【核心机制】：穿透文字，指出底层真实的资产重组、流动性搬运或权力清洗的物理动作。
-【收割代价】：明确指出谁的利益正在被悄无声息地榨取。
-
-【🚨 致命格式红线（反幻觉死令）】：
-冒号左侧的键名，必须是你从用户输入的通稿原文中【100% 逐字复制】的真实词汇或短句！
-绝对禁止使用“原文”、“原文提取词汇”、“EnglishWord”等抽象代称！必须提取真实的词汇！
-
-【强制 JSON 输出格式（严格参考示例）】：
 {
-  "verdict": { "cn": "一句纯中文犀利判决。", "en": "A ruthless, single-sentence pure English verdict." },
-  "facts": { "cn": ["纯中文事实。"], "en": ["PURE ENGLISH facts ONLY."] },
+  "verdict": { "cn": "...", "en": "..." },
+  "facts": { "cn": ["..."], "en": ["..."] },
   "fluff": {
-    "cn": [
-      "战略性业务架构优化::【表层伪装】此处通过宏大叙事掩盖真相...【核心机制】管理层正在执行隐蔽的资本虹吸...【收割代价】此动作最终将由普通散户承担流动性枯竭的苦果。"
-    ],
-    "en": [
-      "Strategic business restructuring::[Surface Camouflage] Analysis... [Core Mechanism] Deep financial forensics... [Harvesting Cost] Who pays the price..."
-    ]
+    "cn": ["原文词::[表层伪装]...[核心机制]...[收割代价]..."],
+    "en": ["Term::[SurfaceCamouflage]...[CoreMechanism]...[HarvestingCost]..."]
   }
 }`;
 
@@ -57,7 +47,7 @@ export async function POST(req: Request) {
         { role: "user", content: rawContent }
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.6
+      temperature: 0.3
     });
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
@@ -68,14 +58,13 @@ export async function POST(req: Request) {
         fluff_words: intel.fluff,
         hard_facts: intel.facts,
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict, washed: true }
+        metadata: { bilingual: intel.verdict, washed: true, model: 'deepseek-v3' }
       })
       .eq('id', id);
 
     if (dbError) throw dbError;
 
-    return NextResponse.json({ success: true, message: `Signal ${id} Washed` });
-
+    return NextResponse.json({ success: true, message: `Signal ${id} Washed & Upgraded` });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '资产重塑过程遭遇致命死锁';
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
