@@ -36,15 +36,22 @@ export default function DecodePage() {
          const res = await fetch(`/api/decode?id=${id}`); 
          const json = await res.json(); 
          if (json.success) setSignal(json.data);
-       } catch (err) { if (process.env.NODE_ENV === 'development') console.log("🔴 ERROR:", err); } 
-       finally { setLoading(false); } 
+       } catch (err) { 
+         if (process.env.NODE_ENV === 'development') {
+           console.log("🔴 [模块_崩溃] -> 原因: 信号抓取失败", err); 
+         }
+       } finally { 
+         setLoading(false); 
+       } 
      }; 
  
      fetchSignal(); 
    }, [id]);
 
   /**
-   * 🚨 架构师 V6.7 终极字典解析：适配 Word::Analysis 双冒号切割法
+   * 🚨 架构师 V7.0 终极字典解析：双轨容灾提取算法
+   * 作用：解析大模型生成的 fluff 数组，将其转化为 { "原文": "解析" } 的映射字典。
+   * 容灾：即使大模型遗漏了双冒号，也能通过捕捉第一个中文方括号【 来强行切分数据。
    */
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -58,27 +65,50 @@ export default function DecodePage() {
       cnFluffs.forEach((item, idx) => {
         if (!item || typeof item !== 'string') return;
         
-        // 按照新的双冒号协议一刀切
+        let key = '';
+        let explanation = '';
+        
         const parts = item.split(/(?:::|：：)/);
-        if (parts.length >= 2) {
-          const key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
-          
-          const targetItem = targetFluffs[idx] || item;
-          const targetParts = targetItem.split(/(?:::|：：)/);
-          // 目标语言的解析部分
-          const explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
+        const targetItem = targetFluffs[idx] || item;
 
-          if (key && rawText.includes(key)) {
-            dict[key] = explanation;
-          } else if (key) {
-            // 物理降级匹配：只要前4个字对得上就高亮
-            const shortKey = key.substring(0, 4);
-            if (shortKey.length >= 2 && rawText.includes(shortKey)) {
-              dict[shortKey] = explanation;
+        // 1. 标准双冒号切割路径
+        if (parts.length >= 2) {
+          key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
+          const targetParts = targetItem.split(/(?:::|：：)/);
+          explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
+        } 
+        // 2. 物理容灾路径：大模型忘记冒号，寻找第一个方括号【 或 [
+        else {
+          const bracketMatch = item.match(/[【\[]/);
+          if (bracketMatch && bracketMatch.index && bracketMatch.index > 0) {
+             key = item.substring(0, bracketMatch.index).replace(/[「」"“”'*\[\]]/g, '').trim();
+             
+             // 目标语言可能也没有冒号
+             const targetBracketMatch = targetItem.match(/[【\[]/);
+             if (targetBracketMatch && targetBracketMatch.index && targetBracketMatch.index > 0) {
+                 explanation = targetItem.substring(targetBracketMatch.index).trim();
+             } else {
+                 explanation = targetItem;
+             }
+          }
+        }
+
+        // 3. 字典入库与降级匹配
+        if (key && rawText.includes(key)) {
+          dict[key] = explanation;
+        } else if (key) {
+          // 物理降级匹配：只要前 4 个字对得上就强行高亮
+          const shortKey = key.substring(0, 4);
+          if (shortKey.length >= 2 && rawText.includes(shortKey)) {
+            dict[shortKey] = explanation;
+          } else {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🟡 [模块_异步] -> 目标: 字典键值脱靶，已物理丢弃:', key);
             }
           }
         }
       });
+
       setDictionary(dict);
     }
   }, [signal, lang]);
@@ -102,7 +132,11 @@ export default function DecodePage() {
       const json = await res.json();
       if (json.success) router.push('/');
       else alert(`抹杀失败: ${json.error}`);
-    } catch (_e) { alert("网络阻断"); } finally { setIsDeleting(false); }
+    } catch (_e) { 
+      alert("网络阻断"); 
+    } finally { 
+      setIsDeleting(false);
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-red-600 w-10 h-10" /></div>;
@@ -145,7 +179,7 @@ export default function DecodePage() {
             ) : ( <DossierReader content={dossierContent} isStreaming={isStreamingDossier} dictionary={dictionary} /> )}
           </div>
         </div>
- 
+
         <div className="mt-12 border-t border-zinc-900 pt-12"><ChatTerminal signalId={id} hardFacts={currentHardFacts} onRequireAuth={() => { setAuthContext({ title: "QUOTA EXCEEDED", subtitle: "登录以解除频率限制。" }); setIsAuthModalOpen(true); }} /></div>
       </div>
     </main>
