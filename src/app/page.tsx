@@ -15,8 +15,8 @@ export default function HomePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); 
   const [user, setUser] = useState<User | null>(null);
 
-  const supabase = createClient(); 
-  
+  const supabase = createClient();
+
   useEffect(() => { 
     const getUser = async () => { 
       const { data: { user: currentUser } } = await supabase.auth.getUser(); 
@@ -28,7 +28,6 @@ export default function HomePage() {
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [feed, setFeed] = useState<SignalRecord[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -75,11 +74,11 @@ export default function HomePage() {
   const handleStart = async () => { 
     if (!input.trim() || isSubmitting) return; 
     setIsSubmitting(true); 
-    setError(null); 
+    setError(null);
 
     try { 
       if (process.env.NODE_ENV === 'development') { 
-        console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON'); 
+        console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
       } 
 
       const res = await fetch('/api/v1/ingest', { 
@@ -89,32 +88,32 @@ export default function HomePage() {
           'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
         }, 
         body: JSON.stringify({ rawContent: input }) 
-      }); 
+      });
 
       if (!res.ok || !res.body) throw new Error('流式引擎连接被拒'); 
 
       const reader = res.body.getReader(); 
       const decoder = new TextDecoder('utf-8'); 
-      let done = false; 
+      let done = false;
       let buffer = ''; 
       let rawJsonString = ''; 
 
       while (!done) { 
-        const { value, done: readerDone } = await reader.read(); 
+        const { value, done: readerDone } = await reader.read();
         done = readerDone; 
         if (value) { 
-          buffer += decoder.decode(value, { stream: true }); 
+          buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n'); 
           buffer = lines.pop() || ''; 
 
           for (const line of lines) { 
-            const trimmedLine = line.trim(); 
+            const trimmedLine = line.trim();
             if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) { 
               try { 
-                const data = JSON.parse(trimmedLine.slice(6)); 
+                const data = JSON.parse(trimmedLine.slice(6));
                 const delta = data.choices[0]?.delta?.content || ''; 
                 if (delta) { 
-                  rawJsonString += delta; 
+                  rawJsonString += delta;
                 } 
               } catch (e) { /* 忽略流碎片解析异常 */ } 
             } 
@@ -123,37 +122,37 @@ export default function HomePage() {
       } 
 
       if (process.env.NODE_ENV === 'development') { 
-        console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动绝对防御洗刷程序'); 
+        console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动绝对防御洗刷程序');
       } 
 
       // 3. 剥离 Markdown 干扰符 
-      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim(); 
+      let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
       const firstBrace = cleanedJsonString.indexOf('{'); 
       const lastBrace = cleanedJsonString.lastIndexOf('}'); 
       
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
-        cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1); 
+        cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
       } else if (firstBrace !== -1) {
         // 🚨 探测到物理截断：只找到了开头，没找到结尾
         cleanedJsonString = cleanedJsonString.substring(firstBrace);
       }
       
-      let intel; 
+      let intel;
       try { 
         // 尝试剔除控制字符并进行标准解析
         const sanitized = cleanedJsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
         intel = JSON.parse(sanitized); 
       } catch (parseError) { 
         if (process.env.NODE_ENV === 'development') { 
-          console.log('🔴 [模块_崩溃] -> JSON 结构损毁或截断，启动正则暴力抢救...'); 
+          console.log('🔴 [模块_崩溃] -> JSON 结构损毁或截断，启动正则暴力抢救...');
         } 
         
-        // 🚨 V6.1 终极容灾：正则暴力拾荒者协议
+        // 🚨 架构师修复 V6.2：强制注入类型契约，击碎 never[] 死锁
         intel = { 
           verdict: { cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。", en: "Stream Truncated. Rescue protocol engaged." }, 
-          facts: { cn: [], en: [] }, 
-          fluff: { cn: [], en: [] } 
-        }; 
+          facts: { cn: [] as string[], en: [] as string[] }, 
+          fluff: { cn: [] as string[], en: [] as string[] } 
+        };
 
         try {
           // 抢救 Verdict
@@ -163,13 +162,13 @@ export default function HomePage() {
           // 抢救 Facts
           const fMatch = cleanedJsonString.match(/"facts"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
           if (fMatch) {
-            intel.facts.cn = fMatch[1].split('",').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+            intel.facts.cn = fMatch[1].split('",').map((s: string) => s.replace(/["\n]/g, '').trim()).filter(Boolean);
           }
 
           // 抢救 Fluff (气泡字典的生命线)
           const flMatch = cleanedJsonString.match(/"fluff"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
           if (flMatch) {
-            intel.fluff.cn = flMatch[1].split('",').map(s => s.replace(/["\n]/g, '').trim()).filter(Boolean);
+            intel.fluff.cn = flMatch[1].split('",').map((s: string) => s.replace(/["\n]/g, '').trim()).filter(Boolean);
           }
         } catch (rescueErr) {
           console.log('🔴 [模块_崩溃] -> 抢救失败:', rescueErr);
@@ -190,22 +189,22 @@ export default function HomePage() {
 
       if (saveJson.success && saveJson.data?.signalId) { 
         if (process.env.NODE_ENV === 'development') { 
-          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId); 
+          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
         } 
         setInput(''); 
-        router.push(`/decode/${saveJson.data.signalId}`); 
+        router.push(`/decode/${saveJson.data.signalId}`);
       } else { 
-        throw new Error(saveJson.error || '瞬时写入网关异常'); 
+        throw new Error(saveJson.error || '瞬时写入网关异常');
       } 
 
     } catch (_e) { 
       const errMsg = _e instanceof Error ? _e.message : '物理链路破译失败'; 
       if (process.env.NODE_ENV === 'development') { 
-        console.log('🔴 [模块_崩溃] -> 原因:', errMsg); 
+        console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
       } 
       setError(errMsg); 
     } finally { 
-      setIsSubmitting(false); 
+      setIsSubmitting(false);
     } 
   };
 
@@ -223,6 +222,7 @@ export default function HomePage() {
                 <p className="text-[10px] font-mono text-red-600 tracking-[0.4em]">v6.2 SECURE_GATE</p>
               </div>
             </div>
+           
             <div className="flex items-center gap-4">
               {user ? (
                 <div className="flex items-center gap-2 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950">
