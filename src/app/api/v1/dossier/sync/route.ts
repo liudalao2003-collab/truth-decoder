@@ -32,14 +32,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
 
   } catch (err: unknown) {
-    // 🛡️ 架构师防线：强制执行类型收缩 (Type Narrowing) [cite: 307, 308]
+    // 🛡️ 架构师防线：强制执行类型收缩 (Type Narrowing)
     let errorDetails = '未知持久化物理故障';
-    
+
     if (err instanceof Error) {
       errorDetails = err.message;
     } else if (err && typeof err === 'object') {
-      // 兼容 Supabase 等返回的普通对象错误
-     errorDetails = (err as Record<string, unknown>).message || (err as Record<string, unknown>).details || JSON.stringify(err);
+      // 🚨 架构师修复：强制类型校验，确保最终赋值绝对是 string，修复 Vercel 部署阻断
+      const errObj = err as Record<string, unknown>;
+      errorDetails = typeof errObj.message === 'string' 
+        ? errObj.message 
+        : typeof errObj.details === 'string'
+          ? errObj.details
+          : JSON.stringify(err);
     }
     
     if (process.env.NODE_ENV === 'development') {
