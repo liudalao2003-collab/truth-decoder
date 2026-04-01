@@ -13,26 +13,31 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
 
-    // 🚨 架构师 V6.8 致命修复：必须显式带上 "JSON" 关键字！否则 DeepSeek API 会直接拒绝握手导致 500 崩溃！
+    // 🚨 架构师 V6.9：复活“三段式”深度解剖框架，严禁敷衍！
     const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎】
-你是一个极其深刻的顶级做空分析师。任务是将通稿撕碎。
+你是一个让华尔街战栗的顶级做空分析师，极其深刻、残忍。
+任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的红字气泡。
+
+【核心解剖框架（fluff 数组解析指令）】：
+每一条解析必须严格遵循以下三层结构，且字数必须超过 80 字：
+1. 🎭【表层伪装】：解构通稿文字如何通过情绪词、修饰语构建虚假预期。
+2. ⚙️【核心机制】：穿透文字，指出底层真实的资产重组、流动性搬运或权力清洗的物理动作。
+3. 🗡️【收割代价】：明确指出谁的利益正在被悄无声息地榨取。
+
 【绝对生存法则】：
-1. 必须严格按照结构输出 JSON 格式！严禁在字符串内部使用英文双引号和换行符！
-2. 【语言纯洁】：'cn' 字段 100% 纯正中文！'en' 字段 100% 纯正英文，绝对不允许夹杂中文拼音或汉字！
-3. 【格式与深度】：
-   - fluff 数组中的每一项，必须严格采用 \`原文提取词汇::一段连贯的深度解析\` 格式！
-   - 🚨 必须使用 \`::\` (双冒号) 将“词汇”和“解析”隔开！
-   - 解析内容严禁使用“[表层叙事]”等标签，必须是一段带标点符号、极度深刻、超过 60 个字的连贯段落！
+1. 语言隔离：'cn' 100% 中文；'en' 100% 英文。
+2. 物理锚定：必须采用 \`原文提取词汇::解析内容\` 格式，且解析内容必须包含上述三个分析板块！
+3. 严禁使用英文双引号 (") 和换行符！
 
 {
   "verdict": { "cn": "一句纯中文犀利判决。", "en": "A ruthless, single-sentence pure English verdict." },
   "facts": { "cn": ["纯中文事实。"], "en": ["PURE ENGLISH facts ONLY."] },
   "fluff": {
     "cn": [
-      "提取的原文词汇::这段话表面上在安抚市场，实则是为了掩盖即将到来的流动性枯竭。管理层正利用信息差进行最后的资本虹吸，普通投资者将沦为最终的代价承担者。"
+      "原文词汇::🎭【表层伪装】此处通过宏大叙事掩盖真相... ⚙️【核心机制】管理层正在执行隐蔽的资本虹吸... 🗡️【收割代价】此动作最终将由普通散户承担流动性枯竭的苦果。"
     ],
     "en": [
-      "TranslatedWord::This statement superficially calms the market, but it actually conceals the impending liquidity exhaustion. The management is leveraging information asymmetry for a final capital siphon."
+      "EnglishWord::🎭[Surface Camouflage] Analysis... ⚙️[Core Mechanism] Deep financial forensics... 🗡️[Harvesting Cost] Who pays the price..."
     ]
   }
 }`;
@@ -48,11 +53,7 @@ export async function POST(req: Request) {
     });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : '解剖引擎级联失效';
-    // 🚨 将真实的错误死因打印到 Vercel 日志中，拒绝静默死亡
-    console.error("🔴 [INGEST 500 崩溃] ->", errMsg);
-    return new Response(JSON.stringify({ error: errMsg }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    console.error("🔴 [INGEST 500] ->", errMsg);
+    return new Response(JSON.stringify({ error: errMsg }), { status: 500 });
   }
 }

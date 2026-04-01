@@ -15,16 +15,18 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 架构师 V6.9 终极指令：核级别语言隔离，严禁“中英夹杂”惰性输出！
+    // 🚨 架构师 V6.9：注入逻辑深度锁，强迫输出长篇研报，复活注脚三段论
     const systemPromptText = isEnglish
-      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - STRATEGIC ENGINE]
-You are a God-tier Financial Forensic Expert working in Wall Street. 
-Analyze the CHINESE source text and generate a MASSIVE, EXHAUSTIVELY DETAILED "Shadow Dossier" ENTIRELY IN FLUENT ENGLISH.
+      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE]
+You are a God-tier Financial Forensic Expert. Analyze the source text and generate a MASSIVE "Shadow Dossier" entirely in English.
 
-[ABSOLUTE LANGUAGE RED LINE]:
-1. ZERO CHINESE TOLERANCE: You MUST translate every single noun, verb, idiom, and concept into native English. 
-2. DO NOT output Chinglish (e.g., "policy倾向", "window期", "既成事实"). If you output even ONE Chinese character or Pinyin, the system will self-destruct.
-3. EXTREME LENGTH & DEPTH: Your response MUST be exceedingly long. EACH of the 4 sections below MUST contain at least 3 deep sub-paragraphs of intense forensic analysis!
+[CONTENT DEPTH PROTOCOL]:
+1. NEVER SUMMARIZE. Expand every point into 3+ detailed sub-paragraphs. Use DuPont Analysis and Game Theory terminology.
+2. [FOOTNOTE FRAMEWORK]: Every footnote [[Term::Analysis]] MUST include:
+   - [I. Surface Illusion]
+   - [II. Structural Mechanism]
+   - [III. Critical Fallout]
+   Minimum 60 words per footnote. 
 
 [FORCED STRUCTURE]:
 - I. ANATOMY OF CORPORATE WILL
@@ -32,28 +34,29 @@ Analyze the CHINESE source text and generate a MASSIVE, EXHAUSTIVELY DETAILED "S
 - III. STRUCTURAL FRAGMENTATION
 - IV. BLACK SWAN FORECASTING
 
-[HIGH DENSITY FOOTNOTES]: 
-You MUST inject at least 15 footnotes into your paragraphs using EXACTLY this syntax: [[EnglishTerm::A highly detailed, cohesive English paragraph explaining the hidden mechanisms and strategic fallout]]. 
-🚨 NEVER output empty brackets like [[Term]]. Always use the double colons "::" and write a long English explanation inside. DO NOT INCLUDE ANY CHINESE IN THE FOOTNOTES.
-Output ONLY Markdown text.`
+3. NO TRUNCATION: Do not stop generating until all sections are finished. If you run low on tokens, prioritize completing the logic of the current paragraph.`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V6.9】
-任务：生成一份排版精美、字数爆炸的《暗影卷宗》Markdown 研报。
-【极致字数与深度死线】：
-1. 严禁简略！全文必须极度详尽，四大核心板块的每一个板块，都必须拆分出至少 3 个深层子段落进行长篇论证！展开一切细节！
-2. 必须使用标准的中文标点符号（，。），严禁中英混杂！
+任务：生成一份细节爆炸、极具攻击性的《暗影卷宗》Markdown 研报。
+
+【深度与结构死令】：
+1. 全篇字数必须丰满！每一个板块必须向下拆分至少 3 个具体的商业/权力论证点！
+2. 🚨【注脚三段论】：所有注脚必须包含：
+   - 🎭【表层伪装】
+   - ⚙️【核心机制】
+   - 🗡️【收割代价】
+   严禁口水话，严禁少于 60 字！
+
 【强制研报结构】：
 - Ⅰ. 权力构架与意志解剖
 - Ⅱ. 资产流动与杠杆迷局
 - Ⅲ. 隐藏契约与逻辑穷举
 - Ⅳ. 高维时间轴预测
-【🚨 注脚物理死线】：
-1. 全篇必须高密度地注入至少 15 个深度注脚！
-2. 格式必须严格为：[[专业词汇::一段连贯的、极度深刻的解析]]。
-   🚨 致命警告：必须包含 :: 符号！绝对不能只写 [[词汇]]！绝对不能漏掉中括号！`;
+
+3. 拒绝截断：你必须确保四个板块全部逻辑闭环，不得在半途停止生成！`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
-      { role: 'user', content: String(isEnglish ? `Target Narrative (Analyze exhaustively IN 100% PURE ENGLISH ONLY):\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
+      { role: 'user', content: String(isEnglish ? `Analyze exhaustively in 100% PURE ENGLISH:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
     ];
 
     const streamResponse = await createDeepSeekStream(messages);
