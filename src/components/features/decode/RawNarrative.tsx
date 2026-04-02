@@ -126,13 +126,11 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
       {mounted && hoverInfo && createPortal(
         <div
-          onMouseEnter={handlePortalMouseEnter}
-          onMouseLeave={handlePortalMouseLeave}
-          className={`fixed z-[2147483647] w-max max-w-[360px] md:max-w-[420px] max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-red-900/50 scrollbar-track-transparent bg-zinc-950/98 backdrop-blur-xl border border-red-900/80 text-zinc-300 text-sm p-5 rounded-md shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)] pointer-events-auto transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          className={`fixed z-[2147483647] w-max max-w-[320px] bg-zinc-950/98 backdrop-blur-xl border border-red-900/80 text-zinc-300 text-sm p-5 rounded-md shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
           style={{ left: hoverInfo.x, top: hoverInfo.y }}
         >
-          <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs sticky top-0 bg-zinc-950/90 py-1 z-10">
-             <Zap size={14} className="animate-pulse" /> {lang === 'cn' ? '深层剖析 (DEEP INSIGHT)' : 'DEEP INSIGHT'}
+          <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs">
+             <Zap size={14} className="animate-pulse" /> DEEP INSIGHT
           </span>
           <div className="text-justify whitespace-pre-wrap">{hoverInfo.text}</div>
         </div>,
