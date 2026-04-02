@@ -93,10 +93,14 @@ export default function DecodePage() {
             return;
         }
 
-        if (!dict[key] && rawText.includes(key)) {
+        // 🚨 修复：取消脱靶校验，确保所有关键词无论是否在原文精确匹配都能被高亮显示
+        if (!dict[key]) {
           dict[key] = explanation;
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🟢 [模块_发起] -> 加载词汇:', key);
+          }
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🟡 [模块_异步] -> Key 脱靶或重复，已物理丢弃:', key);
+          console.log('🟡 [模块_异步] -> Key重复，已物理丢弃:', key);
         }
       });
       
