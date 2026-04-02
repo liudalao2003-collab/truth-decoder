@@ -52,58 +52,91 @@ export default function DecodePage() {
   useEffect(() => {
     if (signal && signal.raw_content) {
       const f = signal.fluff_words;
+
+      // 🔧 核心修复 V2.0：同时读取 cn 和 en 两套词汇
+      // 原逻辑只用 cnFluffs 的词作为 key，导致英文原文或 AI 输出词汇与原文不一致时气泡消失
       const cnFluffs = Array.isArray(f) ? f : (f as BilingualData)?.['cn'] || [];
+      const enFluffs = Array.isArray(f) ? [] : (f as BilingualData)?.['en'] || [];
       const targetFluffs = Array.isArray(f) ? f : (f as BilingualData)?.[lang] || [];
-      
-      const dict: Record<string, string> = {}; 
-      const rawText = signal.raw_content;
-      
-      cnFluffs.forEach((item, idx) => {
-        if (!item || typeof item !== 'string') return;
-        
+
+      const INVALID_KEYS = ['原文', '原文提取词汇', 'EnglishWord', '词汇', '提取词汇'];
+
+      // 通用解析函数：从一条 fluff 字符串中提取 key（词）和 explanation（解释）
+      const parseFluffItem = (
+        item: string,
+        explanationSource: string
+      ): { key: string; explanation: string } | null => {
+        if (!item || typeof item !== 'string') return null;
+
         let key = '';
         let explanation = '';
-        
+
         const parts = item.split(/(?:::|：：)/);
-        const targetItem = targetFluffs[idx] || item;
 
         if (parts.length >= 2) {
-          key = parts[0].replace(/[「」"“”'*\[\]]/g, '').trim();
-          const targetParts = targetItem.split(/(?:::|：：)/);
-          explanation = targetParts.length >= 2 ? targetParts.slice(1).join("::").trim() : targetItem;
-        } 
-        else {
+          // 标准格式：「词汇::解析」
+          key = parts[0].replace(/[「」"""'*\[\]]/g, '').trim();
+          const targetParts = explanationSource.split(/(?:::|：：)/);
+          explanation = targetParts.length >= 2
+            ? targetParts.slice(1).join("::").trim()
+            : explanationSource;
+        } else {
+          // 降级格式：「词汇【解析...」
           const bracketMatch = item.match(/[【\[]/);
           if (bracketMatch && bracketMatch.index !== undefined && bracketMatch.index > 0) {
-             key = item.substring(0, bracketMatch.index).replace(/[「」"“”'*\[\]]/g, '').trim();
-             const targetBracketMatch = targetItem.match(/[【\[]/);
-             if (targetBracketMatch && targetBracketMatch.index !== undefined && targetBracketMatch.index > 0) {
-                 explanation = targetItem.substring(targetBracketMatch.index).trim();
-             } else {
-                 explanation = targetItem;
-             }
+            key = item.substring(0, bracketMatch.index).replace(/[「」"""'*\[\]]/g, '').trim();
+            const targetBracketMatch = explanationSource.match(/[【\[]/);
+            if (targetBracketMatch && targetBracketMatch.index !== undefined && targetBracketMatch.index > 0) {
+              explanation = explanationSource.substring(targetBracketMatch.index).trim();
+            } else {
+              explanation = explanationSource;
+            }
           }
         }
 
-        const INVALID_KEYS = ['原文', '原文提取词汇', 'EnglishWord', '词汇', '提取词汇'];
-        if (key.length < 2 || INVALID_KEYS.includes(key)) {
-            if (process.env.NODE_ENV === 'development') {
-                console.log('🟡 [模块_异步] -> 拦截废弃/幻觉 Key:', key);
-            }
-            return;
-        }
+        if (key.length < 2 || INVALID_KEYS.includes(key)) return null;
+        return { key, explanation };
+      };
 
-        // 🚨 修复：取消脱靶校验，确保所有关键词无论是否在原文精确匹配都能被高亮显示
-        if (!dict[key]) {
-          dict[key] = explanation;
+      const dict: Record<string, string> = {};
+
+      // 第一轮：注册 cn 词汇（对中文原文命中）
+      cnFluffs.forEach((item, idx) => {
+        const targetItem = targetFluffs[idx] || item;
+        const parsed = parseFluffItem(item, targetItem);
+        if (!parsed) {
           if (process.env.NODE_ENV === 'development') {
-            console.log('🟢 [模块_发起] -> 加载词汇:', key);
+            console.log('🟡 [模块_异步] -> 拦截废弃/幻觉 cn Key:', item);
+          }
+          return;
+        }
+        if (!dict[parsed.key]) {
+          dict[parsed.key] = parsed.explanation;
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🟢 [模块_发起] -> 加载 cn 词汇:', parsed.key);
           }
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🟡 [模块_异步] -> Key重复，已物理丢弃:', key);
+          console.log('🟡 [模块_异步] -> cn Key 重复，已物理丢弃:', parsed.key);
         }
       });
-      
+
+      // 🔧 第二轮：额外注册 en 词汇（对英文原文命中，同时兜底爬虫抓取的英文新闻）
+      // explanation 始终使用当前语言对应的解释，保证显示内容正确
+      enFluffs.forEach((item, idx) => {
+        // en key 的解释：优先用当前语言的 targetFluffs，没有则用自身
+        const targetItem = targetFluffs[idx] || item;
+        const parsed = parseFluffItem(item, targetItem);
+        if (!parsed) return;
+        if (!dict[parsed.key]) {
+          dict[parsed.key] = parsed.explanation;
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🟢 [模块_发起] -> 加载 en 词汇:', parsed.key);
+          }
+        } else if (process.env.NODE_ENV === 'development') {
+          console.log('🟡 [模块_异步] -> en Key 重复，已物理丢弃:', parsed.key);
+        }
+      });
+
       setDictionary(dict);
     }
   }, [signal, lang]);
