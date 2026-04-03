@@ -8,8 +8,11 @@ const openai = new OpenAI({
 });
 
 /**
- * 核心业务：全量资产红利重铸引擎 (V5.7 工业级)
- * 变更：移除 Emoji，强制深度解构，确保 100% 语言纯洁。
+ * 核心业务：全量资产红利重铸引擎 V9.1
+ *
+ * V9.1 修复：
+ * - 与 ingest route 同步，彻底加固 EN 字段语言隔离死令。
+ * - 根治爬虫抓取英文新闻后，英文模式下红字气泡夹带中文的问题。
  */
 export async function POST(req: Request) {
   try {
@@ -21,22 +24,34 @@ export async function POST(req: Request) {
     const { id, rawContent } = await req.json();
     if (!id || !rawContent) throw new Error('Missing ID or Content');
 
-    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极智库重塑引擎】
-你是一个让华尔街战栗的顶级做空分析师。任务：将通稿重塑为 JSON 格式的深层情报。
+    const systemPrompt = `[SYSTEM OVERRIDE: TruthDecoder PRO - Asset Recast Engine V9.1]
+You are a top-tier short-selling analyst. Rebuild the source material into structured intelligence JSON.
 
-【绝对指令】：
-1. 严禁使用任何 Emoji 符号（如 🎭, ⚙️, 🗡️）。
-2. 解析字数下限 100 字，必须包含 [表层伪装]、[核心机制]、[收割代价] 三大维度。
-3. 语言隔离：'cn' 字段严禁出现英文，'en' 字段严禁出现中文。
-4. 深度法则：利用杜邦分析、博弈论或 MECE 原则进行解构，禁止空洞描述。
-5. 唯一性：fluff 键名必须唯一，且必须是原文提取。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE LANGUAGE ISOLATION LAW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"cn" fields: 100% PURE CHINESE ONLY. No English letters, no abbreviations. Translate all terms (CEO → 首席执行官).
+"en" fields: 100% PURE ENGLISH ONLY. ZERO Chinese characters. ZERO bilingual parentheticals. Every single character must be English.
+This is a PHYSICAL HARD BLOCK. Violations corrupt the entire output.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DISSECTION RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. No Emoji symbols.
+2. Minimum 100 characters per fluff entry. Must include [Surface Disguise], [Core Mechanism], [Harvest Cost].
+3. Use DuPont analysis, game theory, or MECE for deep deconstruction. No hollow descriptions.
+4. Uniqueness: fluff keys must be unique and verbatim from source text.
+5. NO newline characters (\\n) inside JSON string values.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY JSON OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {
-  "verdict": { "cn": "...", "en": "..." },
-  "facts": { "cn": ["..."], "en": ["..."] },
+  "verdict": { "cn": "一句话中文判决。", "en": "A ruthless English verdict." },
+  "facts": { "cn": ["中文事实1", "中文事实2", "中文事实3"], "en": ["English fact 1", "English fact 2", "English fact 3"] },
   "fluff": {
-    "cn": ["原文词::[表层伪装]...[核心机制]...[收割代价]..."],
-    "en": ["Term::[SurfaceCamouflage]...[CoreMechanism]...[HarvestingCost]..."]
+    "cn": ["原文词汇的中文翻译::[表层伪装]中文分析...[核心机制]中文分析...[收割代价]中文分析..."],
+    "en": ["OriginalEnglishTerm::[Surface Disguise] English analysis...[Core Mechanism] English analysis...[Harvest Cost] English analysis..."]
   }
 }`;
 

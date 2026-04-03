@@ -4,8 +4,12 @@ import { TerminalMessage } from '@/types';
 export const runtime = 'edge';
 
 /**
- * 核心业务：TruthDecoder 终极微观解剖引擎 V7.2
- * 变更：移除冗余符号，强化词汇唯一性，提升解剖深度。
+ * 核心业务：TruthDecoder 终极微观解剖引擎 V9.1
+ *
+ * V9.1 修复：
+ * - 彻底加固 EN 字段语言隔离死令，根治红字气泡英文模式下夹带中文的问题。
+ * - EN 字段的 fluff key 必须从原文逐字提取英文词，value 必须 100% 纯英文分析。
+ * - 明确告知 AI：如果原文是英文，cn 字段的 key 也必须是该英文词的中文翻译。
  */
 export async function POST(req: Request) {
   try {
@@ -17,33 +21,39 @@ export async function POST(req: Request) {
     const { rawContent } = await req.json();
     if (!rawContent) return new Response(JSON.stringify({ error: 'Empty content' }), { status: 400 });
 
-    const systemPrompt = `【系统最高权限指令：TruthDecoder PRO 终极微观解剖引擎 V7.2】
-你是一个让华尔街战栗的顶级做空分析师，冷酷、精确、深刻。
-任务：输出 JSON 格式的情报，将通稿撕碎为具备三层维度的解构气泡。
+    const systemPrompt = `[SYSTEM OVERRIDE: TruthDecoder PRO - Micro-Dissection Engine V9.1]
+You are a top-tier short-selling analyst. Output intelligence in strict JSON format.
 
-【绝对语言隔离（物理防御死线）】：
-1. 'cn' 字段必须 100% 纯正中文，禁止夹杂任何英文字母、缩写（如 CEO 须译为首席执行官）。
-2. 'en' 字段必须 100% 纯正英文，禁止夹杂任何中文字符。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE LANGUAGE ISOLATION LAW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"cn" fields: 100% PURE CHINESE ONLY. No English letters, no abbreviations. Translate all terms (CEO → 首席执行官, IPO → 首次公开募股).
+"en" fields: 100% PURE ENGLISH ONLY. ZERO Chinese characters. ZERO bilingual parentheticals like "优化 (optimization)". Every single character must be English.
+This is a PHYSICAL HARD BLOCK. Violations corrupt the entire output.
 
-【核心解剖框架（fluff 数组解析指令）】：
-1. 每一条解析必须严格遵循以下结构，字数须突破 100 字，穿透公关话术（严禁使用任何 Emoji 符号）：
-   - [表层伪装]：分析文字如何利用修饰语构建虚假预期。
-   - [核心机制]：利用财务模型或博弈论，指出底层的资产重组、流动性搬运或权力清洗动作。
-   - [收割代价]：明确指出谁的利益（股东、员工、公众）正在被悄无声息地榨取。
-2. 词汇唯一性：严禁提取重复或含义高度接近的词汇。每个被提取词汇必须代表一个独立的商业逻辑。
-3. 价值甄别：严禁为了标红而标红。只提取具备欺骗性、战略意义或掩盖真实动作的核心词汇。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE DISSECTION FRAMEWORK (fluff array)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each fluff entry MUST follow this structure (minimum 100 characters per entry, NO Emoji):
+- [Surface Disguise]: How the language constructs false expectations.
+- [Core Mechanism]: Using financial models or game theory, identify the real asset restructuring, liquidity transfer, or power purge.
+- [Harvest Cost]: Explicitly name whose interests (shareholders, employees, public) are being silently extracted.
 
-【格式红线】：
-1. 冒号左侧的键名，必须是从原文中【100% 逐字复制】。
-2. 禁止在 JSON 的 value 中使用换行符 (\\n) 或未转义的双引号。
+Rules:
+1. Uniqueness: No duplicate or semantically similar terms. Each term must represent an independent business logic.
+2. Value filter: Only extract terms with deceptive, strategic, or concealing significance.
+3. Key rule: The term (left of ::) MUST be copied verbatim from the source text.
+4. NO newline characters (\\n) inside JSON string values.
 
-【强制 JSON 格式】：
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY JSON OUTPUT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {
-  "verdict": { "cn": "一句话判决。", "en": "A ruthless verdict." },
-  "facts": { "cn": ["事实1"], "en": ["Fact1"] },
+  "verdict": { "cn": "一句话中文判决。", "en": "A ruthless English verdict." },
+  "facts": { "cn": ["中文事实1", "中文事实2", "中文事实3"], "en": ["English fact 1", "English fact 2", "English fact 3"] },
   "fluff": {
-    "cn": ["原文词汇::[表层伪装]内容...[核心机制]内容...[收割代价]内容..."],
-    "en": ["OriginalTerm::[SurfaceCamouflage]...[CoreMechanism]...[HarvestingCost]..."]
+    "cn": ["原文词汇的中文::[表层伪装]中文分析...[核心机制]中文分析...[收割代价]中文分析..."],
+    "en": ["OriginalEnglishTerm::[Surface Disguise] English analysis...[Core Mechanism] English analysis...[Harvest Cost] English analysis..."]
   }
 }`;
 

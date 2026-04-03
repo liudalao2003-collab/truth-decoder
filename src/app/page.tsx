@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon } from 'lucide-react';
+import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon, LogOut } from 'lucide-react';
 import AuthModal from '@/components/features/auth/AuthModal'; 
 import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
@@ -24,6 +24,12 @@ export default function HomePage() {
     }; 
     getUser(); 
   }, [supabase]);
+
+  // 🔧 新增：退出登录处理函数
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,7 +131,6 @@ export default function HomePage() {
         console.log('🟡 [模块_异步] -> 目标: JSON 流拼接完毕，启动绝对防御洗刷程序');
       } 
 
-      // 3. 剥离 Markdown 干扰符 
       let cleanedJsonString = rawJsonString.replace(/```json/gi, '').replace(/```/g, '').trim();
       const firstBrace = cleanedJsonString.indexOf('{'); 
       const lastBrace = cleanedJsonString.lastIndexOf('}'); 
@@ -133,13 +138,11 @@ export default function HomePage() {
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) { 
         cleanedJsonString = cleanedJsonString.substring(firstBrace, lastBrace + 1);
       } else if (firstBrace !== -1) {
-        // 🚨 探测到物理截断：只找到了开头，没找到结尾
         cleanedJsonString = cleanedJsonString.substring(firstBrace);
       }
       
       let intel;
       try { 
-        // 尝试剔除控制字符并进行标准解析
         const sanitized = cleanedJsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
         intel = JSON.parse(sanitized); 
       } catch (parseError) { 
@@ -147,7 +150,6 @@ export default function HomePage() {
           console.log('🔴 [模块_崩溃] -> JSON 结构损毁或截断，启动正则暴力抢救...');
         } 
         
-        // 🚨 架构师修复 V6.2：强制注入类型契约，击碎 never[] 死锁
         intel = { 
           verdict: { cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。", en: "Stream Truncated. Rescue protocol engaged." }, 
           facts: { cn: [] as string[], en: [] as string[] }, 
@@ -155,17 +157,14 @@ export default function HomePage() {
         };
 
         try {
-          // 抢救 Verdict
           const vMatch = cleanedJsonString.match(/"verdict"[\s\S]*?"cn"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/);
           if (vMatch) intel.verdict.cn = vMatch[1];
 
-          // 抢救 Facts
           const fMatch = cleanedJsonString.match(/"facts"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
           if (fMatch) {
             intel.facts.cn = fMatch[1].split('",').map((s: string) => s.replace(/["\n]/g, '').trim()).filter(Boolean);
           }
 
-          // 抢救 Fluff (气泡字典的生命线)
           const flMatch = cleanedJsonString.match(/"fluff"[\s\S]*?"cn"\s*:\s*\[([\s\S]*?)\]/);
           if (flMatch) {
             intel.fluff.cn = flMatch[1].split('",').map((s: string) => s.replace(/["\n]/g, '').trim()).filter(Boolean);
@@ -175,7 +174,6 @@ export default function HomePage() {
         }
       } 
 
-      // 4. 闪电瞬时入库 
       const saveRes = await fetch('/api/v1/ingest/save', { 
         method: 'POST', 
         headers: { 
@@ -225,9 +223,20 @@ export default function HomePage() {
            
             <div className="flex items-center gap-4">
               {user ? (
-                <div className="flex items-center gap-2 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase">Commander_Active</span>
+                // 🔧 已登录：用户状态指示 + 退出登录按钮（与 admin 控制面板风格一致）
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Commander_Active</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    title={lang === 'cn' ? '退出登录' : 'Log out'}
+                    className="flex items-center gap-1.5 px-3 py-1 border border-zinc-800 rounded-sm bg-zinc-950 text-zinc-500 hover:text-red-500 hover:border-red-900/50 transition-all text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    <LogOut size={11} />
+                    Exit
+                  </button>
                 </div>
               ) : (
                 <button
@@ -295,7 +304,7 @@ export default function HomePage() {
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-red-900 opacity-20 group-hover:opacity-100 transition-all" />
                   <p className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors italic line-clamp-2">
-                    “{item.metadata?.bilingual?.[lang] || item.verdict}”
+                    "{item.metadata?.bilingual?.[lang] || item.verdict}"
                   </p>
                 </motion.div>
               ))}
