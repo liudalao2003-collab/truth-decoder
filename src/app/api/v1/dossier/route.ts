@@ -5,9 +5,18 @@ import { logger } from '@/utils/logger';
 export const runtime = 'edge';
 
 /**
- * 核心业务：暗影卷宗 (Shadow Dossier) 逻辑核心 V8.0
- * 作用：处理前端发起的深度卷宗生成请求，调用 DeepSeek 流式泵出解析。
- * V8.0 架构师重构：注入词法防逃逸死令，彻底阻断大模型换行符导致的正则穿透崩溃。
+ * 核心业务：暗影卷宗 (Shadow Dossier) 逻辑核心 V9.0
+ *
+ * V9.0 双重外科手术修复：
+ * 1. [BUG-1 根治] 英文模式"重复中文乱码"：
+ *    根因是 EN prompt 未强力阻断 AI 的"翻译冲动"，导致 AI 在 [[Term::Analysis]] 注脚内部
+ *    夹带中文解释。新版 prompt 物理级强化"ZERO CHINESE"死令，并明确禁止双语注脚。
+ *
+ * 2. [BUG-2 根治] 各板块内容"敷衍了事"：
+ *    根因是 prompt 的"深度要求"形同虚设，AI 识别到 max_tokens 有限时会主动收缩。
+ *    修复方案：(a) 在 prompt 中强制规定每个板块的最低字数/论点数量；
+ *              (b) 将 max_tokens 从 8192 提升至 16000（DeepSeek 支持上限）；
+ *              (c) 注入"反收缩死令"，明令禁止 AI 以"总结"代替"论证"。
  */
 export async function POST(request: Request) {
   try {
@@ -21,58 +30,129 @@ export async function POST(request: Request) {
     const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
     const isEnglish = lang === 'en';
 
-    // 🚨 V8.0 架构师防线：全面加固 Prompt 语法锁，根治气泡渲染错位
     const systemPromptText = isEnglish
-      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE V8.0]
-You are a God-tier Financial Forensic Expert. Produce a MASSIVE "Shadow Dossier".
+      // ============================================================
+      // 🔧 BUG-1 FIX: EN Prompt - 物理级语言隔离死令
+      // ============================================================
+      ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE V9.0]
+You are a God-tier Financial Forensic Expert writing for a sophisticated English-speaking audience.
 
-[CONSTRAINTS]:
-1. 100% PURE ENGLISH: No Chinese characters or bilingual explanations allowed.
-2. NO SYMBOLS: Remove all emojis. Use bold text for emphasis.
-3. FRACTAL EXPANSION: Never summarize. Deconstruct every sentence using DuPont and Game Theory models.
-4. 🚨 STRICT FOOTNOTE SYNTAX (CRITICAL PREVENTION):
-   - Format MUST be exactly: [[Term::Analysis]]
-   - NO NEWLINES: Inside the [[ ]] brackets, you are ABSOLUTELY FORBIDDEN to use any newline characters (\\n). The entire Analysis must be a single continuous paragraph.
-   - Every Analysis MUST exceed 120 words, breaking down Surface Illusion, Structural Mechanism, and Critical Fallout.
-5. NO TRUNCATION: Complete all 4 sections. Prioritize logical closure.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE LANGUAGE LAW — ZERO TOLERANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**ZERO CHINESE. ZERO CHINESE. ZERO CHINESE.**
+This is a PHYSICAL HARD BLOCK. Every single character in your output — including inside [[...]] footnotes — MUST be 100% English.
+- FORBIDDEN: Any Chinese character (汉字), Pinyin, or bilingual parenthetical (e.g., "资产 (assets)").
+- If you feel the urge to add a Chinese explanation, SUPPRESS IT COMPLETELY and write only English.
+- Violation of this rule is a CRITICAL FAILURE.
 
-[STRUCTURE]:
-- I. ANATOMY OF CORPORATE WILL
-- II. THE LEVERAGE MAZE
-- III. STRUCTURAL FRAGMENTATION
-- IV. BLACK SWAN FORECASTING`
-      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V8.0】
-任务：生成细节爆炸、逻辑深度封顶的《暗影卷宗》Markdown 研报。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DEPTH LAW — ANTI-TRUNCATION PROTOCOL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each of the 4 sections MUST contain a minimum of 3 sub-headings (###) and at least 400 words of substantive analytical prose. Do NOT summarize. Do NOT conclude early. EXPAND every claim using:
+- **DuPont Analysis**: Decompose every financial metric into its constituent levers.
+- **Game Theory**: Model the strategic payoffs and hidden incentives of each actor.
+- **MECE Principle**: Exhaustively enumerate what is NOT being said.
 
-【语言隔离舱】：
-1. 100% 纯正中文：禁止出现任何英文字母或双语括号。CEO 须译为首席执行官。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FOOTNOTE SYNTAX LAW — STRICT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Inject 15-25 analytical footnotes using EXACTLY this format: [[EnglishTerm::EnglishAnalysis]]
+- The "EnglishTerm" MUST be extracted verbatim from the source text.
+- The "EnglishAnalysis" MUST be a single continuous paragraph (NO newlines inside [[ ]]).
+- The "EnglishAnalysis" MUST exceed 80 words and cover: [Surface Illusion] → [Structural Mechanism] → [Critical Fallout].
+- BOTH sides of :: MUST be 100% English. Chinese inside [[ ]] is a CRITICAL FAILURE.
 
-【深度与结构死令】：
-1. 绝对禁止总结！利用【杜邦分析法】和【博弈论】对每一个商业动作进行分形拆解。
-2. 严禁符号：禁止使用任何 Emoji。利用排版和黑体字体现攻击性。
-3. 🚨 气泡注脚格式绝对死令（防崩溃协议）：
-   - 格式必须极其严格：[[原文词汇::[表层伪装]...[核心机制]...[收割代价]...]]
-   - 物理隔离：在 [[ 和 ]] 内部，绝对、绝对禁止使用任何换行符 (\\n)！所有的解析内容必须是一整段连贯的纯文本！
-   - 解析内容字数必须突破 120 字，展现上帝视角的智力碾压。
-4. 拒绝截断：必须确保四个板块全部逻辑闭环。如果 Token 不足，请缩减修饰词，但必须完成所有板块的论证。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY REPORT STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## I. ANATOMY OF CORPORATE WILL
+### 1.1 [Sub-topic]
+### 1.2 [Sub-topic]
+### 1.3 [Sub-topic]
 
-【架构】：
-- Ⅰ. 权力构架与意志解剖
-- Ⅱ. 资产流动与杠杆迷局
-- Ⅲ. 隐藏契约与逻辑穷举
-- Ⅳ. 高维时间轴预测`;
+## II. THE LEVERAGE MAZE
+### 2.1 [Sub-topic]
+### 2.2 [Sub-topic]
+### 2.3 [Sub-topic]
+
+## III. STRUCTURAL FRAGMENTATION
+### 3.1 [Sub-topic]
+### 3.2 [Sub-topic]
+### 3.3 [Sub-topic]
+
+## IV. BLACK SWAN FORECASTING
+### 4.1 [Sub-topic]
+### 4.2 [Sub-topic]
+### 4.3 [Sub-topic]`
+
+      // ============================================================
+      // 🔧 BUG-2 FIX: CN Prompt - 反敷衍死令 + 强制深度
+      // ============================================================
+      : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V9.0】
+任务：生成一份细节爆炸、逻辑深度封顶的《暗影卷宗》Markdown 研报。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【语言隔离舱 — 物理死令】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+100% 纯正中文。禁止出现任何英文字母、缩写或括号内的英文注释。CEO 须译为"首席执行官"，R&D 须译为"研发"，以此类推。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【深度死令 — 反敷衍协议（最高优先级）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**这是最重要的指令：每个板块必须包含至少 3 个子标题（###）和至少 400 字的实质性论证散文。**
+- 绝对禁止总结！禁止用一两句话带过任何论点。
+- 必须对原文每一个核心动作进行"显微镜式"解剖：
+  - 利用【杜邦分析法】拆解其对净资产收益率、负债率、周转效率的具体影响。
+  - 利用【博弈论】建模所有利益相关方的支付矩阵与信息不对称优势。
+  - 利用【MECE 原则】穷举所有"被刻意隐瞒"的事实。
+- 如果你感觉在收缩、在总结、在偷懒——立刻停止并强制展开论证。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【气泡注脚格式死令】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+全篇注入 15-25 个深度注脚，格式极其严格：[[原文词汇::解析]]
+- "原文词汇"必须从原文中 100% 逐字复制。
+- "::" 右侧的"解析"必须是一整段连贯的纯文本（[[ ]] 内部绝对禁止换行符）。
+- 解析内容必须超过 80 字，包含：[表层伪装] → [核心机制] → [收割代价] 三个维度。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【强制研报架构】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 一、权力构架与意志解剖
+### 1.1 [子标题]
+### 1.2 [子标题]
+### 1.3 [子标题]
+
+## 二、资产流动与杠杆迷局
+### 2.1 [子标题]
+### 2.2 [子标题]
+### 2.3 [子标题]
+
+## 三、隐藏契约与逻辑穷举
+### 3.1 [子标题]
+### 3.2 [子标题]
+### 3.3 [子标题]
+
+## 四、高维时间轴预测
+### 4.1 [子标题]
+### 4.2 [子标题]
+### 4.3 [子标题]`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
-      { role: 'user', content: String(isEnglish ? `Target Narrative:\n\n${rawContent}` : `需解密的目标通稿：\n\n${rawContent}`) }
+      { role: 'user', content: String(isEnglish
+        ? `Target Narrative for Forensic Decryption:\n\n${rawContent}`
+        : `需解密的目标通稿：\n\n${rawContent}`)
+      }
     ];
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('🟢 [模块_发起] -> 动作/参数: 唤醒 V8.0 卷宗引擎，执行词法防逃逸协议');
+      console.log('🟢 [模块_发起] -> 动作/参数: 唤醒 V9.0 卷宗引擎，执行双重外科手术修复协议');
     }
 
-    // 提高 Max Tokens 阈值以应对分形展开需求
-    const streamResponse = await createDeepSeekStream(messages);
+    // 🔧 BUG-2 FIX: 将 max_tokens 从 8192 提升至 16000，给 AI 足够空间展开深度论证
+    const streamResponse = await createDeepSeekStream(messages, false, 16000);
 
     return new Response(streamResponse.body, {
       headers: { 

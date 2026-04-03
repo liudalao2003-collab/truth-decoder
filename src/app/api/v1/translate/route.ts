@@ -3,6 +3,13 @@ import { TerminalMessage } from '@/types';
 
 export const runtime = 'edge';
 
+/**
+ * 核心业务：暗影卷宗懒翻译网关
+ *
+ * V9.0 修复：加固 EN 翻译 prompt 的语言隔离死令，
+ * 彻底切断翻译过程中 AI 夹带中文解释的冲动。
+ * 同时同步提升 maxTokens 到 16000，确保长卷宗翻译不被截断。
+ */
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('Authorization');
@@ -11,26 +18,35 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { content, targetLang } = body as { content: string, targetLang: 'cn'|'en' };
 
-    // 🚨 架构师 V7.1 致命修复：断绝翻译过程中的注意力残留，强制执行“语言清空”
     const systemPromptText = targetLang === 'en'
-      ? `You are an elite financial translator. Translate the text into 100% FLUENT, NATIVE ENGLISH.
-[CRITICAL]:
-1. ZERO CHINESE: Every single character must be converted. No Chinese names, terms, or parenthetical explanations.
-2. FOOTNOTE SYNTAX: Preserve [[TranslatedTerm::TranslatedAnalysis]]. Both sides MUST be English.
-3. No intro/outro. Output raw Markdown only.`
-      : `【系统最高权限指令：极限语言纯洁性与符号锚定】
-你是一名顶级的金融翻译官。请将“暗影卷宗”翻译为 100% 纯正的中文。
-【强制要求】：
-1. 绝对禁止在译文中出现任何一个英文字母！所有缩写（如 CEO, R&D）必须翻译为对应的中文职务或称谓。
-2. 物理格式锁：必须保留 [[ ]] 和 :: 的连接格式，且注脚内部也必须全中文。
-3. 严禁输出 JSON 或废话。`;
+      // 🔧 BUG-1 FIX: 英译中时加固语言隔离，防止 AI 在注脚内夹带中文
+      ? `You are an elite financial translator. Your ONLY job is to translate the provided Markdown text into 100% FLUENT, NATIVE ENGLISH.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE LANGUAGE LAW — ZERO TOLERANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**ZERO CHINESE. ZERO CHINESE. ZERO CHINESE.**
+- Every single character — including inside [[...]] footnotes — MUST be converted to English.
+- FORBIDDEN: Any Chinese character (汉字), Pinyin, or bilingual parenthetical like "资产 (assets)".
+- The [[Term::Analysis]] footnote format MUST be preserved. Both "Term" and "Analysis" MUST be English.
+- Do NOT add any introduction, explanation, or closing remarks. Output raw translated Markdown ONLY.`
+
+      // 中文翻译保持原有逻辑，但同样加固
+      : `【系统最高权限指令：极限语言纯洁性与符号锚定 V9.0】
+你是一名顶级的金融翻译官。请将下方"暗影卷宗"从英文原文翻译为 100% 纯正的中文。
+
+【绝对语言死令】：
+1. 译文中禁止出现任何一个英文字母！所有缩写（如 CEO, R&D, IPO）必须翻译为对应的中文称谓。
+2. 物理格式锁：必须完整保留 [[ ]] 和 :: 的注脚格式，且注脚内部也必须全中文。
+3. 严禁输出任何 JSON、前言或废话。只输出翻译后的 Markdown 原文。`;
 
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
       { role: 'user', content: String(content) }
     ];
 
-    const streamResponse = await createDeepSeekStream(messages);
+    // 🔧 BUG-2 FIX: 同步提升翻译的 maxTokens，确保长卷宗不被截断
+    const streamResponse = await createDeepSeekStream(messages, false, 16000);
     return new Response(streamResponse.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
     });
