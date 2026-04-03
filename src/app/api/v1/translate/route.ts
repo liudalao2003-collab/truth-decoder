@@ -45,8 +45,8 @@ ABSOLUTE LANGUAGE LAW — ZERO TOLERANCE
       { role: 'user', content: String(content) }
     ];
 
-    // 🔧 BUG-2 FIX: 同步提升翻译的 maxTokens，确保长卷宗不被截断
-    const streamResponse = await createDeepSeekStream(messages, false, 16000);
+    // 翻译同样使用标准 8192 上限
+    const streamResponse = await createDeepSeekStream(messages);
     return new Response(streamResponse.body, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
     });

@@ -3,15 +3,14 @@ import { TerminalMessage } from '@/types';
 /**
  * 核心业务：DeepSeek 流式请求服务层
  *
- * V9.0 修复：新增 maxTokens 参数，允许调用方按需控制 Token 上限。
- * 暗影卷宗生成需要 16000 tokens 才能保证内容深度，
- * 其他接口（终端审讯等）继续使用默认的 8192。
+ * V9.1 紧急修复：
+ * - deepseek-chat 模型的单次输出硬上限为 8192 tokens，传入更大值会导致 API 400 错误进而引发 500。
+ * - 恢复 max_tokens 为 8192（模型物理上限），彻底杜绝因超限导致的崩溃。
+ * - 内容深度通过 prompt 工程（强制子标题+最低字数要求）来保证，而非依赖超限的 token 数。
  */
 export async function createDeepSeekStream(
   messages: TerminalMessage[],
-  isJson: boolean = false,
-  // 🔧 BUG-2 FIX: 新增 maxTokens 参数，默认保持 8192 向后兼容，卷宗生成传入 16000
-  maxTokens: number = 8192
+  isJson: boolean = false
 ): Promise<Response> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -19,7 +18,7 @@ export async function createDeepSeekStream(
     throw new Error('系统配置异常：未侦测到神经引擎访问令牌。');
   }
 
-  console.log(`🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions (Stream, JSON_MODE: ${isJson}, MAX_TOKENS: ${maxTokens}), 记忆链长度:`, messages.length);
+  console.log(`🟡 [网络请求] -> 接口: api.deepseek.com/chat/completions (Stream, JSON_MODE: ${isJson}), 记忆链长度:`, messages.length);
   
   if (messages.length > 20) {
     console.log('🔴 [错误捕获] -> 节点: 流式引擎层 - 上下文超载');
@@ -29,9 +28,9 @@ export async function createDeepSeekStream(
   const payload: Record<string, unknown> = {
     model: 'deepseek-chat',
     messages: messages,
-    stream: true, 
-    temperature: 0.3, 
-    max_tokens: maxTokens,
+    stream: true,
+    temperature: 0.3,
+    max_tokens: 8192, // deepseek-chat 模型物理上限，不可超过此值
     // 🚨 架构师 V6.7 修复：彻底废除 frequency_penalty。这是导致大模型中英混杂、乱造词汇的物理元凶！
   };
 

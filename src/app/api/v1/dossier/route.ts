@@ -151,8 +151,7 @@ MANDATORY REPORT STRUCTURE
       console.log('🟢 [模块_发起] -> 动作/参数: 唤醒 V9.0 卷宗引擎，执行双重外科手术修复协议');
     }
 
-    // 🔧 BUG-2 FIX: 将 max_tokens 从 8192 提升至 16000，给 AI 足够空间展开深度论证
-    const streamResponse = await createDeepSeekStream(messages, false, 16000);
+    const streamResponse = await createDeepSeekStream(messages);
 
     return new Response(streamResponse.body, {
       headers: { 
