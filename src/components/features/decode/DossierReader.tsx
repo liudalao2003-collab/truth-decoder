@@ -8,11 +8,17 @@ export default function DossierReader({
   content, 
   isStreaming = false, 
   isTruncated = false,
+  qualityError = null,
+  recoveryHint = null,
   dictionary = {} 
 }: { 
   content: string; 
   isStreaming?: boolean; 
   isTruncated?: boolean;
+  /** 流式输出质量异常（如异常复读被掐断）时的说明文案 */
+  qualityError?: string | null;
+  /** 自动恢复过程中性提示（重试、切换通道等） */
+  recoveryHint?: string | null;
   dictionary?: Record<string, string>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -143,7 +149,18 @@ export default function DossierReader({
           </div>
         );
       }
-      
+
+      // 🛡️ 防御性渲染守卫：检测并跳过孤立注脚块
+      // 当 AI 将 [[Term::Analysis]] 抽离为底部列表时，每行只有一个注脚标记，
+      // 去掉所有 [[...]] 内容后剩余正文为空，此时跳过渲染，避免产生无上下文的孤立红字行。
+      // 此守卫不影响正常内联注脚（正常情况下注脚前后有正文，stripped 后仍有内容）。
+      if (trimmed.startsWith('[[') && trimmed.endsWith(']]')) {
+        const strippedOfFootnotes = trimmed.replace(/\[\[[\s\S]*?\]\]/g, '').trim();
+        if (strippedOfFootnotes.length === 0) {
+          return null;
+        }
+      }
+
       // 常规段落渲染
       return (
         <p key={`p-${index}`} className="text-zinc-400 font-serif leading-[2.2] tracking-wide text-base md:text-lg mb-6 text-justify">
@@ -180,6 +197,13 @@ export default function DossierReader({
             <ShieldAlert className="w-[500px] h-[500px] text-white" />
           </div>
           <div className="relative z-10 max-w-4xl mx-auto">
+            {isStreaming && recoveryHint && (
+              <div className="mb-8 p-4 border border-zinc-700 bg-zinc-900/60 rounded-sm">
+                <p className="text-xs font-mono text-zinc-400 uppercase tracking-widest leading-relaxed">
+                  {recoveryHint}
+                </p>
+              </div>
+            )}
             {renderBlocks()}
             
             {isStreaming && (
@@ -187,7 +211,19 @@ export default function DossierReader({
             )}
             
             {/* 🚨 架构师防线：UI 级截断托底 */}
-            {!isStreaming && isTruncated && (
+            {!isStreaming && qualityError && (
+              <div className="mt-12 p-6 border border-amber-900 bg-amber-950/20 rounded-sm flex items-start gap-4">
+                <AlertTriangle className="text-amber-500 shrink-0 w-6 h-6 mt-1" />
+                <div>
+                  <h4 className="text-amber-500 font-bold uppercase tracking-widest text-sm mb-2">Output Quality Guard / 输出质量拦截</h4>
+                  <p className="text-amber-200/90 text-sm leading-relaxed font-mono">
+                    {qualityError}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isStreaming && isTruncated && !qualityError && (
               <div className="mt-12 p-6 border border-red-900 bg-red-950/20 rounded-sm flex items-start gap-4">
                 <AlertTriangle className="text-red-500 shrink-0 w-6 h-6 mt-1" />
                 <div>

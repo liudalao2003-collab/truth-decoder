@@ -1,5 +1,12 @@
 import { TerminalMessage } from '@/types';
 
+/** 可选流式参数（与 frequency_penalty 区分，用于抑制同句式复读且降低中英混杂风险） */
+export interface DeepSeekStreamOptions {
+  presence_penalty?: number;
+  /** 覆盖默认 temperature（如卷宗自动重试时略上调） */
+  temperature?: number;
+}
+
 /**
  * 核心业务：DeepSeek 流式请求服务层
  *
@@ -10,7 +17,8 @@ import { TerminalMessage } from '@/types';
  */
 export async function createDeepSeekStream(
   messages: TerminalMessage[],
-  isJson: boolean = false
+  isJson: boolean = false,
+  streamOptions?: DeepSeekStreamOptions
 ): Promise<Response> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -29,10 +37,14 @@ export async function createDeepSeekStream(
     model: 'deepseek-chat',
     messages: messages,
     stream: true,
-    temperature: 0.3,
+    temperature: streamOptions?.temperature ?? 0.3,
     max_tokens: 8192, // deepseek-chat 模型物理上限，不可超过此值
     // 🚨 架构师 V6.7 修复：彻底废除 frequency_penalty。这是导致大模型中英混杂、乱造词汇的物理元凶！
   };
+
+  if (streamOptions?.presence_penalty !== undefined) {
+    payload.presence_penalty = streamOptions.presence_penalty;
+  }
 
   if (isJson) {
     payload.response_format = { type: 'json_object' };

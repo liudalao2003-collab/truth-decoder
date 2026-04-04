@@ -5,11 +5,12 @@ import { logger } from '@/utils/logger';
 export const runtime = 'edge';
 
 /**
- * 核心业务：暗影卷宗 (Shadow Dossier) 逻辑核心 V9.2
+ * 核心业务：暗影卷宗 (Shadow Dossier) 逻辑核心 V9.3
  *
- * V9.2 双重修复：
- * 1. [EN 中文污染根治] 三重 ZERO CHINESE 声明，且明确注脚/标题/段落/结语全部禁止中文。
- * 2. [强制结语] CN/EN 均追加 ## EPILOGUE / ## 终章判决，确保每份卷宗有完整收尾。
+ * V9.3 新增修复：
+ * 1. [EN 注脚内联强制] 新增 INLINE INJECTION MANDATE 章节，明确禁止注脚单独成行或集中
+ *    在底部列表区，强制要求每个 [[Term::Analysis]] 必须内联嵌入在正文句子中间，
+ *    与中文版渲染结构保持 100% 对齐。
  */
 export async function POST(request: Request) {
   try {
@@ -20,8 +21,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { rawContent, lang } = body as { rawContent: string; lang?: 'cn' | 'en' };
+    const { rawContent, lang, retryAttempt: rawRetry } = body as {
+      rawContent: string;
+      lang?: 'cn' | 'en';
+      retryAttempt?: number;
+    };
     const isEnglish = lang === 'en';
+    const retryAttempt =
+      typeof rawRetry === 'number' && Number.isFinite(rawRetry)
+        ? Math.min(3, Math.max(0, Math.floor(rawRetry)))
+        : 0;
+    const dossierTemperature = Math.min(0.55, 0.3 + retryAttempt * 0.08);
 
     const systemPromptText = isEnglish
       ? `[SYSTEM OVERRIDE: TruthDecoder PRO - ULTIMATE STRATEGIC ENGINE V9.2]
@@ -49,6 +59,21 @@ Inject 15-20 footnotes using format: [[EnglishTerm::EnglishAnalysis]]
 - "EnglishAnalysis": single continuous paragraph, NO newlines inside [[ ]], minimum 80 words.
 - Covers: [Surface Illusion] then [Structural Mechanism] then [Critical Fallout].
 - BOTH sides of :: must be 100% English. No exceptions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INLINE INJECTION MANDATE — CRITICAL STRUCTURE LAW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each [[Term::Analysis]] footnote MUST be injected INLINE inside a sentence within a paragraph body.
+STRICTLY FORBIDDEN — any of the following will CORRUPT the output:
+  - Creating a "Footnotes", "References", "Glossary", or "Terms" section anywhere.
+  - Placing [[Term::Analysis]] on its own standalone line with no surrounding sentence text.
+  - Grouping or listing multiple [[Term::Analysis]] entries consecutively without prose between them.
+CORRECT (inject mid-sentence in a paragraph):
+  "The article weaponizes [[Prediction Markets::Surface Illusion: The article frames Polymarket odds as objective probability, obscuring that these are speculative bets by undercapitalized retail traders. Structural Mechanism: Prediction market prices reflect momentary sentiment equilibrium, not analytical consensus — they are a liquidity-weighted vote, not a forecast. Critical Fallout: Readers conflate "market believes X" with "X will happen," triggering emotionally-driven entry into positions timed to benefit content producers, not readers.]] data to manufacture false epistemic authority over Bitcoin's price trajectory."
+INCORRECT (FORBIDDEN — standalone line):
+  [[Prediction Markets::...]]
+  [[Boom-and-Bust Cycles::...]]
+Every single [[Term::Analysis]] must be surrounded by English prose on at least one side.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY REPORT STRUCTURE
@@ -127,7 +152,7 @@ Write a single paragraph (100-150 words) delivering the ultimate penetrating con
     const messages: TerminalMessage[] = [
       { role: 'system', content: String(systemPromptText) },
       { role: 'user', content: String(isEnglish
-        ? `Target Narrative for Forensic Decryption:\n\n${rawContent}`
+        ? `Target Narrative for Forensic Decryption:\n\n${rawContent}\n\nNote: The source text may be in Chinese or any other language. Your entire analytical report must nevertheless be written in English only (no Chinese characters).`
         : `需解密的目标通稿：\n\n${rawContent}`)
       }
     ];
@@ -136,7 +161,10 @@ Write a single paragraph (100-150 words) delivering the ultimate penetrating con
       console.log('🟢 [模块_发起] -> 动作/参数: 唤醒 V9.2 卷宗引擎');
     }
 
-    const streamResponse = await createDeepSeekStream(messages);
+    const streamResponse = await createDeepSeekStream(messages, false, {
+      presence_penalty: 0.2,
+      temperature: dossierTemperature,
+    });
 
     return new Response(streamResponse.body, {
       headers: { 

@@ -27,7 +27,7 @@ export default function DecodePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
 
-  const { dossierContent, isStreamingDossier, isTruncated, startDossierStream } = useDossierStream(signal, lang);
+  const { dossierContent, isStreamingDossier, isTruncated, streamQualityError, dossierRecoveryStatus, startDossierStream } = useDossierStream(signal, lang);
 
   useEffect(() => { 
      if (!id) return;
@@ -102,6 +102,10 @@ export default function DecodePage() {
 
       // 第一轮：注册 cn 词汇（对中文原文命中）
       cnFluffs.forEach((item, idx) => {
+        // EN 模式语种隔离守卫：如果没有对应的 EN 解释（targetFluffs[idx] 为空），
+        // 跳过此条 CN 词条，绝不允许 CN 解释渗入 EN 模式的词典导致气泡弹出中文。
+        if (lang === 'en' && !targetFluffs[idx]) return;
+
         const targetItem = targetFluffs[idx] || item;
         const parsed = parseFluffItem(item, targetItem);
         if (!parsed) {
@@ -212,6 +216,8 @@ export default function DecodePage() {
                 content={dossierContent} 
                 isStreaming={isStreamingDossier} 
                 isTruncated={isTruncated} 
+                qualityError={streamQualityError}
+                recoveryHint={dossierRecoveryStatus}
                 dictionary={dictionary} 
               /> 
             )}
