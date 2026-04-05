@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "src/app/api/v1/export/pdf/route.ts": {
+      "memory": 3008,
+      "maxDuration": 120
+    }
+  },
   "crons": [
     {
       "path": "/api/cron",

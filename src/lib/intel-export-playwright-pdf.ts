@@ -87,7 +87,21 @@ function systemChromiumExecutableCandidates(): string[] {
 }
 
 /**
- * 启动无头 Chromium：环境变量路径 → Playwright 缓存浏览器 → 本机 Chrome/Edge。
+ * Vercel / AWS Lambda 等无图形 Linux：使用 @sparticuz/chromium 自带的 headless 二进制。
+ */
+async function launchChromiumServerless(): Promise<Browser> {
+  const { default: ServerlessChromium } = await import('@sparticuz/chromium');
+  const executablePath = await ServerlessChromium.executablePath();
+  return chromium.launch({
+    headless: true,
+    args: ServerlessChromium.args,
+    executablePath,
+  });
+}
+
+/**
+ * 启动无头 Chromium：
+ * CHROMIUM_EXECUTABLE_PATH → Vercel（@sparticuz/chromium）→ Playwright 缓存 → 本机 Chrome/Edge。
  */
 async function launchChromium(): Promise<Browser> {
   const exec = process.env.CHROMIUM_EXECUTABLE_PATH?.trim();
@@ -99,6 +113,10 @@ async function launchChromium(): Promise<Browser> {
       executablePath: exec,
       args: baseArgs,
     });
+  }
+
+  if (process.env.VERCEL === '1') {
+    return launchChromiumServerless();
   }
 
   try {

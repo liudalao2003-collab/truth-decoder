@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  serverExternalPackages: ['playwright-core'],
+  serverExternalPackages: ['playwright-core', '@sparticuz/chromium'],
+  /** 确保 Vercel 打包带上 sparticuz 的 bin（否则运行时找不到 chromium.br） */
+  outputFileTracingIncludes: {
+    "/api/v1/export/pdf": ["./node_modules/@sparticuz/chromium/**/*"],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '16mb',
