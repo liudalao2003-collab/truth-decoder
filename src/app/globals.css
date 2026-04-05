@@ -1,8 +1,39 @@
 @import "tailwindcss";
 
+/* 锁定浅色方案，避免系统深色模式扭曲表单与滚动条 */
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  color-scheme: light;
+
+  /* 机构级表面层级 */
+  --td-surface-0: #f4f4f5;
+  --td-surface-1: #ffffff;
+  --td-surface-2: #fafafa;
+
+  /* 正文：主/次 对比度满足扫读（次文不低于 zinc-600） */
+  --td-text-primary: #0a0a0a;
+  --td-text-secondary: #52525b;
+
+  --td-border: #e4e4e7;
+  --td-border-strong: #d4d4d8;
+  --td-accent: #dc2626;
+  --td-accent-soft: rgba(220, 38, 38, 0.08);
+  --td-ring: rgba(9, 9, 11, 0.06);
+
+  /* 冷色仪器区：雷达网格、多边形与嵌入槽（slate 系） */
+  --td-instrument-surface: #f8fafc;
+  --td-slate-grid: #64748b;
+  --td-slate-stroke: #334155;
+  --td-slate-radar-fill: rgba(51, 65, 85, 0.13);
+
+  /* 兼容旧令牌 */
+  --td-bg-page: var(--td-surface-0);
+  --td-bg-card: var(--td-surface-1);
+  --td-bg-elevated: var(--td-surface-2);
+  --td-text: var(--td-text-primary);
+  --td-text-muted: var(--td-text-secondary);
+
+  --background: var(--td-surface-0);
+  --foreground: var(--td-text-primary);
 }
 
 @theme inline {
@@ -10,26 +41,9 @@
   --color-foreground: var(--foreground);
 }
 
-/* 核心视觉：骇客扫描线特效 */
-.scanline {
-  width: 100%;
-  height: 4px;
-  background: linear-gradient(to bottom, transparent, rgba(185, 28, 28, 0.1), transparent);
-  position: fixed;
-  top: -100px;
-  animation: scanline 8s linear infinite;
-  z-index: 999;
-  pointer-events: none;
-}
-
-@keyframes scanline {
-  0% { top: -100px; }
-  100% { top: 100%; }
-}
-
 body {
-  background: black;
-  color: white;
+  background: var(--td-surface-0);
+  color: var(--td-text-primary);
   overflow-x: hidden;
   font-family: var(--font-geist-sans);
 }

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { generateIntelProfile } from '@/services/intel-profile';
+import type { IntelProfileError } from '@/types/intel-profile';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
@@ -67,13 +69,49 @@ MANDATORY JSON OUTPUT FORMAT
 
     const intel = JSON.parse(completion.choices[0].message.content || '{}');
 
+    const { data: existingRow } = await supabaseAdmin
+      .from('signals')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+
+    const prevMeta =
+      existingRow?.metadata &&
+      typeof existingRow.metadata === 'object' &&
+      !Array.isArray(existingRow.metadata)
+        ? (existingRow.metadata as Record<string, unknown>)
+        : {};
+
+    const metaRest = { ...prevMeta };
+    delete metaRest.intelProfileError;
+
+    const mergedMeta: Record<string, unknown> = {
+      ...metaRest,
+      bilingual: intel.verdict,
+      washed: true,
+      model: 'deepseek-v3',
+    };
+
+    try {
+      const profile = await generateIntelProfile(rawContent, intel.facts);
+      mergedMeta.intelProfile = profile;
+      delete mergedMeta.intelProfileError;
+    } catch (e: unknown) {
+      const errPayload: IntelProfileError = {
+        message: e instanceof Error ? e.message : '情报体征生成失败',
+        at: new Date().toISOString(),
+      };
+      mergedMeta.intelProfileError = errPayload;
+      delete mergedMeta.intelProfile;
+    }
+
     const { error: dbError } = await supabaseAdmin
       .from('signals')
       .update({
         fluff_words: intel.fluff,
         hard_facts: intel.facts,
         verdict: intel.verdict?.cn || "解析失败",
-        metadata: { bilingual: intel.verdict, washed: true, model: 'deepseek-v3' }
+        metadata: mergedMeta,
       })
       .eq('id', id);
 

@@ -16,9 +16,9 @@ export default function AdminPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-[var(--td-bg-page)] flex flex-col items-center justify-center">
       <Loader2 className="animate-spin text-red-600 w-10 h-10 mb-4" />
-      <p className="font-mono text-xs text-zinc-500 uppercase tracking-[0.3em]">
+      <p className="font-mono text-xs text-zinc-600 uppercase tracking-[0.3em]">
         Redirecting to Tactical Dashboard...
       </p>
     </div>

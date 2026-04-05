@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { ApiResponse, DecodeResult } from '@/types';
 import { SignalRecord } from '@/types/database';
+import type { IntelProfile, IntelProfileError } from '@/types/intel-profile';
 import { logger } from '@/utils/logger';
 
 export interface ReportPayload {
   rawContent: string;
   result: DecodeResult;
   viewCount?: number;
+  intelProfile?: IntelProfile | null;
+  intelProfileError?: IntelProfileError | null;
 }
 
 export async function GET(
@@ -55,9 +58,11 @@ export async function GET(
       result: {
         fluffWords: record.fluff_words,
         hardFacts: record.hard_facts,
-        verdict: record.verdict
+        verdict: record.verdict,
       },
-      viewCount: updatedCount
+      viewCount: updatedCount,
+      intelProfile: record.metadata?.intelProfile ?? null,
+      intelProfileError: record.metadata?.intelProfileError ?? null,
     };
 
     return NextResponse.json({ 

@@ -2,20 +2,28 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal as TerminalIcon, Send, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { useTerminalMachine } from '@/hooks/useTerminalMachine';
-import { createClient } from '@/lib/supabase/client'; // 🚀 引入侦察兵
+import { createClient } from '@/lib/supabase/client';
+import type { TerminalMessage } from '@/types';
 
 interface ChatTerminalProps {
   signalId: string;
   hardFacts: string[];
-  onRequireAuth: () => void; // 🚀 接收拦截回调
+  onRequireAuth: () => void;
+  onMessagesChange?: (messages: TerminalMessage[]) => void;
 }
 
-export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: ChatTerminalProps) {
+export default function ChatTerminal({
+  signalId,
+  hardFacts,
+  onRequireAuth,
+  onMessagesChange,
+}: ChatTerminalProps) {
   const [inputValue, setInputValue] = useState('');
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
-  const { messages, isStreaming, error, submitInterrogation, clearTerminal } = useTerminalMachine({ signalId, hardFacts });
+  const { messages, isStreaming, error, submitInterrogation, clearTerminal } =
+    useTerminalMachine({ signalId, hardFacts, onMessagesChange });
 
   useEffect(() => {
     if (endOfMessagesRef.current) {
@@ -44,35 +52,34 @@ export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: Cha
   };
 
   return (
-    <div className="w-full bg-black border border-zinc-800 shadow-2xl flex flex-col h-[600px] rounded-sm relative overflow-hidden group">
-      {/* ... [保持 UI 渲染部分不变，节省 CEO 阅读带宽] ... */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
+    <div className="w-full bg-[var(--td-surface-1)] border border-[var(--td-border)] shadow-sm ring-1 ring-[var(--td-ring)] flex flex-col h-[600px] rounded-lg relative overflow-hidden group">
+      <div className="flex items-center justify-between p-4 border-b border-[var(--td-border)] bg-zinc-50">
         <div className="flex items-center gap-3">
           <TerminalIcon className="w-5 h-5 text-red-600 group-hover:animate-pulse" />
-          <span className="text-xs font-mono text-zinc-400 tracking-widest uppercase">PRO Terminal / {signalId}</span>
+          <span className="text-xs font-mono text-zinc-600 tracking-widest uppercase">PRO Terminal / {signalId}</span>
         </div>
         <div className="flex items-center gap-4 text-zinc-500">
-          <button onClick={clearTerminal} title="清除物理内存" className="hover:text-red-500 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
+          <button onClick={clearTerminal} title="清除物理内存" className="hover:text-red-600 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
             <Trash2 className="w-4 h-4" /> CLEAR
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-800 bg-zinc-950/30">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 font-mono text-sm scrollbar-thin scrollbar-thumb-zinc-300 bg-white">
         {messages.length === 0 && (
-          <div className="text-zinc-600 text-xs text-center mt-20 uppercase tracking-[0.2em]">
-            <span className="block mb-2 text-red-900/50">_ SYSTEM STANDBY _</span>
+          <div className="text-zinc-500 text-xs text-center mt-20 uppercase tracking-[0.2em]">
+            <span className="block mb-2 text-red-400">_ SYSTEM STANDBY _</span>
             等待输入核心指令。请基于已查明的硬通货事实进行追问。
           </div>
         )}
         
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <span className={`text-[10px] uppercase tracking-[0.2em] mb-2 ${msg.role === 'user' ? 'text-zinc-600' : 'text-red-700 font-bold'}`}>
+            <span className={`text-[10px] uppercase tracking-[0.2em] mb-2 ${msg.role === 'user' ? 'text-zinc-500' : 'text-red-700 font-bold'}`}>
               {msg.role === 'user' ? 'GUEST_USER' : 'SYSTEM_AI'}
             </span>
             <div className={`p-4 max-w-[90%] md:max-w-[75%] leading-relaxed ${
-              msg.role === 'user' ? 'bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-sm' : 'bg-transparent text-white border-l-2 border-red-700 pl-5 text-base'
+              msg.role === 'user' ? 'bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-md' : 'bg-transparent text-zinc-800 border-l-2 border-red-500 pl-5 text-base'
             }`}>
               {msg.content}
             </div>
@@ -80,7 +87,7 @@ export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: Cha
         ))}
         
         {error && (
-          <div className="bg-red-950/30 border border-red-900 text-red-500 p-4 flex items-start gap-3 text-sm rounded-sm">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 flex items-start gap-3 text-sm rounded-md">
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -88,7 +95,7 @@ export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: Cha
         <div ref={endOfMessagesRef} className="h-4" />
       </div>
 
-      <div className="p-4 bg-zinc-950 border-t border-zinc-800">
+      <div className="p-4 bg-zinc-50 border-t border-[var(--td-border)]">
         <form onSubmit={handleSubmit} className="relative flex items-center">
           <span className="absolute left-4 text-red-600 font-black text-lg">{'>'}</span>
           <input
@@ -97,9 +104,9 @@ export default function ChatTerminal({ signalId, hardFacts, onRequireAuth }: Cha
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isStreaming}
             placeholder="输入指令，洞透底层逻辑..."
-            className="w-full bg-black border border-zinc-800 text-white font-mono text-base py-4 pl-10 pr-16 focus:outline-none focus:border-red-800 transition-colors disabled:opacity-50 rounded-sm"
+            className="w-full bg-white border border-zinc-200 text-zinc-900 font-mono text-base py-4 pl-10 pr-16 placeholder:text-zinc-500 focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-colors disabled:opacity-50 rounded-md"
           />
-          <button type="submit" disabled={!inputValue.trim() || isStreaming} className="absolute right-4 text-zinc-500 hover:text-red-500 disabled:text-zinc-800 transition-colors bg-zinc-900 p-2 rounded-sm">
+          <button type="submit" disabled={!inputValue.trim() || isStreaming} className="absolute right-4 text-zinc-500 hover:text-red-600 disabled:text-zinc-300 transition-colors bg-white border border-zinc-200 p-2 rounded-md">
             {isStreaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </form>

@@ -2,6 +2,8 @@
 // 数据库实体契约。已彻底消除 fluff_words、hard_facts 以及 metadata 中的 any 毒瘤。
 // 引入 BilingualData 确保双语数据的严密性，同时保留旧版 string[] 的类型兼容性防断层。
 
+import type { IntelProfile, IntelProfileError } from '@/types/intel-profile';
+
 export interface BilingualData {
   cn: string[];
   en: string[];
@@ -29,7 +31,9 @@ export interface SignalRecord {
       en?: string;
     };
     washed?: boolean;
+    intelProfile?: IntelProfile;
+    intelProfileError?: IntelProfileError;
     // 严禁 any 投毒，使用 unknown 确保 TS 纯洁性
-    [key: string]: unknown; 
+    [key: string]: unknown;
   };
 }

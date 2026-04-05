@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TerminalMessage } from '@/types';
 
 interface UseTerminalMachineProps {
   signalId: string;
   hardFacts: string[];
+  onMessagesChange?: (messages: TerminalMessage[]) => void;
 }
 
-export function useTerminalMachine({ signalId, hardFacts }: UseTerminalMachineProps) {
+export function useTerminalMachine({
+  signalId,
+  hardFacts,
+  onMessagesChange,
+}: UseTerminalMachineProps) {
   const [messages, setMessages] = useState<TerminalMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +97,12 @@ export function useTerminalMachine({ signalId, hardFacts }: UseTerminalMachinePr
   };
 
   const clearTerminal = () => setMessages([]);
+
+  const onMessagesChangeRef = useRef(onMessagesChange);
+  onMessagesChangeRef.current = onMessagesChange;
+  useEffect(() => {
+    onMessagesChangeRef.current?.(messages);
+  }, [messages]);
 
   return { messages, isStreaming, error, submitInterrogation, clearTerminal };
 }

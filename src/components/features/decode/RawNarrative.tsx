@@ -17,7 +17,7 @@ const HighlightMark = React.memo(({
   <mark
     onMouseEnter={(e) => onEnter(e, meaning)}
     onMouseLeave={onLeave}
-    className="bg-red-900/40 text-red-400 px-1.5 rounded-[2px] border-b border-red-500/50 transition-all duration-300 hover:bg-red-800/80 hover:text-white hover:shadow-[0_0_10px_rgba(220,38,38,0.5)] cursor-crosshair font-bold"
+    className="bg-red-100 text-red-800 px-1.5 rounded-[2px] border-b border-red-400 transition-colors duration-200 hover:bg-red-200 hover:text-red-950 hover:border-red-500 cursor-crosshair font-semibold"
   >
     {text}
   </mark>
@@ -95,23 +95,23 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
   return (
     <>
-      <div className="bg-black border border-zinc-900 rounded-sm overflow-hidden shadow-2xl h-full flex flex-col relative">
-        <div className="bg-zinc-900/30 px-6 py-3 border-b border-zinc-900 flex items-center justify-between shrink-0">
+      <div className="bg-[var(--td-surface-1)] border border-[var(--td-border)] rounded-lg overflow-hidden shadow-sm ring-1 ring-[var(--td-ring)] h-full flex flex-col relative">
+        <div className="bg-zinc-50 px-6 py-3 border-b border-[var(--td-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <FileText size={14} className="text-zinc-500" />
-            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
               {lang === 'cn' ? 'Evidence_File_Raw.txt' : 'Source_Material_Untouched.log'}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-            <span className="text-[9px] font-mono text-red-900 uppercase">Intercepted_Stream</span>
+            <span className="text-[9px] font-mono text-red-700 uppercase">Intercepted_Stream</span>
           </div>
         </div>
         
-        <div className="p-8 md:p-12 relative flex-1 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] z-10 pointer-events-none bg-[length:100%_4px,3px_100%]"></div>
-          <div className="relative z-20 font-serif text-base leading-[2.2] text-zinc-400 tracking-wide text-justify whitespace-pre-wrap">
+        <div className="p-8 md:p-12 relative flex-1 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-zinc-300 scrollbar-track-transparent bg-white">
+          <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.02)_50%)] z-10 pointer-events-none bg-[length:100%_4px]" />
+          <div className="relative z-20 max-w-prose font-sans text-base leading-relaxed text-zinc-800 tracking-normal text-justify whitespace-pre-wrap">
             {tokens.map((token, index) => {
               // 极速 O(1) 字典查表
               const meaning = dictionary[token];
@@ -126,10 +126,10 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
       {mounted && hoverInfo && createPortal(
         <div
-          className={`fixed z-[2147483647] w-max max-w-[320px] bg-zinc-950/98 backdrop-blur-xl border border-red-900/80 text-zinc-300 text-sm p-5 rounded-md shadow-[0_20px_50px_-10px_rgba(220,38,38,0.5)] pointer-events-none transition-all duration-150 font-serif leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          className={`fixed z-[2147483647] w-max max-w-[320px] bg-white/95 backdrop-blur-xl border border-red-200 text-zinc-800 text-sm p-5 rounded-lg shadow-lg pointer-events-none transition-all duration-150 font-sans leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
           style={{ left: hoverInfo.x, top: hoverInfo.y }}
         >
-          <span className="text-red-500 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-900/40 pb-2 text-xs">
+          <span className="text-red-600 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-100 pb-2 text-xs">
              <Zap size={14} className="animate-pulse" /> DEEP INSIGHT
           </span>
           <div className="text-justify whitespace-pre-wrap">{hoverInfo.text}</div>
