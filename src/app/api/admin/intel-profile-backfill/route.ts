@@ -53,7 +53,8 @@ export async function POST(req: Request) {
       rows?.filter((r) => {
         const m = r.metadata;
         if (!isMetaRecord(m)) return true;
-        return m.intelProfile == null;
+        if (m.intelProfile == null) return true;
+        return m.intelProfileError != null;
       }) ?? [];
 
     const slice = targets.slice(0, limit);

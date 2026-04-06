@@ -3,6 +3,12 @@
     "src/app/api/v1/export/pdf/route.ts": {
       "memory": 2048,
       "maxDuration": 120
+    },
+    "src/app/api/v1/ingest/save/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/intel-profile/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

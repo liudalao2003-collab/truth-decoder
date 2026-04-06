@@ -5,6 +5,21 @@ import { generateIntelProfile } from '@/services/intel-profile';
 import { regenerateFullIntelJsonFromRaw } from '@/services/regenerate-ingest-intel';
 import type { IntelProfileError } from '@/types/intel-profile';
 
+/** Vercel 默认短时上限下体征易截断；与 vercel.json 中本路由 maxDuration 对齐 */
+export const maxDuration = 60;
+
+function isMetaRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+/** 缺失体征或曾失败时允许在重复入库时重算，避免永久锁死在首次简略结果 */
+function needsIntelProfileRegeneration(meta: Record<string, unknown>): boolean {
+  const hasProfile =
+    meta.intelProfile != null && typeof meta.intelProfile === 'object';
+  const hasError = meta.intelProfileError != null;
+  return !hasProfile || hasError;
+}
+
 export async function POST(req: Request) {
   try {
     const auth = await assertIngestAuthorized(req);
@@ -35,12 +50,34 @@ export async function POST(req: Request) {
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
       .from('signals')
-      .select('id')
+      .select('id, metadata')
       .ilike('raw_content', `${safeSnippet}%`)
       .limit(1);
 
     if (existing && existing.length > 0) {
-      return NextResponse.json({ success: true, data: { signalId: existing[0].id } });
+      const row = existing[0];
+      const prevMeta = isMetaRecord(row.metadata) ? row.metadata : {};
+
+      if (needsIntelProfileRegeneration(prevMeta)) {
+        let mergedMeta: Record<string, unknown> = { ...prevMeta };
+        try {
+          const profile = await generateIntelProfile(rawContent, intel?.facts);
+          mergedMeta = { ...mergedMeta, intelProfile: profile };
+          delete mergedMeta.intelProfileError;
+        } catch (e: unknown) {
+          const errPayload: IntelProfileError = {
+            message: e instanceof Error ? e.message : '情报体征生成失败',
+            at: new Date().toISOString(),
+          };
+          mergedMeta = { ...mergedMeta, intelProfileError: errPayload };
+        }
+        await supabaseAdmin
+          .from('signals')
+          .update({ metadata: mergedMeta })
+          .eq('id', row.id);
+      }
+
+      return NextResponse.json({ success: true, data: { signalId: row.id } });
     }
 
     const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
