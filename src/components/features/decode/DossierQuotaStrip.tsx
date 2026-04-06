@@ -26,25 +26,37 @@ export default function DossierQuotaStrip({
   if (quota.isUnlimited) {
     return (
       <div
-        className={`flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 shadow-sm ${className}`}
+        className={`flex flex-col gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 shadow-sm ${className}`}
         role="status"
       >
-        <Crown className="h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden />
-        <span className="font-medium tracking-tight">
+        <div className="flex items-center gap-2">
+          <Crown className="h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden />
+          <span className="font-medium tracking-tight">
+            {lang === 'cn'
+              ? 'Pro：暗影卷宗无限次'
+              : 'Pro: Unlimited dossier generations'}
+          </span>
+        </div>
+        <p className="pl-[22px] text-[11px] leading-snug text-amber-900/85">
           {lang === 'cn'
-            ? 'Pro：暗影卷宗无限次'
-            : 'Pro: Unlimited dossier generations'}
-        </span>
+            ? '载入引擎解析报道不限次数。'
+            : 'Unlimited report parsing via the ingest engine.'}
+        </p>
       </div>
     );
   }
 
   return (
     <div
-      className={`rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 shadow-sm ${className}`}
+      className={`flex flex-col gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 shadow-sm ${className}`}
       role="status"
     >
-      <span className="font-medium">
+      <p className="text-[11px] leading-snug text-zinc-600">
+        {lang === 'cn'
+          ? '载入引擎解析报道不限次数；仅「暗影卷宗」长文按月限额（UTC）。'
+          : 'Unlimited report parsing; only Shadow Dossier (long-form) is capped monthly (UTC).'}
+      </p>
+      <p className="font-medium text-zinc-800">
         {lang === 'cn' ? (
           <>
             本月暗影卷宗剩余{' '}
@@ -62,7 +74,7 @@ export default function DossierQuotaStrip({
             (UTC {quota.period})
           </>
         )}
-      </span>
+      </p>
     </div>
   );
 }

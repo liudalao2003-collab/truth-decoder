@@ -8,8 +8,8 @@ import { z } from 'zod';
 export const INTEL_PROFILE_SCHEMA_VERSION = 1 as const;
 
 const BilingualLineSchema = z.object({
-  cn: z.array(z.string()).min(1).max(2),
-  en: z.array(z.string()).min(1).max(2),
+  cn: z.array(z.string()).min(1).max(3),
+  en: z.array(z.string()).min(1).max(3),
 });
 
 export const IntelProfileRadarKeys = [

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateIntelProfile } from '@/services/intel-profile';
+import { regenerateFullIntelJsonFromRaw } from '@/services/regenerate-ingest-intel';
 import type { IntelProfileError } from '@/types/intel-profile';
 
 export async function POST(req: Request) {
@@ -13,7 +14,23 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const rawContent = body?.rawContent || "内容流失兜底";
-    const intel = body?.intel || {}; 
+    let intel = body?.intel || {};
+
+    /** 客户端 SSE 常在 fluff 段之前截断：启发式无法救回时，用单次非流式与 wash 同契约补全，保证红字气泡与事实一致 */
+    const cnFluff = intel?.fluff?.cn;
+    if (!Array.isArray(cnFluff) || cnFluff.length === 0) {
+      try {
+        const regen = await regenerateFullIntelJsonFromRaw(rawContent);
+        intel = {
+          ...intel,
+          verdict: regen.verdict,
+          facts: regen.facts,
+          fluff: regen.fluff,
+        };
+      } catch {
+        /* 兜底失败时沿用客户端 intel，不阻断入库 */
+      }
+    }
 
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin

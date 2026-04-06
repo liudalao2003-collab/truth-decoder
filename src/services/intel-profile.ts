@@ -10,7 +10,7 @@ import {
 } from '@/types/intel-profile';
 import { logger } from '@/utils/logger';
 
-export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v1';
+export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v2';
 
 function normalizeHardFacts(facts: BilingualData | string[] | undefined): {
   cn: string[];
@@ -34,38 +34,103 @@ function stripJsonFence(raw: string): string {
   return s;
 }
 
-async function callDeepSeekJson(systemPrompt: string, userContent: string): Promise<string> {
+/** 从 chat/completions 响应中取出正文（兼容 content 为字符串或空的情况） */
+function extractAssistantText(data: {
+  choices?: Array<{
+    finish_reason?: string;
+    message?: { content?: string | null };
+  }>;
+}): string {
+  const raw = data.choices?.[0]?.message?.content;
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim();
+  }
+  return '';
+}
+
+type IntelFetchStrategy = {
+  useJsonObjectFormat: boolean;
+  temperature: number;
+  maxTokens: number;
+};
+
+const INTEL_FETCH_STRATEGIES: IntelFetchStrategy[] = [
+  { useJsonObjectFormat: true, temperature: 0.25, maxTokens: 8192 },
+  { useJsonObjectFormat: true, temperature: 0.35, maxTokens: 8192 },
+  /** 部分环境下 json_object 会偶发空正文，降级为普通补全仍要求 JSON */
+  { useJsonObjectFormat: false, temperature: 0.35, maxTokens: 8192 },
+];
+
+/**
+ * 情报体征专用：多策略重试，避免 DeepSeek 在 json_object 下返回空 message.content。
+ */
+async function callDeepSeekJson(
+  systemPrompt: string,
+  userContent: string
+): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('未配置 DEEPSEEK_API_KEY');
 
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  let lastEmptyDiag: string | undefined;
+
+  for (let i = 0; i < INTEL_FETCH_STRATEGIES.length; i++) {
+    const strat = INTEL_FETCH_STRATEGIES[i];
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, 400 * i));
+    }
+
+    const body: Record<string, unknown> = {
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
+        {
+          role: 'user',
+          content: strat.useJsonObjectFormat
+            ? userContent
+            : `${userContent}\n\n【输出要求】仅输出一个合法 JSON 对象，不要 Markdown 围栏。`,
+        },
       ],
-      response_format: { type: 'json_object' },
-      temperature: 0.25,
-    }),
-  });
+      temperature: strat.temperature,
+      max_tokens: strat.maxTokens,
+    };
+    if (strat.useJsonObjectFormat) {
+      body.response_format = { type: 'json_object' };
+    }
 
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`DeepSeek HTTP ${res.status}: ${t}`);
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`DeepSeek HTTP ${res.status}: ${t}`);
+    }
+
+    const data = (await res.json()) as {
+      choices?: Array<{
+        finish_reason?: string;
+        message?: { content?: string | null };
+      }>;
+    };
+    const text = extractAssistantText(data);
+    if (text.length > 0) {
+      return text;
+    }
+
+    const fr = data.choices?.[0]?.finish_reason;
+    lastEmptyDiag = `finish_reason=${String(fr)},jsonMode=${strat.useJsonObjectFormat}`;
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek 返回空内容');
-  return content;
+  throw new Error(
+    lastEmptyDiag
+      ? `DeepSeek 返回空内容（${lastEmptyDiag}）`
+      : 'DeepSeek 返回空内容'
+  );
 }
 
 const SYSTEM_PROMPT = `[SYSTEM: TruthDecoder Intel Signature Engine ${INTEL_PROFILE_PROMPT_VERSION}]
@@ -75,19 +140,36 @@ LANGUAGE LAW:
 - Every "cn" string: Simplified Chinese only. No English letters in cn fields.
 - Every "en" string: English only. No Chinese characters in en fields.
 
+TONE LAW (anti-generic):
+- Write like a hostile forensic analyst, not a journalist summary. No filler, no "balanced overview", no "needs further observation", no "overall", no "on the one hand".
+- Every sentence must carry a mechanism, a transfer of value, or a falsifiable gap. If you cannot say something sharp, say less.
+
 SCORING LAW (0-100 integers):
 - narrativeIncitement: emotional leverage, fear/greed hooks, loaded language in the source.
-- stakeholderEntanglement: how many distinct power/interest centers are in play (not headcount; structural tension).
+- stakeholderEntanglement: distinct power/interest centers in structural tension (not headcount).
 - verifiability: how checkable claims are (primary data, filings, traceable facts) — NOT a "truth" verdict.
 - actionUrging: push to trade, boycott, panic, or take sides.
+- COHERENCE: If a radar score is high (e.g. >= 70), the matching rationale bullets MUST show equally sharp mechanisms; avoid high scores with vague bullets.
 
-RATIONALE LAW:
-- For EACH of the four dimensions, provide 1-2 bullets per language.
-- Each bullet MUST cite a short verbatim phrase from the source OR reference a fact index like "事实2" / "Fact 2" matching the provided hard facts list order (1-based).
+RATIONALE LAW (per dimension, per language):
+- Provide 1 to 3 bullets in each of "cn" and "en" arrays (same count in cn and en for each dimension).
+- Order: first bullet = THE PUNCH LINE (shortest, most incisive attack on the narrative).
+- Following bullets = evidence chain (finer, still anchored).
+- Each bullet MUST anchor by EITHER a short verbatim phrase from the source OR a fact index "事实N" / "Fact N" where N matches the indexed HARD_FACTS lists (1-based).
+- Each bullet must combine: (1) mechanism — how the narrative pressures the reader or hides a transfer; (2) consequence — who pays, who extracts, or what becomes unverifiable.
+- Do not output legal verdicts or "guilty" language; stay forensic.
 
-STAKEHOLDERS: 1-12 rows. impact.cn/en: who gains, loses, or is ambiguous (plain language).
+STAKEHOLDERS LAW (1-12 rows):
+- subject: concrete actor or institution.
+- role: structural identity (regulator, counterparty, narrative beneficiary, etc.), not a title-only resume line.
+- impact: MUST state direction of transfer of power, cashflow, or reputation (who gains more, who loses more, who is blurred). Ban vague "has impact".
+- anchor: MUST tie back to a verbatim phrase from the source OR a fact index "事实N" / "Fact N". No generic labels.
 
-VERIFICATION: 3-5 items. Each item describes what to verify and where (regulator site, exchange filing, primary document, etc.) — bilingual.
+VERIFICATION LAW (3-5 items):
+- Each item MUST be actionable: what to check, where (primary source), and what number/date/timestamp to match.
+- Prefer primary sources: exchange filings, regulator disclosures, original documents — not secondary commentary.
+- Each item MUST embed the falsification consequence in the same sentence: if this check fails, which narrative claim collapses or weakens.
+- Bilingual: item.cn and item.en must carry the same meaning.
 
 AUDIT:
 - Set audit.model to "deepseek-chat"
@@ -99,7 +181,7 @@ REQUIRED TOP-LEVEL SHAPE:
   "schemaVersion": ${INTEL_PROFILE_SCHEMA_VERSION},
   "radar": { "narrativeIncitement": 0, "stakeholderEntanglement": 0, "verifiability": 0, "actionUrging": 0 },
   "rationale": {
-    "narrativeIncitement": { "cn": ["..."], "en": ["..."] },
+    "narrativeIncitement": { "cn": ["...", "..."], "en": ["...", "..."] },
     "stakeholderEntanglement": { "cn": ["..."], "en": ["..."] },
     "verifiability": { "cn": ["..."], "en": ["..."] },
     "actionUrging": { "cn": ["..."], "en": ["..."] }
@@ -130,10 +212,21 @@ export async function generateIntelProfile(
     '',
     '【HARD_FACTS_EN_INDEXED】',
     en.map((t, i) => `${i + 1}. ${t}`).join('\n') || '(none)',
+    '',
+    '【OUTPUT_DISCIPLINE】',
+    '每条 rationale 须与 HARD_FACTS 对齐：优先引用「事实N」或「Fact N」；否则引用原文短语。',
+    '每维依据：第1条为最短总刺，后续为证据链；禁止空话、平衡式综述与「需进一步观察」等套话。',
+    'stakeholders.impact 须写清权力/现金流/声誉的转移方向；anchor 须扣回原文措辞或事实编号。',
+    'verificationChecklist 每条须含可执行动作（查什么、去哪、对什么数字或时间），并说明若证伪则何种叙事不成立；优先一级来源。',
+    'radar 分数须与 rationale 锐利度自洽。',
+    '',
+    'Each rationale bullet must anchor to indexed facts or verbatim source text. First bullet per dimension = punch line; follow-ups = evidence chain.',
+    'Stakeholder impact must state transfer direction; anchor must cite verbatim phrase or fact index.',
+    'Verification items must be actionable with primary-source preference and falsification consequence.',
   ].join('\n');
 
   let lastErr: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       logger.async(`情报体征 LLM 第 ${attempt + 1} 次`);
       const raw = await callDeepSeekJson(SYSTEM_PROMPT, userBlock);

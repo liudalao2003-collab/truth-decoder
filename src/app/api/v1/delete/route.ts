@@ -6,7 +6,7 @@ import { logger } from '@/utils/logger';
 export const runtime = 'edge';
 
 /**
- * 删除信号：Bearer INGEST_TOKEN 机器全量权限；登录用户仅可删 owner_id 为己的记录；管理员邮箱可删任意。
+ * 删除信号：Bearer INGEST_TOKEN 为机器全量权限；Cookie 会话仅当邮箱与 NEXT_PUBLIC_ADMIN_EMAIL 一致时可删（不再按 owner_id 放行）。
  */
 export async function DELETE(request: Request) {
   try {
@@ -50,33 +50,20 @@ export async function DELETE(request: Request) {
     }
 
     const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase();
-    const isAdmin =
-      !!user.email && user.email.toLowerCase() === adminEmail;
+    const isPurgeAdmin =
+      !!adminEmail &&
+      !!user.email &&
+      user.email.toLowerCase() === adminEmail;
 
-    if (!isAdmin) {
-      const { data: row, error: qErr } = await supabaseAdmin
-        .from('signals')
-        .select('owner_id')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (qErr || !row) {
-        return NextResponse.json(
-          { success: false, error: 'Not found' },
-          { status: 404 }
-        );
-      }
-
-      const signalRow = row as { owner_id: string | null };
-      if (signalRow.owner_id !== user.id) {
-        return NextResponse.json(
-          { success: false, error: 'Forbidden' },
-          { status: 403 }
-        );
-      }
+    if (!isPurgeAdmin) {
+      logger.crash('非管理员禁止抹除 (403)');
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: purge not allowed' },
+        { status: 403 }
+      );
     }
 
-    logger.async(`用户/管理员抹除 -> [${id}]`);
+    logger.async(`管理员抹除 -> [${id}]`);
     const { error } = await supabaseAdmin.from('signals').delete().eq('id', id);
     if (error) {
       logger.crash(`[PURGE_FAILED] 抹杀失败: ${error.message}`);

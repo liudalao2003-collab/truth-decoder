@@ -106,8 +106,8 @@ export default function IntelProfilePanel({
           </h2>
           <p className="text-xs text-zinc-600 mt-2 font-medium font-sans">
             {lang === 'cn'
-              ? '模型辅助速写，非司法或审计结论。'
-              : 'Model-assisted sketch, not a legal verdict.'}
+              ? '依据为对抗性速写，非投资建议；亦非司法或审计结论。'
+              : 'Adversarial sketch from the source; not investment advice or a legal/audit conclusion.'}
           </p>
         </div>
         {!unlocked && (

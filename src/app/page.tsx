@@ -13,6 +13,28 @@ import { type Session, type User } from '@supabase/supabase-js';
 import DossierQuotaStrip from '@/components/features/decode/DossierQuotaStrip';
 import type { DossierQuotaPublic } from '@/lib/dossier-quota';
 
+/**
+ * 当 ingest SSE 截断导致 JSON.parse 失败或 fluff 未被正则救回时，
+ * 从原始拼接串中按契约「词汇::解析」启发式提取 cn 侧 fluff，用于恢复左侧红字气泡。
+ */
+function extractFluffCnFromBrokenJsonBlob(blob: string): string[] {
+  const fluffIdx = blob.indexOf('"fluff"');
+  const slice =
+    fluffIdx >= 0
+      ? blob.slice(fluffIdx, Math.min(blob.length, fluffIdx + 150_000))
+      : blob;
+  const re = /"((?:[^"\\]|\\.)*::(?:[^"\\]|\\.)*)"/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(slice)) !== null) {
+    const inner = m[1].replace(/\\n/g, ' ').replace(/\\"/g, '"');
+    if (inner.includes('::') && inner.length >= 10) {
+      out.push(inner);
+    }
+  }
+  return [...new Set(out)].slice(0, 24);
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { lang, setLang } = useGlobalLang();
@@ -323,7 +345,21 @@ export default function HomePage() {
         } catch (rescueErr) {
           console.log('🔴 [模块_崩溃] -> 抢救失败:', rescueErr);
         }
-      } 
+      }
+
+      const cnFluffEarly = intel?.fluff?.cn;
+      if (!Array.isArray(cnFluffEarly) || cnFluffEarly.length === 0) {
+        const recovered = extractFluffCnFromBrokenJsonBlob(cleanedJsonString);
+        if (recovered.length > 0) {
+          intel = {
+            ...intel,
+            fluff: {
+              cn: recovered,
+              en: Array.isArray(intel?.fluff?.en) ? intel.fluff.en : [],
+            },
+          };
+        }
+      }
 
       const saveRes = await fetch('/api/v1/ingest/save', {
         method: 'POST',

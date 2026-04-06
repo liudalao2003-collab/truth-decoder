@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { subscriptionStatusIsPro } from '@/lib/billing-entitlements';
+import {
+  getIsProForUser,
+  subscriptionStatusIsPro,
+} from '@/lib/billing-entitlements';
 
 /** 供前端展示的卷宗额度快照（UTC 自然月） */
 export interface DossierQuotaPublic {
@@ -100,6 +103,9 @@ export async function assertCanStartDossierStream(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
+  if (await getIsProForUser(supabase, userId)) {
+    return true;
+  }
   const state = await getDossierQuotaState(supabase, userId);
   if (state.isUnlimited) {
     return true;

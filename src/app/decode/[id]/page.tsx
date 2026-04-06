@@ -52,6 +52,8 @@ export default function DecodePage() {
   const [dossierQuota, setDossierQuota] = useState<DossierQuotaPublic | null>(
     null
   );
+  /** 与 Admin 面板一致：仅 NEXT_PUBLIC_ADMIN_EMAIL 可物理删除 signals */
+  const [canPurgeSignals, setCanPurgeSignals] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pngExporting, setPngExporting] = useState(false);
   const [includeTerminalExport, setIncludeTerminalExport] = useState(false);
@@ -67,8 +69,14 @@ export default function DecodePage() {
       if (!session) {
         setIsPro(false);
         setDossierQuota(null);
+        setCanPurgeSignals(false);
         return;
       }
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase();
+      const sessionEmail = session.user?.email?.toLowerCase();
+      setCanPurgeSignals(
+        !!adminEmail && !!sessionEmail && sessionEmail === adminEmail
+      );
       try {
         const res = await fetch('/api/me/entitlements', {
           credentials: 'include',
@@ -563,7 +571,9 @@ export default function DecodePage() {
               <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded ${lang === 'cn' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>CN</button>
               <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded ${lang === 'en' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>EN</button>
             </div>
-            <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-white border border-zinc-200 hover:border-red-300 hover:bg-red-50 transition-all rounded-md disabled:opacity-50 shadow-sm" title="Purge"><Trash2 size={16} className="text-zinc-500 group-hover:text-red-600" /></button>
+            {canPurgeSignals ? (
+              <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-white border border-zinc-200 hover:border-red-300 hover:bg-red-50 transition-all rounded-md disabled:opacity-50 shadow-sm" title="Purge"><Trash2 size={16} className="text-zinc-500 group-hover:text-red-600" /></button>
+            ) : null}
           </div>
         </header>
 

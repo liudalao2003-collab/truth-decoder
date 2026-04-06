@@ -20,7 +20,18 @@ export async function GET() {
   }
 
   const isPro = await getIsProForUser(supabase, user.id);
-  const dossierQuota = await getDossierQuotaState(supabase, user.id);
+  let dossierQuota = await getDossierQuotaState(supabase, user.id);
+
+  // 与 getIsProForUser 单一真源对齐，避免 profiles 字段分叉导致 Pro 仍显示月度限额
+  if (isPro) {
+    dossierQuota = {
+      limit: 0,
+      used: 0,
+      remaining: 0,
+      period: dossierQuota.period,
+      isUnlimited: true,
+    };
+  }
 
   return NextResponse.json({
     success: true,
