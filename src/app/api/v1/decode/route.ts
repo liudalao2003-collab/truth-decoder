@@ -1,3 +1,4 @@
+import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { createDeepSeekStream } from '@/services/deepseek-stream';
 import { TerminalMessage } from '@/types';
 import { logger } from '@/utils/logger';
@@ -15,10 +16,9 @@ export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    // 物理鉴权防线 [cite: 279]
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
-        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
+    const auth = await assertIngestAuthorized(request);
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
     }
 
     const body = await request.json();

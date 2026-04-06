@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getIsProForUser } from '@/lib/billing-entitlements';
 import { createClient } from '@/lib/supabase/server';
 import { buildIntelExportBlocks } from '@/lib/intel-export-sections';
 import { renderIntelExportPdfBuffer } from '@/lib/intel-export-playwright-pdf';
@@ -38,6 +39,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { success: false, error: 'Unauthorized' },
       { status: 401 }
+    );
+  }
+
+  const isPro = await getIsProForUser(supabase, user.id);
+  if (!isPro) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Pro subscription required',
+        code: 'PRO_REQUIRED',
+      },
+      { status: 403 }
     );
   }
 

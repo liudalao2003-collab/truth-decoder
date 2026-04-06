@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
+import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateIntelProfile } from '@/services/intel-profile';
 import type { IntelProfileError } from '@/types/intel-profile';
 
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+    const auth = await assertIngestAuthorized(req);
+    if (!auth.ok) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -28,15 +29,23 @@ export async function POST(req: Request) {
     const signalId = `SIGNAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
     const baseMetadata: Record<string, unknown> = { bilingual: intel?.verdict || {} };
 
-    const { error: dbError } = await supabaseAdmin.from('signals').insert([{
-      id: signalId,
-      raw_content: rawContent,
-      fluff_words: intel?.fluff || { cn: [], en: [] },
-      hard_facts: intel?.facts || { cn: [], en: [] },
-      verdict: intel?.verdict?.cn || (typeof intel?.verdict === 'string' ? intel.verdict : "资产解析降级"),
-      view_count: 0,
-      metadata: baseMetadata,
-    }]);
+    const ownerId =
+      auth.kind === 'user' ? auth.userId : null;
+
+    const { error: dbError } = await supabaseAdmin.from('signals').insert([
+      {
+        id: signalId,
+        raw_content: rawContent,
+        fluff_words: intel?.fluff || { cn: [], en: [] },
+        hard_facts: intel?.facts || { cn: [], en: [] },
+        verdict:
+          intel?.verdict?.cn ||
+          (typeof intel?.verdict === 'string' ? intel.verdict : '资产解析降级'),
+        view_count: 0,
+        metadata: baseMetadata,
+        owner_id: ownerId,
+      },
+    ]);
 
     if (dbError) throw dbError;
 

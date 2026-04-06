@@ -17,6 +17,8 @@ export interface BilingualDossier {
 
 export interface SignalRecord {
   id: string;
+  /** 浏览器入库时的创建者；机器脚本可为空 */
+  owner_id?: string | null;
   created_at: string;
   raw_content: string;
   verdict: string;

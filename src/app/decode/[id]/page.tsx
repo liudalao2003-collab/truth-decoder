@@ -45,7 +45,8 @@ export default function DecodePage() {
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
-  const [intelUnlocked, setIntelUnlocked] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [isPro, setIsPro] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pngExporting, setPngExporting] = useState(false);
   const [includeTerminalExport, setIncludeTerminalExport] = useState(false);
@@ -77,19 +78,49 @@ export default function DecodePage() {
      fetchSignal(); 
    }, [id]);
 
+  /**
+   * 登录态与 Pro 权益：情报全维与导出均以 isPro 为准（数据来自 /api/me/entitlements）。
+   */
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
-      setIntelUnlocked(!!data.session);
-    });
+    const syncAuthAndEntitlements = async (session: Session | null) => {
+      setHasSession(!!session);
+      if (!session) {
+        setIsPro(false);
+        return;
+      }
+      try {
+        const res = await fetch('/api/me/entitlements', { credentials: 'include' });
+        const json = (await res.json()) as {
+          success?: boolean;
+          data?: { isPro?: boolean };
+        };
+        if (json.success && json.data && typeof json.data.isPro === 'boolean') {
+          setIsPro(json.data.isPro);
+        } else {
+          setIsPro(false);
+        }
+      } catch {
+        setIsPro(false);
+      }
+    };
+
+    void supabase.auth
+      .getSession()
+      .then(({ data }: { data: { session: Session | null } }) =>
+        syncAuthAndEntitlements(data.session)
+      );
+
     const { data: sub } = supabase.auth.onAuthStateChange(
       (_event: string, session: Session | null) => {
-        setIntelUnlocked(!!session);
+        void syncAuthAndEntitlements(session);
       }
     );
     return () => {
       sub.subscription.unsubscribe();
     };
   }, [supabase]);
+
+  const intelUnlocked = hasSession && isPro;
 
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -202,7 +233,10 @@ export default function DecodePage() {
     if (!confirm) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/v1/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}` } });
+      const res = await fetch(`/api/v1/delete?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
       const json = await res.json();
       if (json.success) {
         router.push('/');
@@ -251,6 +285,13 @@ export default function DecodePage() {
         }),
       });
       if (!res.ok) {
+        const ct = res.headers.get('content-type');
+        if (ct?.includes('application/json')) {
+          const j = (await res.json()) as { error?: string; code?: string };
+          throw new Error(
+            j.error || j.code || res.statusText || 'PDF export failed'
+          );
+        }
         const errText = await res.text();
         throw new Error(errText || res.statusText);
       }
@@ -433,14 +474,30 @@ export default function DecodePage() {
           lang={lang}
           unlocked={intelUnlocked}
           onRequireAuth={() => {
-            setAuthContext({
-              title: lang === 'cn' ? '体征未解锁' : 'PROFILE LOCKED',
-              subtitle:
-                lang === 'cn'
-                  ? '登录以解锁完整情报体征、利益沙盘与可核验清单。'
-                  : 'Sign in for full intel signature, stakeholder board, and verification checklist.',
-            });
-            setIsAuthModalOpen(true);
+            void (async () => {
+              const {
+                data: { session },
+              } = await supabase.auth.getSession();
+              if (!session) {
+                setAuthContext({
+                  title: lang === 'cn' ? '体征未解锁' : 'PROFILE LOCKED',
+                  subtitle:
+                    lang === 'cn'
+                      ? '登录后可查看完整情报体征；订阅 Pro 解锁全部维度。'
+                      : 'Sign in to use intel signature; subscribe to Pro for all dimensions.',
+                });
+                setIsAuthModalOpen(true);
+                return;
+              }
+              setAuthContext({
+                title: lang === 'cn' ? '需要 Pro' : 'PRO REQUIRED',
+                subtitle:
+                  lang === 'cn'
+                    ? '订阅 Pro 解锁完整情报体征、利益沙盘与核验清单。请返回首页点击「升级 Pro」。'
+                    : 'Subscribe to Pro for full intel. Use “Upgrade Pro” on the home page.',
+              });
+              setIsAuthModalOpen(true);
+            })();
           }}
         />
 

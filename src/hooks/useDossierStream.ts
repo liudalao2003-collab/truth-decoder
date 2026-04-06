@@ -109,7 +109,6 @@ async function consumeChatCompletionSseStream(
  */
 async function runEnCleanupTranslation(
   pollutedText: string,
-  authHeader: string,
   onStatus: (msg: string | null) => void
 ): Promise<string> {
   onStatus('Language purity guard: cleaning up mixed-language content…');
@@ -119,7 +118,8 @@ async function runEnCleanupTranslation(
   try {
     const res = await fetch('/api/v1/translate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ content: pollutedText, targetLang: 'en' }),
     });
     if (!res.ok || !res.body) return pollutedText;
@@ -197,9 +197,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}`
             },
-            body: JSON.stringify({ content: sourceText, targetLang: lang })
+            credentials: 'include',
+            body: JSON.stringify({ content: sourceText, targetLang: lang }),
           });
 
           if (!res.ok || !res.body) {
@@ -229,9 +229,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}`
             },
-            body: JSON.stringify({ id: signal.id, dossier_content: merged })
+            credentials: 'include',
+            body: JSON.stringify({ id: signal.id, dossier_content: merged }),
           }).catch((e) => {
             if (process.env.NODE_ENV === 'development') console.log('🔴 [同步失败] ->', e);
           });
@@ -254,7 +254,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
     if (!signal?.raw_content || isStreamingDossier) return;
 
     const rawContent = signal.raw_content;
-    const authHeader = `Bearer ${process.env.NEXT_PUBLIC_INGEST_TOKEN || 'ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ='}`;
 
     setIsStreamingDossier(true);
     setIsTruncated(false);
@@ -284,9 +283,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: authHeader
             },
-            body: JSON.stringify({ rawContent, lang, retryAttempt: attempt })
+            credentials: 'include',
+            body: JSON.stringify({ rawContent, lang, retryAttempt: attempt }),
           });
         } catch {
           continue;
@@ -317,7 +316,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
         if (lang === 'en' && chineseCharRatio(outcome.text) > CHINESE_POLLUTION_THRESHOLD) {
           const cleanedText = await runEnCleanupTranslation(
             outcome.text,
-            authHeader,
             setDossierRecoveryStatus
           );
           setCache((prev) => ({ ...prev, en: cleanedText }));
@@ -343,9 +341,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: authHeader
               },
-              body: JSON.stringify({ rawContent, lang: 'cn', retryAttempt: attempt })
+              credentials: 'include',
+              body: JSON.stringify({ rawContent, lang: 'cn', retryAttempt: attempt }),
             });
           } catch {
             continue;
@@ -382,9 +380,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  Authorization: authHeader
                 },
-                body: JSON.stringify({ content: cnText, targetLang: 'en' })
+                credentials: 'include',
+                body: JSON.stringify({ content: cnText, targetLang: 'en' }),
               });
             } catch {
               continue;
@@ -412,7 +410,6 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             if (chineseCharRatio(tOutcome.text) > CHINESE_POLLUTION_THRESHOLD) {
               const cleanedText = await runEnCleanupTranslation(
                 tOutcome.text,
-                authHeader,
                 setDossierRecoveryStatus
               );
               setCache((prev) => ({ ...prev, en: cleanedText }));
@@ -440,9 +437,9 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: authHeader
             },
-            body: JSON.stringify({ id: signal.id, dossier_content: finalCache })
+            credentials: 'include',
+            body: JSON.stringify({ id: signal.id, dossier_content: finalCache }),
           }).catch(() => {});
           return finalCache;
         });

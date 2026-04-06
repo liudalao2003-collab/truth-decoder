@@ -1,4 +1,5 @@
 import { createDeepSeekStream } from '@/services/deepseek-stream';
+import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { TerminalMessage } from '@/types';
 
 export const runtime = 'edge';
@@ -13,8 +14,8 @@ export const runtime = 'edge';
  */
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+    const auth = await assertIngestAuthorized(req);
+    if (!auth.ok) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
 

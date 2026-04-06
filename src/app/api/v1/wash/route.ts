@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateIntelProfile } from '@/services/intel-profile';
 import type { IntelProfileError } from '@/types/intel-profile';
@@ -18,8 +19,8 @@ const openai = new OpenAI({
  */
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+    const auth = await assertIngestAuthorized(req);
+    if (!auth.ok) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 

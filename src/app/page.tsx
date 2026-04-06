@@ -2,14 +2,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon, LogOut } from 'lucide-react';
+import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon, LogOut, Crown } from 'lucide-react';
 import AuthModal from '@/components/features/auth/AuthModal'; 
 import { createClient } from '@/lib/supabase/client';
 import { SignalRecord } from '@/types/database';
 import { IntelProfileMiniBars } from '@/components/features/decode/IntelProfileRadar';
 import { emptyIntelLockedKeys, guestIntelLockedKeys } from '@/lib/intel-profile-ui';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
-import { type User } from '@supabase/supabase-js';
+import { type Session, type User } from '@supabase/supabase-js';
 
 export default function HomePage() {
   const router = useRouter();
@@ -19,18 +19,68 @@ export default function HomePage() {
 
   const supabase = createClient();
 
-  useEffect(() => { 
-    const getUser = async () => { 
-      const { data: { user: currentUser } } = await supabase.auth.getUser(); 
-      setUser(currentUser); 
-    }; 
-    getUser(); 
+  useEffect(() => {
+    const getUser = async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      setUser(currentUser);
+    };
+    void getUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event: string, session: Session | null) => {
+        setUser(session?.user ?? null);
+      }
+    );
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
   // 🔧 新增：退出登录处理函数
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+  };
+
+  const handleUpgradePro = async () => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      setError(
+        lang === 'cn'
+          ? '请先登录，再订阅 Pro。'
+          : 'Please sign in before subscribing to Pro.'
+      );
+      return;
+    }
+    setCheckoutLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        data?: { url?: string | null };
+        error?: string;
+      };
+      if (json.success && json.data?.url) {
+        window.location.href = json.data.url;
+      } else {
+        setError(json.error || (lang === 'cn' ? '无法创建支付会话' : 'Checkout failed'));
+      }
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError(errMsg);
+    } finally {
+      setCheckoutLoading(false);
+    }
   };
 
   const [input, setInput] = useState('');
@@ -40,10 +90,71 @@ export default function HomePage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
+  const [isPro, setIsPro] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   useEffect(() => {
     fetchFeed();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setIsPro(false);
+      return;
+    }
+    void fetch('/api/me/entitlements', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((j: { success?: boolean; data?: { isPro?: boolean } }) => {
+        if (j.success && j.data && typeof j.data.isPro === 'boolean') {
+          setIsPro(j.data.isPro);
+        } else {
+          setIsPro(false);
+        }
+      })
+      .catch(() => setIsPro(false));
+  }, [user]);
+
+  /**
+   * Stripe 支付成功回跳：若有 session_id 则先 confirm-session 写库（Webhook 兜底），再拉权益并清 query。
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('billing') !== 'success') return;
+    const checkoutSessionId = sp.get('session_id');
+    void (async () => {
+      try {
+        if (checkoutSessionId) {
+          const confirmRes = await fetch('/api/billing/confirm-session', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: checkoutSessionId }),
+          });
+          if (process.env.NODE_ENV === 'development' && !confirmRes.ok) {
+            const errJson = (await confirmRes.json().catch(() => ({}))) as {
+              code?: string;
+            };
+            console.log(
+              '🟡 [billing] confirm-session:',
+              confirmRes.status,
+              errJson.code ?? ''
+            );
+          }
+        }
+        const r = await fetch('/api/me/entitlements', { credentials: 'include' });
+        const j = (await r.json()) as {
+          success?: boolean;
+          data?: { isPro?: boolean };
+        };
+        if (j.success && j.data && typeof j.data.isPro === 'boolean') {
+          setIsPro(j.data.isPro);
+        }
+      } finally {
+        router.replace('/');
+      }
+    })();
+  }, [user, router]);
 
   const fetchFeed = async (isLoadMore = false) => {
     if (isLoadMore && isLoadingMore) return;
@@ -79,23 +190,37 @@ export default function HomePage() {
     }
   };
 
-  const handleStart = async () => { 
-    if (!input.trim() || isSubmitting) return; 
-    setIsSubmitting(true); 
+  const handleStart = async () => {
+    if (!input.trim() || isSubmitting) return;
+
+    const {
+      data: { user: sessionUser },
+    } = await supabase.auth.getUser();
+    if (!sessionUser) {
+      setIsAuthModalOpen(true);
+      setError(
+        lang === 'cn'
+          ? '请先登录后再提交解析，以保护接口与成本。'
+          : 'Please sign in before decoding.'
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
     setError(null);
 
-    try { 
-      if (process.env.NODE_ENV === 'development') { 
+    try {
+      if (process.env.NODE_ENV === 'development') {
         console.log('🟢 [模块_发起] -> 动作: 建立流式透传连接，准备静默接收 JSON');
-      } 
+      }
 
-      const res = await fetch('/api/v1/ingest', { 
-        method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
-        }, 
-        body: JSON.stringify({ rawContent: input }) 
+      const res = await fetch('/api/v1/ingest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ rawContent: input }),
       });
 
       if (!res.ok || !res.body) throw new Error('流式引擎连接被拒'); 
@@ -123,7 +248,9 @@ export default function HomePage() {
                 if (delta) { 
                   rawJsonString += delta;
                 } 
-              } catch (e) { /* 忽略流碎片解析异常 */ } 
+              } catch {
+                /* 忽略流碎片解析异常 */
+              }
             } 
           } 
         } 
@@ -147,8 +274,8 @@ export default function HomePage() {
       try { 
         const sanitized = cleanedJsonString.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
         intel = JSON.parse(sanitized); 
-      } catch (parseError) { 
-        if (process.env.NODE_ENV === 'development') { 
+      } catch {
+        if (process.env.NODE_ENV === 'development') {
           console.log('🔴 [模块_崩溃] -> JSON 结构损毁或截断，启动正则暴力抢救...');
         } 
         
@@ -176,13 +303,13 @@ export default function HomePage() {
         }
       } 
 
-      const saveRes = await fetch('/api/v1/ingest/save', { 
-        method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': `Bearer ThiGarIm5q+dEuji8a8wdpsOXoe2Sy/CsKCQa6wS5SQ=` 
-        }, 
-        body: JSON.stringify({ rawContent: input, intel }) 
+      const saveRes = await fetch('/api/v1/ingest/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ rawContent: input, intel }),
       }); 
 
       const saveJson = await saveRes.json(); 
@@ -225,6 +352,28 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               {user ? (
                 <div className="flex items-center gap-2">
+                  {isPro ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 border border-amber-200 rounded-md bg-amber-50 text-amber-900 shadow-sm">
+                      <Crown className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-widest">
+                        Pro
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleUpgradePro()}
+                      disabled={checkoutLoading}
+                      className="flex items-center gap-1.5 px-3 py-1 border border-amber-300 rounded-md bg-amber-50 text-amber-900 hover:bg-amber-100 text-[10px] font-bold uppercase tracking-widest shadow-sm disabled:opacity-50"
+                    >
+                      {checkoutLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Crown className="w-3.5 h-3.5" />
+                      )}
+                      {lang === 'cn' ? '升级 Pro' : 'Upgrade Pro'}
+                    </button>
+                  )}
                   <div className="flex items-center gap-2 px-3 py-1 border border-[var(--td-border)] rounded-md bg-[var(--td-surface-1)] shadow-sm">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-[10px] font-mono text-zinc-500 uppercase">Commander_Active</span>
@@ -312,7 +461,11 @@ export default function HomePage() {
                     {item.metadata?.intelProfile ? (
                       <IntelProfileMiniBars
                         scores={item.metadata.intelProfile.radar}
-                        lockedKeys={user ? emptyIntelLockedKeys() : guestIntelLockedKeys()}
+                        lockedKeys={
+                          user && isPro
+                            ? emptyIntelLockedKeys()
+                            : guestIntelLockedKeys()
+                        }
                         lang={lang}
                       />
                     ) : null}

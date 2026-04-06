@@ -116,3 +116,4 @@ Desktop.ini
 *.gif
 tmp/
 temp/
+.vercel

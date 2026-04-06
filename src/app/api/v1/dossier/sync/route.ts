@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { supabaseAdmin } from '@/lib/supabase';
 
 /**
@@ -12,14 +13,29 @@ export async function POST(req: Request) {
       console.log('🟢 [模块_发起] -> 动作/参数: 接收双轨卷宗静默同步请求 (Node.js 引擎)');
     }
 
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader !== `Bearer ${process.env.INGEST_TOKEN}`) {
+    const auth = await assertIngestAuthorized(req);
+    if (!auth.ok) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id, dossier_content } = await req.json();
     if (!id || !dossier_content) {
       return NextResponse.json({ success: false, error: 'Invalid Payload' }, { status: 400 });
+    }
+
+    if (auth.kind === 'user') {
+      const { data: row, error: qErr } = await supabaseAdmin
+        .from('signals')
+        .select('owner_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (qErr || !row) {
+        return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+      }
+      const signalRow = row as { owner_id: string | null };
+      if (signalRow.owner_id !== auth.userId) {
+        return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const { error } = await supabaseAdmin
