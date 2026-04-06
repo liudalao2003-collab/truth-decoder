@@ -81,6 +81,28 @@ export default function DecodePage() {
         const res = await fetch('/api/me/entitlements', {
           credentials: 'include',
         });
+        // #region agent log
+        if (res.status === 401) {
+          fetch(
+            'http://127.0.0.1:7242/ingest/0c753ea0-b6cf-4d53-95cb-28c61cb08775',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'decode/[id]/page.tsx:fetchEntitlements',
+                message: 'entitlements 401 while client has session',
+                data: {
+                  hypothesisId: 'H4',
+                  httpStatus: res.status,
+                  clientHasSession: true,
+                },
+                timestamp: Date.now(),
+                runId: 'pre-fix',
+              }),
+            }
+          ).catch(() => {});
+        }
+        // #endregion
         const json = (await res.json()) as {
           success?: boolean;
           data?: {
