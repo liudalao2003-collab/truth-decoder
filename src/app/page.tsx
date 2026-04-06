@@ -10,6 +10,8 @@ import { IntelProfileMiniBars } from '@/components/features/decode/IntelProfileR
 import { emptyIntelLockedKeys, guestIntelLockedKeys } from '@/lib/intel-profile-ui';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { type Session, type User } from '@supabase/supabase-js';
+import DossierQuotaStrip from '@/components/features/decode/DossierQuotaStrip';
+import type { DossierQuotaPublic } from '@/lib/dossier-quota';
 
 export default function HomePage() {
   const router = useRouter();
@@ -91,6 +93,9 @@ export default function HomePage() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [isPro, setIsPro] = useState(false);
+  const [dossierQuota, setDossierQuota] = useState<DossierQuotaPublic | null>(
+    null
+  );
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   useEffect(() => {
@@ -100,18 +105,32 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) {
       setIsPro(false);
+      setDossierQuota(null);
       return;
     }
     void fetch('/api/me/entitlements', { credentials: 'include' })
       .then((r) => r.json())
-      .then((j: { success?: boolean; data?: { isPro?: boolean } }) => {
-        if (j.success && j.data && typeof j.data.isPro === 'boolean') {
-          setIsPro(j.data.isPro);
-        } else {
-          setIsPro(false);
+      .then(
+        (j: {
+          success?: boolean;
+          data?: { isPro?: boolean; dossierQuota?: DossierQuotaPublic };
+        }) => {
+          if (j.success && j.data && typeof j.data.isPro === 'boolean') {
+            setIsPro(j.data.isPro);
+          } else {
+            setIsPro(false);
+          }
+          if (j.success && j.data?.dossierQuota) {
+            setDossierQuota(j.data.dossierQuota);
+          } else {
+            setDossierQuota(null);
+          }
         }
-      })
-      .catch(() => setIsPro(false));
+      )
+      .catch(() => {
+        setIsPro(false);
+        setDossierQuota(null);
+      });
   }, [user]);
 
   /**
@@ -145,10 +164,13 @@ export default function HomePage() {
         const r = await fetch('/api/me/entitlements', { credentials: 'include' });
         const j = (await r.json()) as {
           success?: boolean;
-          data?: { isPro?: boolean };
+          data?: { isPro?: boolean; dossierQuota?: DossierQuotaPublic };
         };
         if (j.success && j.data && typeof j.data.isPro === 'boolean') {
           setIsPro(j.data.isPro);
+        }
+        if (j.success && j.data?.dossierQuota) {
+          setDossierQuota(j.data.dossierQuota);
         }
       } finally {
         router.replace('/');
@@ -402,6 +424,15 @@ export default function HomePage() {
               </div>
             </div>
           </header>
+
+          {user ? (
+            <DossierQuotaStrip
+              quota={dossierQuota}
+              lang={lang}
+              hasSession={!!user}
+              className="mb-2"
+            />
+          ) : null}
 
           <section className="bg-[var(--td-surface-1)] border border-[var(--td-border)] p-8 rounded-lg relative overflow-hidden group min-h-[600px] flex flex-col shadow-sm ring-1 ring-[var(--td-ring)]">
             <textarea 

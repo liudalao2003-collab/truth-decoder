@@ -18,7 +18,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id, dossier_content } = await req.json();
+    const { id, dossier_content, skipQuotaIncrement } = await req.json() as {
+      id?: string;
+      dossier_content?: unknown;
+      /** 懒翻译等补全同步不计入「本月卷宗次数」 */
+      skipQuotaIncrement?: boolean;
+    };
     if (!id || !dossier_content) {
       return NextResponse.json({ success: false, error: 'Invalid Payload' }, { status: 400 });
     }
@@ -44,6 +49,16 @@ export async function POST(req: Request) {
       .eq('id', id);
 
     if (error) throw error;
+
+    if (auth.kind === 'user' && !skipQuotaIncrement) {
+      const { error: rpcErr } = await supabaseAdmin.rpc(
+        'increment_dossier_quota_if_needed',
+        { p_user_id: auth.userId }
+      );
+      if (rpcErr && process.env.NODE_ENV === 'development') {
+        console.log('🟡 [模块_异步] -> 目标: 卷宗计次 RPC', rpcErr.message);
+      }
+    }
 
     return NextResponse.json({ success: true });
 

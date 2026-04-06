@@ -21,6 +21,11 @@ const FINAL_FAIL_EN =
 const TRANSLATE_FAIL_HINT =
   '中文卷宗已生成，但自动翻译成英文未成功。请切换至 CN 查看中文卷宗，或稍后重试生成英文。 / Chinese dossier is ready; automatic English translation did not complete. Switch to CN or try again.';
 
+const QUOTA_ERROR_CN =
+  '本月暗影卷宗次数已用完。订阅 Pro 可无限生成，或于下月（UTC）重置后再试。';
+const QUOTA_ERROR_EN =
+  'Monthly dossier quota reached. Subscribe to Pro for unlimited generation, or try again next month (UTC).';
+
 type ConsumeSseOutcome = {
   text: string;
   abortedByQuality: boolean;
@@ -148,7 +153,55 @@ async function runEnCleanupTranslation(
   }
 }
 
-export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en') {
+/** 懒翻译补全同步不计入月度卷宗次数，避免与主生成重复扣次 */
+const SKIP_QUOTA_SYNC_BODY = { skipQuotaIncrement: true as const };
+
+/**
+ * 解析卷宗网关响应：403 且 code 为额度用尽时返回 quota，避免误触发重试。
+ */
+async function postDossierApi(body: Record<string, unknown>): Promise<
+  | { kind: 'quota' }
+  | { kind: 'bad' }
+  | { kind: 'ok'; res: Response }
+> {
+  const res = await fetch('/api/v1/dossier', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  if (res.status === 403) {
+    try {
+      const j = (await res.json()) as { code?: string };
+      if (j.code === 'DOSSIER_QUOTA_EXCEEDED') {
+        return { kind: 'quota' };
+      }
+    } catch {
+      /* 忽略非 JSON */
+    }
+    return { kind: 'bad' };
+  }
+  if (!res.ok || !res.body) {
+    return { kind: 'bad' };
+  }
+  return { kind: 'ok', res };
+}
+
+export interface UseDossierStreamOptions {
+  /** 403 额度用尽时由页面弹出升级或刷新权益 */
+  onQuotaExceeded?: () => void;
+  /** 主路径成功 sync 后刷新剩余次数 */
+  onDossierSynced?: () => void;
+}
+
+export function useDossierStream(
+  signal: SignalRecord | null,
+  lang: 'cn' | 'en',
+  options?: UseDossierStreamOptions
+) {
+  const { onQuotaExceeded, onDossierSynced } = options ?? {};
   const [cache, setCache] = useState<Record<'cn' | 'en', string>>({ cn: '', en: '' });
   const [isStreamingDossier, setIsStreamingDossier] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -279,23 +332,31 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
         let res: Response;
         try {
-          res = await fetch('/api/v1/dossier', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({ rawContent, lang, retryAttempt: attempt }),
+          const out = await postDossierApi({
+            rawContent,
+            lang,
+            retryAttempt: attempt,
           });
+          if (out.kind === 'quota') {
+            setStreamQualityError(
+              lang === 'cn' ? QUOTA_ERROR_CN : QUOTA_ERROR_EN
+            );
+            onQuotaExceeded?.();
+            return;
+          }
+          if (out.kind === 'bad') {
+            continue;
+          }
+          res = out.res;
         } catch {
           continue;
         }
 
-        if (!res.ok || !res.body) {
+        const streamBody = res.body;
+        if (!streamBody) {
           continue;
         }
-
-        const reader = res.body.getReader();
+        const reader = streamBody.getReader();
         const targetLang = lang;
         const outcome = await consumeChatCompletionSseStream(reader, (full) => {
           setCache((prev) => ({ ...prev, [targetLang]: full }));
@@ -337,23 +398,31 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
 
           let res: Response;
           try {
-            res = await fetch('/api/v1/dossier', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({ rawContent, lang: 'cn', retryAttempt: attempt }),
+            const out = await postDossierApi({
+              rawContent,
+              lang: 'cn',
+              retryAttempt: attempt,
             });
+            if (out.kind === 'quota') {
+              // 此分支仅在主界面语言为 en 时进入，固定英文提示
+              setStreamQualityError(QUOTA_ERROR_EN);
+              onQuotaExceeded?.();
+              return;
+            }
+            if (out.kind === 'bad') {
+              continue;
+            }
+            res = out.res;
           } catch {
             continue;
           }
 
-          if (!res.ok || !res.body) {
+          const streamBodyCn = res.body;
+          if (!streamBodyCn) {
             continue;
           }
 
-          const reader = res.body.getReader();
+          const reader = streamBodyCn.getReader();
           const outcome = await consumeChatCompletionSseStream(reader, (full) => {
             setCache((prev) => ({ ...prev, cn: full }));
           });
@@ -440,7 +509,11 @@ export function useDossierStream(signal: SignalRecord | null, lang: 'cn' | 'en')
             },
             credentials: 'include',
             body: JSON.stringify({ id: signal.id, dossier_content: finalCache }),
-          }).catch(() => {});
+          })
+            .then(() => {
+              onDossierSynced?.();
+            })
+            .catch(() => {});
           return finalCache;
         });
       }

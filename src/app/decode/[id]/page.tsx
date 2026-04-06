@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import RawNarrative from '@/components/features/decode/RawNarrative';
 import DossierReader from '@/components/features/decode/DossierReader';
+import DossierQuotaStrip from '@/components/features/decode/DossierQuotaStrip';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import IntelProfilePanel from '@/components/features/decode/IntelProfilePanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal';
@@ -30,6 +31,7 @@ import {
 } from '@/lib/intel-export-sections';
 import { IntelExportHtmlMount } from '@/components/export/IntelExportHtmlMount';
 import type { TerminalMessage } from '@/types';
+import type { DossierQuotaPublic } from '@/lib/dossier-quota';
 
 export default function DecodePage() {
   const params = useParams();
@@ -47,6 +49,9 @@ export default function DecodePage() {
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
   const [hasSession, setHasSession] = useState(false);
   const [isPro, setIsPro] = useState(false);
+  const [dossierQuota, setDossierQuota] = useState<DossierQuotaPublic | null>(
+    null
+  );
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pngExporting, setPngExporting] = useState(false);
   const [includeTerminalExport, setIncludeTerminalExport] = useState(false);
@@ -56,7 +61,73 @@ export default function DecodePage() {
   const [pngBlocks, setPngBlocks] = useState<IntelExportBlock[] | null>(null);
   const pngMountRef = useRef<HTMLDivElement>(null);
 
-  const { dossierContent, isStreamingDossier, isTruncated, streamQualityError, dossierRecoveryStatus, startDossierStream } = useDossierStream(signal, lang);
+  const fetchEntitlementsForSession = useCallback(
+    async (session: Session | null) => {
+      setHasSession(!!session);
+      if (!session) {
+        setIsPro(false);
+        setDossierQuota(null);
+        return;
+      }
+      try {
+        const res = await fetch('/api/me/entitlements', {
+          credentials: 'include',
+        });
+        const json = (await res.json()) as {
+          success?: boolean;
+          data?: {
+            isPro?: boolean;
+            dossierQuota?: DossierQuotaPublic;
+          };
+        };
+        if (json.success && json.data && typeof json.data.isPro === 'boolean') {
+          setIsPro(json.data.isPro);
+        } else {
+          setIsPro(false);
+        }
+        if (json.success && json.data?.dossierQuota) {
+          setDossierQuota(json.data.dossierQuota);
+        } else {
+          setDossierQuota(null);
+        }
+      } catch {
+        setIsPro(false);
+        setDossierQuota(null);
+      }
+    },
+    []
+  );
+
+  const { dossierContent, isStreamingDossier, isTruncated, streamQualityError, dossierRecoveryStatus, startDossierStream } = useDossierStream(
+    signal,
+    lang,
+    {
+      onQuotaExceeded: () => {
+        void (async () => {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          await fetchEntitlementsForSession(session);
+          setAuthContext({
+            title: lang === 'cn' ? '卷宗次数已用尽' : 'DOSSIER QUOTA EXCEEDED',
+            subtitle:
+              lang === 'cn'
+                ? '本月暗影卷宗次数已用完。订阅 Pro 可无限生成，或于下月（UTC）重置后再试。'
+                : 'Monthly quota reached. Subscribe to Pro for unlimited dossiers, or try again next month (UTC).',
+          });
+          setIsAuthModalOpen(true);
+        })();
+      },
+      onDossierSynced: () => {
+        void (async () => {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          await fetchEntitlementsForSession(session);
+        })();
+      },
+    }
+  );
 
   useEffect(() => { 
      if (!id) return;
@@ -79,48 +150,27 @@ export default function DecodePage() {
    }, [id]);
 
   /**
-   * 登录态与 Pro 权益：情报全维与导出均以 isPro 为准（数据来自 /api/me/entitlements）。
+   * 登录态与 Pro 权益：情报全维用 intelUnlocked；导出能力用 canExport（均要求登录且 Pro，数据来自 /api/me/entitlements）。
    */
   useEffect(() => {
-    const syncAuthAndEntitlements = async (session: Session | null) => {
-      setHasSession(!!session);
-      if (!session) {
-        setIsPro(false);
-        return;
-      }
-      try {
-        const res = await fetch('/api/me/entitlements', { credentials: 'include' });
-        const json = (await res.json()) as {
-          success?: boolean;
-          data?: { isPro?: boolean };
-        };
-        if (json.success && json.data && typeof json.data.isPro === 'boolean') {
-          setIsPro(json.data.isPro);
-        } else {
-          setIsPro(false);
-        }
-      } catch {
-        setIsPro(false);
-      }
-    };
-
     void supabase.auth
       .getSession()
       .then(({ data }: { data: { session: Session | null } }) =>
-        syncAuthAndEntitlements(data.session)
+        fetchEntitlementsForSession(data.session)
       );
 
     const { data: sub } = supabase.auth.onAuthStateChange(
       (_event: string, session: Session | null) => {
-        void syncAuthAndEntitlements(session);
+        void fetchEntitlementsForSession(session);
       }
     );
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, fetchEntitlementsForSession]);
 
   const intelUnlocked = hasSession && isPro;
+  const canExport = hasSession && isPro;
 
   useEffect(() => {
     if (signal && signal.raw_content) {
@@ -225,6 +275,21 @@ export default function DecodePage() {
       setIsAuthModalOpen(true);
       return;
     }
+    if (
+      dossierQuota &&
+      !dossierQuota.isUnlimited &&
+      dossierQuota.remaining <= 0
+    ) {
+      setAuthContext({
+        title: lang === 'cn' ? '卷宗次数已用尽' : 'DOSSIER QUOTA EXCEEDED',
+        subtitle:
+          lang === 'cn'
+            ? '本月暗影卷宗次数已用完。订阅 Pro 可无限生成，或于下月（UTC）重置后再试。'
+            : 'Monthly quota reached. Subscribe to Pro for unlimited dossiers, or try again next month (UTC).',
+      });
+      setIsAuthModalOpen(true);
+      return;
+    }
     startDossierStream();
   };
 
@@ -268,8 +333,28 @@ export default function DecodePage() {
     return true;
   };
 
+  /**
+   * 导出 PDF/长图：先登录，再校验 Pro；与情报面板的「需要 Pro」文案保持一致。
+   */
+  const assertExportAllowed = async (): Promise<boolean> => {
+    if (!(await requireSessionForExport())) return false;
+    if (!isPro) {
+      setAuthContext({
+        title: lang === 'cn' ? '需要 Pro' : 'PRO REQUIRED',
+        subtitle:
+          lang === 'cn'
+            ? '订阅 Pro 解锁完整情报体征、利益沙盘与核验清单。请返回首页点击「升级 Pro」。'
+            : 'Subscribe to Pro for full intel. Use “Upgrade Pro” on the home page.',
+      });
+      setIsAuthModalOpen(true);
+      return false;
+    }
+    return true;
+  };
+
   const handleExportPdf = async () => {
-    if (!(await requireSessionForExport()) || !signal) return;
+    if (!signal) return;
+    if (!(await assertExportAllowed())) return;
     setPdfExporting(true);
     try {
       const res = await fetch('/api/v1/export/pdf', {
@@ -311,7 +396,8 @@ export default function DecodePage() {
   };
 
   const handleExportPngClick = async () => {
-    if (!(await requireSessionForExport()) || !signal) return;
+    if (!signal) return;
+    if (!(await assertExportAllowed())) return;
     setPngExporting(true);
     const blocks = buildIntelExportBlocks(signal, lang, {
       mode: 'full',
@@ -412,51 +498,66 @@ export default function DecodePage() {
         <header className="py-8 flex flex-wrap items-center justify-between gap-4 border-b border-[var(--td-border)] mb-8">
           <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-red-600 transition-all"><ArrowLeft size={16} /><span className="text-xs font-mono uppercase tracking-widest">Index</span></button>
           <div className="flex items-center gap-3 flex-wrap">
-            {intelUnlocked && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => void handleExportPdf()}
-                    disabled={pdfExporting}
-                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-zinc-200 bg-white text-zinc-700 hover:border-red-300 hover:text-red-700 rounded-md shadow-sm transition-all disabled:opacity-50"
-                  >
-                    {pdfExporting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <FileDown className="w-3.5 h-3.5" />
-                    )}
-                    {lang === 'cn' ? '导出 PDF' : 'Export PDF'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleExportPngClick()}
-                    disabled={pngExporting}
-                    className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-zinc-200 bg-white text-zinc-700 hover:border-red-300 hover:text-red-700 rounded-md shadow-sm transition-all disabled:opacity-50"
-                  >
-                    {pngExporting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <ImageDown className="w-3.5 h-3.5" />
-                    )}
-                    {lang === 'cn' ? '导出长图' : 'Export image'}
-                  </button>
-                </div>
-                <label className="flex items-center gap-2 text-[10px] font-mono text-zinc-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="rounded border-zinc-300"
-                    checked={includeTerminalExport}
-                    onChange={(e) => setIncludeTerminalExport(e.target.checked)}
-                  />
-                  <span>
-                    {lang === 'cn'
-                      ? '包含终端对话（当前页面会话）'
-                      : 'Include terminal (this session)'}
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:flex-wrap sm:gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="shrink-0 rounded border border-red-200 px-1 text-[9px] font-bold text-red-600">
+                    {lang === 'cn' ? 'Pro 专属' : 'PRO'}
                   </span>
-                </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleExportPdf()}
+                      disabled={pdfExporting}
+                      className={`flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-zinc-200 bg-white text-zinc-700 hover:border-red-300 hover:text-red-700 rounded-md shadow-sm transition-all disabled:opacity-50 ${!canExport ? 'opacity-60 cursor-pointer' : ''}`}
+                    >
+                      {pdfExporting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="w-3.5 h-3.5" />
+                      )}
+                      {lang === 'cn' ? '导出 PDF' : 'Export PDF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleExportPngClick()}
+                      disabled={pngExporting}
+                      className={`flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-zinc-200 bg-white text-zinc-700 hover:border-red-300 hover:text-red-700 rounded-md shadow-sm transition-all disabled:opacity-50 ${!canExport ? 'opacity-60 cursor-pointer' : ''}`}
+                    >
+                      {pngExporting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ImageDown className="w-3.5 h-3.5" />
+                      )}
+                      {lang === 'cn' ? '导出长图' : 'Export image'}
+                    </button>
+                  </div>
+                </div>
+                {!canExport ? (
+                  <p className="text-[10px] font-mono text-zinc-500 pl-0 sm:pl-0 max-w-[min(100%,28rem)]">
+                    {lang === 'cn'
+                      ? '仅 Pro 会员可使用导出 PDF 与长图。'
+                      : 'Pro subscription required for PDF and image export.'}
+                  </p>
+                ) : null}
               </div>
-            )}
+              <label
+                className={`flex items-center gap-2 text-[10px] font-mono text-zinc-600 select-none ${canExport ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+              >
+                <input
+                  type="checkbox"
+                  className="rounded border-zinc-300 disabled:cursor-not-allowed"
+                  checked={includeTerminalExport}
+                  disabled={!canExport}
+                  onChange={(e) => setIncludeTerminalExport(e.target.checked)}
+                />
+                <span>
+                  {lang === 'cn'
+                    ? '包含终端对话（当前页面会话）'
+                    : 'Include terminal (this session)'}
+                </span>
+              </label>
+            </div>
             <div className="flex items-center gap-2 bg-white border border-[var(--td-border)] rounded-md p-1 shadow-sm">
               <Globe className="text-zinc-500 w-4 h-4 ml-2" />
               <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded ${lang === 'cn' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>CN</button>
@@ -505,7 +606,13 @@ export default function DecodePage() {
           <div className="lg:col-span-5 sticky top-8">
              <RawNarrative rawContent={signal.raw_content} lang={lang} dictionary={dictionary} />
           </div>
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 flex flex-col gap-3">
+            <DossierQuotaStrip
+              quota={dossierQuota}
+              lang={lang}
+              hasSession={hasSession}
+              className="shrink-0"
+            />
             {!dossierContent && !isStreamingDossier ? (
               <div className="bg-[var(--td-surface-1)] border border-[var(--td-border)] p-20 flex flex-col items-center justify-center text-center rounded-lg h-[600px] shadow-sm ring-1 ring-[var(--td-ring)] relative">
                 <ShieldAlert className="w-16 h-16 text-zinc-300 mb-6" />

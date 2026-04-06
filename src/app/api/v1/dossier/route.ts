@@ -1,4 +1,6 @@
 import { assertIngestAuthorized } from '@/lib/ingest-auth';
+import { assertCanStartDossierStream } from '@/lib/dossier-quota';
+import { createClient } from '@/lib/supabase/server';
 import { createDeepSeekStream } from '@/services/deepseek-stream';
 import { TerminalMessage } from '@/types';
 import { logger } from '@/utils/logger';
@@ -18,6 +20,20 @@ export async function POST(request: Request) {
     const auth = await assertIngestAuthorized(request);
     if (!auth.ok) {
       return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401 });
+    }
+
+    if (auth.kind === 'user') {
+      const supabase = await createClient();
+      const allowed = await assertCanStartDossierStream(supabase, auth.userId);
+      if (!allowed) {
+        return new Response(
+          JSON.stringify({
+            error: 'Dossier quota exceeded for this month',
+            code: 'DOSSIER_QUOTA_EXCEEDED',
+          }),
+          { status: 403 }
+        );
+      }
     }
 
     const body = await request.json();
