@@ -245,6 +245,51 @@ export default function DecodePage() {
      fetchSignal(); 
    }, [id]);
 
+  /** 入库后异步补全（enrich）期间轮询刷新，体征与脚注在后台落盘后可无刷新呈现 */
+  const pendingEnrichment =
+    Boolean(
+      signal?.metadata &&
+        typeof signal.metadata === 'object' &&
+        (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true
+    );
+
+  useEffect(() => {
+    if (!id || !pendingEnrichment) return;
+    let cancelled = false;
+    let ticks = 0;
+    const maxTicks = 40;
+    const intervalMs = 3500;
+    const timer = setInterval(() => {
+      void (async () => {
+        ticks += 1;
+        if (cancelled || ticks > maxTicks) {
+          clearInterval(timer);
+          return;
+        }
+        try {
+          const res = await fetch(`/api/decode?id=${id}`);
+          const json = (await res.json()) as {
+            success?: boolean;
+            data?: SignalRecord;
+          };
+          if (!json.success || !json.data || cancelled) return;
+          setSignal(json.data);
+          const still =
+            (json.data.metadata as { enrichmentPending?: boolean } | undefined)?.enrichmentPending === true;
+          if (!still) {
+            clearInterval(timer);
+          }
+        } catch {
+          /* 静默 */
+        }
+      })();
+    }, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [id, pendingEnrichment]);
+
   /**
    * 登录态与 Pro 权益：情报全维用 intelUnlocked；导出能力用 canExport（均要求登录且 Pro，数据来自 /api/me/entitlements）。
    */

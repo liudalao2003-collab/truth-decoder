@@ -375,12 +375,35 @@ export default function HomePage() {
 
       const saveJson = await saveRes.json(); 
 
-      if (saveJson.success && saveJson.data?.signalId) { 
-        if (process.env.NODE_ENV === 'development') { 
-          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
-        } 
-        setInput(''); 
-        router.push(`/decode/${saveJson.data.signalId}`);
+      if (saveJson.success && saveJson.data?.signalId) {
+        const sid = saveJson.data.signalId as string;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 [模块_成功] -> 产物 ID:', sid);
+        }
+        /** 链式触发 enrich（intel → profile），独立冷启动预算，避免单请求 504 */
+        if (saveJson.data.enrichmentRequired !== false) {
+          void (async () => {
+            try {
+              const opts: RequestInit = {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+              };
+              await fetch('/api/v1/ingest/enrich', {
+                ...opts,
+                body: JSON.stringify({ signalId: sid, step: 'intel' }),
+              });
+              await fetch('/api/v1/ingest/enrich', {
+                ...opts,
+                body: JSON.stringify({ signalId: sid, step: 'profile' }),
+              });
+            } catch {
+              /* 补全失败不阻断跳转；decode 页轮询 / cron 可兜底 */
+            }
+          })();
+        }
+        setInput('');
+        router.push(`/decode/${sid}`);
       } else { 
         throw new Error(saveJson.error || '瞬时写入网关异常');
       } 

@@ -19,6 +19,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BASE_URL = os.getenv("NEXT_PUBLIC_BASE_URL", "http://localhost:3000").rstrip('/')
 API_INGEST = f"{BASE_URL}/api/v1/ingest"
 API_SAVE = f"{BASE_URL}/api/v1/ingest/save"
+API_ENRICH = f"{BASE_URL}/api/v1/ingest/enrich"
 
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "REPLACE_ME")
 HISTORY_FILE = "seen_urls.txt"
@@ -258,6 +259,20 @@ def main():
             if save_resp.status_code == 200 and save_data.get('success'):
                 signal_id = save_data.get('data', {}).get('signalId', 'UNKNOWN')
                 print(f"   🔵 [模块_成功] -> 产物: 致命裁决已落盘！(ID: {signal_id})")
+                # 与浏览器一致：拆成 intel / profile 两步补全，避免 Vercel 单函数超时 504
+                if save_data.get('data', {}).get('enrichmentRequired', True) and signal_id != 'UNKNOWN':
+                    try:
+                        for step in ('intel', 'profile'):
+                            er = requests.post(
+                                API_ENRICH,
+                                json={"signalId": signal_id, "step": step},
+                                headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
+                                timeout=120,
+                            )
+                            if er.status_code != 200:
+                                print(f"   🟡 [补全告警] enrich/{step} HTTP {er.status_code}")
+                    except requests.exceptions.Timeout:
+                        print("   🟡 [补全告警] enrich 链路超时（可依赖 Cron 兜底）")
                 save_seen_url(url)
                 
                 success_count += 1
