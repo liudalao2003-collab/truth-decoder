@@ -25,10 +25,12 @@ This is a PHYSICAL HARD BLOCK. Violations corrupt the entire output.
 DISSECTION RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. No Emoji symbols.
-2. Minimum 100 characters per fluff entry. Must include [Surface Disguise], [Core Mechanism], [Harvest Cost].
+2. Minimum 150 characters per fluff entry. Must include [Surface Disguise], [Core Mechanism], [Harvest Cost].
 3. Use DuPont analysis, game theory, or MECE for deep deconstruction. No hollow descriptions.
 4. Uniqueness: fluff keys must be unique and verbatim from source text.
 5. NO newline characters (\\n) inside JSON string values.
+6. Contradiction Mandate: Every fluff entry must expose a direct contradiction between the source's stated purpose and the actual financial/power mechanism it serves. Generic surface descriptions with no hidden contradiction are not acceptable — they will be rejected.
+7. Specificity Mandate: Name the specific beneficiary (not just "certain parties" or "the company"), the specific transfer mechanism, and the specific group whose interests are being silently extracted. Vague, non-committal language invalidates the entry.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY JSON OUTPUT FORMAT
@@ -49,7 +51,7 @@ const SYSTEM_PROMPT_FALLBACK = `[SYSTEM: TruthDecoder - Structured Text Recovery
 You output ONE JSON object only. No markdown outside JSON.
 LANGUAGE: "cn" fields must be Simplified Chinese only (no English letters). "en" fields must be English only.
 TASK: Read the source text and produce verdict, facts, and fluff entries for UI highlighting.
-Rules for fluff.cn: each string MUST be "verbatimPhraseFromSource::[表层伪装]...[核心机制]...[收割代价]..." with at least 80 Chinese characters after ::.
+Rules for fluff.cn: each string MUST be "verbatimPhraseFromSource::[表层伪装]...[核心机制]...[收割代价]..." with at least 120 Chinese characters after ::. Each entry must reveal a hidden contradiction between the stated narrative and the real mechanism.
 Use neutral descriptive analysis only; no investment advice; no legal conclusions.
 FORMAT:
 {

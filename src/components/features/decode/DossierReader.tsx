@@ -7,25 +7,26 @@ import { BookOpen, ShieldAlert, Zap, AlertTriangle } from 'lucide-react';
 export default function DossierReader({ 
   content, 
   isStreaming = false, 
+  isTranslating = false,
   isTruncated = false,
   qualityError = null,
   recoveryHint = null,
-  dictionary = {} 
+  lang = 'cn',
 }: { 
   content: string; 
   isStreaming?: boolean; 
+  isTranslating?: boolean;
   isTruncated?: boolean;
   /** 流式输出质量异常（如异常复读被掐断）时的说明文案 */
   qualityError?: string | null;
   /** 自动恢复过程中性提示（重试、切换通道等） */
   recoveryHint?: string | null;
-  dictionary?: Record<string, string>;
+  /** 当前界面语言，控制组件内部 UI 文案 */
+  lang?: 'cn' | 'en';
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const [mounted] = useState(() => typeof window !== 'undefined');
 
   useEffect(() => {
     if (isStreaming && containerRef.current) {
@@ -181,9 +182,10 @@ export default function DossierReader({
               <p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase tracking-widest">Top secret · Analysis</p>
             </div>
           </div>
-          {isStreaming ? ( 
+          {isStreaming || isTranslating ? ( 
             <span className="flex items-center gap-2 text-[10px] font-mono text-red-700 uppercase bg-red-50 px-3 py-1.5 rounded-md border border-red-200">
-              <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping" />Intercepting...
+              <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping" />
+              {isTranslating ? (lang === 'cn' ? '正在翻译...' : 'Translating...') : 'Intercepting...'}
             </span> 
           ) : ( 
             <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2">
@@ -215,7 +217,7 @@ export default function DossierReader({
               <div className="mt-12 p-6 border border-amber-200 bg-amber-50 rounded-md flex items-start gap-4">
                 <AlertTriangle className="text-amber-600 shrink-0 w-6 h-6 mt-1" />
                 <div>
-                  <h4 className="text-amber-800 font-bold uppercase tracking-widest text-sm mb-2">Output Quality Guard / 输出质量拦截</h4>
+                  <h4 className="text-amber-800 font-bold uppercase tracking-widest text-sm mb-2">{lang === 'cn' ? 'Output Quality Guard / 输出质量拦截' : 'OUTPUT QUALITY GUARD'}</h4>
                   <p className="text-amber-900/90 text-sm leading-relaxed font-mono">
                     {qualityError}
                   </p>
@@ -227,9 +229,11 @@ export default function DossierReader({
               <div className="mt-12 p-6 border border-red-200 bg-red-50 rounded-md flex items-start gap-4">
                 <AlertTriangle className="text-red-600 shrink-0 w-6 h-6 mt-1" />
                 <div>
-                  <h4 className="text-red-800 font-bold uppercase tracking-widest text-sm mb-2">Signal Truncated / 卷宗截断预警</h4>
+                  <h4 className="text-red-800 font-bold uppercase tracking-widest text-sm mb-2">{lang === 'cn' ? 'Signal Truncated / 卷宗截断预警' : 'SIGNAL TRUNCATED'}</h4>
                   <p className="text-red-900/85 text-sm leading-relaxed font-mono">
-                    探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。
+                    {lang === 'cn'
+                      ? '探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。'
+                      : 'Cloud compute limit or network disruption detected. The tail-end inference chain is permanently lost. Refer to the existing analysis above, or continue with the PRO Terminal below.'}
                   </p>
                 </div>
               </div>

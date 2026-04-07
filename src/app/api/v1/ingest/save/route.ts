@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { assertIngestAuthorized } from '@/lib/ingest-auth';
 import { supabaseAdmin } from '@/lib/supabase';
+import {
+  normalizeIngestIntel,
+  repairIntelEnglishFromChinese,
+  repairIntelProfileEnglishFromChinese,
+  needsIntelProfileEnglishRepair,
+} from '@/services/bilingual-intel-repair';
 import { generateIntelProfile } from '@/services/intel-profile';
 import { regenerateFullIntelJsonFromRaw } from '@/services/regenerate-ingest-intel';
 import type { IntelProfileError } from '@/types/intel-profile';
@@ -29,7 +35,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const rawContent = body?.rawContent || "内容流失兜底";
-    let intel = body?.intel || {};
+    let intel = normalizeIngestIntel(body?.intel);
 
     /** 客户端 SSE 常在 fluff 段之前截断：启发式无法救回时，用单次非流式与 wash 同契约补全，保证红字气泡与事实一致 */
     const cnFluff = intel?.fluff?.cn;
@@ -47,6 +53,9 @@ export async function POST(req: Request) {
       }
     }
 
+    /** 以中文为准补齐英文判决/事实/脚注，避免抢救分支只回填 CN */
+    intel = await repairIntelEnglishFromChinese(intel);
+
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
       .from('signals')
@@ -61,7 +70,10 @@ export async function POST(req: Request) {
       if (needsIntelProfileRegeneration(prevMeta)) {
         let mergedMeta: Record<string, unknown> = { ...prevMeta };
         try {
-          const profile = await generateIntelProfile(rawContent, intel?.facts);
+          let profile = await generateIntelProfile(rawContent, intel?.facts);
+          if (needsIntelProfileEnglishRepair(profile)) {
+            profile = await repairIntelProfileEnglishFromChinese(profile);
+          }
           mergedMeta = { ...mergedMeta, intelProfile: profile };
           delete mergedMeta.intelProfileError;
         } catch (e: unknown) {
@@ -105,7 +117,10 @@ export async function POST(req: Request) {
 
     let mergedMeta: Record<string, unknown> = { ...baseMetadata };
     try {
-      const profile = await generateIntelProfile(rawContent, intel?.facts);
+      let profile = await generateIntelProfile(rawContent, intel?.facts);
+      if (needsIntelProfileEnglishRepair(profile)) {
+        profile = await repairIntelProfileEnglishFromChinese(profile);
+      }
       mergedMeta = { ...mergedMeta, intelProfile: profile };
       delete mergedMeta.intelProfileError;
     } catch (e: unknown) {

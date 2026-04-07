@@ -41,10 +41,12 @@ This is a PHYSICAL HARD BLOCK. Violations corrupt the entire output.
 DISSECTION RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. No Emoji symbols.
-2. Minimum 100 characters per fluff entry. Must include [Surface Disguise], [Core Mechanism], [Harvest Cost].
+2. Minimum 150 characters per fluff entry. Must include [Surface Disguise], [Core Mechanism], [Harvest Cost].
 3. Use DuPont analysis, game theory, or MECE for deep deconstruction. No hollow descriptions.
 4. Uniqueness: fluff keys must be unique and verbatim from source text.
 5. NO newline characters (\\n) inside JSON string values.
+6. Contradiction Mandate: Every fluff entry must expose a direct contradiction between the source's stated purpose and the actual financial/power mechanism it serves. Generic surface descriptions with no hidden contradiction are not acceptable — they will be rejected.
+7. Specificity Mandate: Name the specific beneficiary (not just "certain parties" or "the company"), the specific transfer mechanism, and the specific group whose interests are being silently extracted. Vague, non-committal language invalidates the entry.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY JSON OUTPUT FORMAT

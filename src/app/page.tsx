@@ -324,9 +324,12 @@ export default function HomePage() {
         } 
         
         intel = { 
-          verdict: { cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。", en: "Stream Truncated. Rescue protocol engaged." }, 
-          facts: { cn: [] as string[], en: [] as string[] }, 
-          fluff: { cn: [] as string[], en: [] as string[] } 
+          verdict: {
+            cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。",
+            en: "",
+          },
+          facts: { cn: [] as string[], en: [] as string[] },
+          fluff: { cn: [] as string[], en: [] as string[] },
         };
 
         try {
@@ -501,7 +504,7 @@ export default function HomePage() {
                 >
                   <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={18} />
                   <div>
-                    <h4 className="text-[10px] font-mono text-red-700 uppercase tracking-widest mb-1.5 font-bold">System Fault / 引擎驳回</h4>
+                    <h4 className="text-[10px] font-mono text-red-700 uppercase tracking-widest mb-1.5 font-bold">{lang === 'cn' ? 'System Fault / 引擎驳回' : 'SYSTEM FAULT'}</h4>
                     <p className="text-sm text-red-800 font-mono leading-relaxed">{error}</p>
                   </div>
                 </motion.div>

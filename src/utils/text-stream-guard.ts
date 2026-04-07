@@ -112,3 +112,21 @@ export function chineseCharRatio(text: string): number {
   const matches = text.match(CHINESE_MATCH_REGEX);
   return matches ? matches.length / text.length : 0;
 }
+
+// ─────────────────────────────────────────────
+// 英文污染检测工具（CN 模式英文字母防御层）
+// ─────────────────────────────────────────────
+
+/** 英文字母正则：覆盖 a-z / A-Z，用于检测 CN 模式输出中的英文夹杂 */
+const ENGLISH_MATCH_REGEX = /[a-zA-Z]/g;
+
+/**
+ * 计算文本中英文字母占总字符数的比例（0~1）。
+ * 比例 > 0.02（即 2%）时视为"英文污染超标"，触发 CN 清洗通道。
+ * 注：[[::]] 格式符号本身不含字母，不会误计入比例。
+ */
+export function englishCharRatio(text: string): number {
+  if (!text || text.length === 0) return 0;
+  const matches = text.match(ENGLISH_MATCH_REGEX);
+  return matches ? matches.length / text.length : 0;
+}

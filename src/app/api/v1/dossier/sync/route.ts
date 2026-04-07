@@ -56,7 +56,17 @@ export async function POST(req: Request) {
         { p_user_id: auth.userId }
       );
       if (rpcErr && process.env.NODE_ENV === 'development') {
-        console.log('🟡 [模块_异步] -> 目标: 卷宗计次 RPC', rpcErr.message);
+        const msg = rpcErr.message ?? '';
+        const rpcMissing =
+          msg.includes('increment_dossier_quota_if_needed') ||
+          msg.includes('Could not find the function');
+        if (rpcMissing) {
+          console.log(
+            '🟡 [模块_异步] -> 卷宗计次: 数据库未部署 RPC，请在 Supabase SQL 执行 supabase/migrations/002_dossier_quota.sql'
+          );
+        } else {
+          console.log('🟡 [模块_异步] -> 目标: 卷宗计次 RPC', msg);
+        }
       }
     }
 
