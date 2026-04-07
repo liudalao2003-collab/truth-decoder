@@ -415,12 +415,14 @@ function coerceIntelProfileLoose(input: unknown): unknown {
       if (!Array.isArray(b.en) || b.en.length === 0) {
         b.en = [DEFAULT_BULLET_EN];
       }
-      b.cn = (b.cn as string[]).slice(0, 3).filter((x) => typeof x === 'string' && x.trim());
-      b.en = (b.en as string[]).slice(0, 3).filter((x) => typeof x === 'string' && x.trim());
-      if (b.cn.length === 0) b.cn = [DEFAULT_BULLET_CN];
-      if (b.en.length === 0) b.en = [DEFAULT_BULLET_EN];
-      while (b.cn.length < b.en.length) b.cn.push(DEFAULT_BULLET_CN);
-      while (b.en.length < b.cn.length) b.en.push(DEFAULT_BULLET_EN);
+      let cnBullets = (b.cn as string[]).slice(0, 3).filter((x) => typeof x === 'string' && x.trim());
+      let enBullets = (b.en as string[]).slice(0, 3).filter((x) => typeof x === 'string' && x.trim());
+      if (cnBullets.length === 0) cnBullets = [DEFAULT_BULLET_CN];
+      if (enBullets.length === 0) enBullets = [DEFAULT_BULLET_EN];
+      while (cnBullets.length < enBullets.length) cnBullets.push(DEFAULT_BULLET_CN);
+      while (enBullets.length < cnBullets.length) enBullets.push(DEFAULT_BULLET_EN);
+      b.cn = cnBullets;
+      b.en = enBullets;
     }
   }
   o.rationale = ratBase;

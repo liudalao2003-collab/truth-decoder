@@ -624,7 +624,8 @@ export function useDossierStream(
           if (translateOk) {
             primarySucceeded = true;
           } else {
-            setStreamQualityError(lang === 'cn' ? TRANSLATE_FAIL_HINT_CN : TRANSLATE_FAIL_HINT_EN);
+            // 此处仅在 lang === 'en' 的 CN→EN 兜底分支内，TypeScript 已收窄 lang，固定英文提示
+            setStreamQualityError(TRANSLATE_FAIL_HINT_EN);
             primarySucceeded = true;
           }
           break cnFallback;
