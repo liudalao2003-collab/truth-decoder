@@ -40,17 +40,20 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
       .sort((a, b) => b.length - a.length);
   }, [dictionary]);
 
-  // 2. 严密的正则流切割算法
+  // 2. 严密的正则流切割算法（原文与词条均 NFC，避免 Unicode 等价形导致无法命中）
   const tokens = useMemo(() => {
     if (!rawContent || sortedKeys.length === 0) return [rawContent];
-    
+    const norm = rawContent.normalize('NFC');
+
     // 物理转义所有可能导致正则崩溃的特殊字符
-    const escapedKeys = sortedKeys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const escapedKeys = sortedKeys.map((k) =>
+      k.normalize('NFC').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    );
     // 利用捕获组 () 进行切割，这样保留下来的匹配项也会作为数组元素返回
     const regex = new RegExp(`(${escapedKeys.join('|')})`, 'g');
-    
+
     // 剔除切割后产生的空字符串，保持 DOM 节点极简
-    return rawContent.split(regex).filter(Boolean);
+    return norm.split(regex).filter(Boolean);
   }, [rawContent, sortedKeys]);
 
   /**
@@ -113,8 +116,9 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
           <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.02)_50%)] z-10 pointer-events-none bg-[length:100%_4px]" />
           <div className="relative z-20 max-w-prose font-sans text-base leading-relaxed text-zinc-800 tracking-normal text-justify whitespace-pre-wrap">
             {tokens.map((token, index) => {
-              // 极速 O(1) 字典查表
-              const meaning = dictionary[token];
+              // 极速 O(1) 字典查表（词条键已 NFC 归一）
+              const meaning =
+                dictionary[token] ?? dictionary[token.normalize('NFC')];
               if (meaning) {
                 return <HighlightMark key={`${index}-${token}`} text={token} meaning={meaning} onEnter={handleMouseEnter} onLeave={handleMouseLeave} />;
               }

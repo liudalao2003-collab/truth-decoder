@@ -324,9 +324,12 @@ export default function HomePage() {
         } 
         
         intel = { 
-          verdict: { cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。", en: "Stream Truncated. Rescue protocol engaged." }, 
-          facts: { cn: [] as string[], en: [] as string[] }, 
-          fluff: { cn: [] as string[], en: [] as string[] } 
+          verdict: {
+            cn: "数据流不稳定，已启用物理层抢救协议，部分核心逻辑可能遗失。",
+            en: "",
+          },
+          facts: { cn: [] as string[], en: [] as string[] },
+          fluff: { cn: [] as string[], en: [] as string[] },
         };
 
         try {
@@ -372,12 +375,46 @@ export default function HomePage() {
 
       const saveJson = await saveRes.json(); 
 
-      if (saveJson.success && saveJson.data?.signalId) { 
-        if (process.env.NODE_ENV === 'development') { 
-          console.log('🔵 [模块_成功] -> 产物 ID:', saveJson.data.signalId);
-        } 
-        setInput(''); 
-        router.push(`/decode/${saveJson.data.signalId}`);
+      if (saveJson.success && saveJson.data?.signalId) {
+        const sid = saveJson.data.signalId as string;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 [模块_成功] -> 产物 ID:', sid);
+        }
+        /** 链式触发 enrich（intel → profile），失败时短暂重试一次，提高体征与脚注落盘成功率 */
+        if (saveJson.data.enrichmentRequired !== false) {
+          void (async () => {
+            const opts: RequestInit = {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+            };
+            const runOnce = async (): Promise<boolean> => {
+              try {
+                const intelRes = await fetch('/api/v1/ingest/enrich', {
+                  ...opts,
+                  body: JSON.stringify({ signalId: sid, step: 'intel' }),
+                });
+                const profileRes = await fetch('/api/v1/ingest/enrich', {
+                  ...opts,
+                  body: JSON.stringify({ signalId: sid, step: 'profile' }),
+                });
+                return intelRes.ok && profileRes.ok;
+              } catch {
+                return false;
+              }
+            };
+            let ok = await runOnce();
+            if (!ok) {
+              await new Promise((r) => setTimeout(r, 2800));
+              ok = await runOnce();
+            }
+            if (!ok && process.env.NODE_ENV === 'development') {
+              console.log('🔴 [模块_崩溃] -> ingest enrich 链两次均未成功，依赖解码页轮询与 cron 兜底');
+            }
+          })();
+        }
+        setInput('');
+        router.push(`/decode/${sid}`);
       } else { 
         throw new Error(saveJson.error || '瞬时写入网关异常');
       } 
@@ -501,7 +538,7 @@ export default function HomePage() {
                 >
                   <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={18} />
                   <div>
-                    <h4 className="text-[10px] font-mono text-red-700 uppercase tracking-widest mb-1.5 font-bold">System Fault / 引擎驳回</h4>
+                    <h4 className="text-[10px] font-mono text-red-700 uppercase tracking-widest mb-1.5 font-bold">{lang === 'cn' ? 'System Fault / 引擎驳回' : 'SYSTEM FAULT'}</h4>
                     <p className="text-sm text-red-800 font-mono leading-relaxed">{error}</p>
                   </div>
                 </motion.div>

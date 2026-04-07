@@ -68,12 +68,25 @@ DEPTH LAW - ANTI-TRUNCATION PROTOCOL
 Each of the 4 main sections MUST contain a minimum of 3 sub-headings (###) and at least 300 words of substantive analytical prose. Do NOT summarize. EXPAND every claim using DuPont Analysis, Game Theory, and MECE Principle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-FILLER LAW — SENTENCE-LEVEL ENFORCEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Every single sentence must pass the COGNITIVE SHOCK TEST: Would a sophisticated financial professional be surprised or disturbed by this claim?
+If NO → delete it and replace with a sharper, more specific claim.
+FORBIDDEN sentence types:
+  - Sentences that merely restate what the source already said.
+  - Transition sentences that carry zero new information ("Furthermore...", "It is worth noting...").
+  - Hedging sentences ("may", "might", "could potentially").
+MANDATORY: Name the specific actor (person/institution/fund), the specific mechanism (debt transfer/equity dilution/regulatory capture), and the specific timeline or amount wherever inferable from context.
+ANTI-CONSENSUS TEST: If your sentence could be published as-is by the original source's PR department, it has failed. Rewrite it from the perspective of the party being harmed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FOOTNOTE SYNTAX LAW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Inject 15-20 footnotes using format: [[EnglishTerm::EnglishAnalysis]]
 - "EnglishTerm": verbatim from source (English only).
-- "EnglishAnalysis": single continuous paragraph, NO newlines inside [[ ]], minimum 80 words.
-- Covers: [Surface Illusion] then [Structural Mechanism] then [Critical Fallout].
+- "EnglishAnalysis": single continuous paragraph, NO newlines inside [[ ]], minimum 120 words.
+- Must expose a direct CONTRADICTION between the source's stated narrative and the actual financial/power reality.
+- Structure: [Surface Illusion] expose the false framing → [Structural Mechanism] name the real transfer/capture/purge mechanism with specific actors → [Critical Fallout] quantify or name who pays the price.
 - BOTH sides of :: must be 100% English. No exceptions.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -121,9 +134,14 @@ Write a single paragraph (100-150 words) delivering the ultimate penetrating con
 任务：生成一份细节爆炸、逻辑深度封顶的《暗影卷宗》Markdown 研报。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-【语言隔离舱 — 物理死令】
+【语言隔离舱 — 物理死令 · 零容忍】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-100% 纯正中文。禁止出现任何英文字母、缩写。CEO 须译为首席执行官，R&D 须译为研发，IPO 须译为首次公开募股。
+100% 纯正简体中文。整份研报的每一个字符，包括正文、标题、注脚内部，均不得出现任何英文字母（a-z / A-Z）。
+严禁任何形式的括号英注！以下写法全部物理禁止：
+  ✗ leverage（杠杆）✗ planning（规划）✗ gracious offer（善意提议）✗ clarity（清晰度）
+  ✗ 任何"中文词汇（English translation）"或"English term（中文注释）"形式
+所有缩写必须翻译为中文全称：CEO→首席执行官，R&D→研发，IPO→首次公开募股，GDP→国内生产总值，AI→人工智能，CPI→居民消费价格指数，BIS→国际清算银行，ECB→欧洲中央银行，Fed→美联储，ETF→交易所交易基金。
+违反此死令即视为输出污染，整份卷宗作废。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【深度死令 — 反敷衍协议】
@@ -133,11 +151,25 @@ Write a single paragraph (100-150 words) delivering the ultimate penetrating con
 利用【杜邦分析法】、【博弈论】、【MECE 原则】进行深度拆解。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【反填充死令 — 句子级执法】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+每一句话都必须通过【认知冲击测试】：一个资深金融专业人士读完后，是否会感到震惊或不安？
+如果答案是"否"→ 删除，替换为更锋利、更具体的论断。
+物理禁止以下句型：
+  ✗ 仅转述原文内容的句子（原文已说过的，不得再说）
+  ✗ 不含新信息的过渡句（"此外"、"值得注意的是"、"综上所述"）
+  ✗ 含模糊性用词的句子（"可能"、"或许"、"据推测"、"有望"）
+强制要求：凡能从上下文推断，必须命名具体主体（人名、机构、基金名），具体机制（债务转移、股权稀释、监管捕获、利润抽取），具体时间节点或金额量级。
+反公关测试：如果你的句子可以被原文作者或其公关部门直接引用为正面评价，则该句已失败，必须从利益受损方视角重写。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【气泡注脚格式死令】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 全篇注入 15-20 个注脚：[[原文词汇::解析]]
-原文词汇必须从原文逐字复制。解析必须是一整段连贯纯文本（[[ ]] 内部绝对禁止换行符），最少 80 字。
-必须包含：[表层伪装]内容 [核心机制]内容 [收割代价]内容。
+原文词汇必须从原文逐字复制，纯中文或与原文一致（原文为中文则词汇必须纯中文）。
+解析必须是一整段连贯纯文本（[[ ]] 内部绝对禁止换行符），最少 120 字，且 100% 纯中文，绝对禁止在解析文本中插入任何英文字母。
+每个注脚必须揭露原文叙事与实际权力或金融现实之间的一处具体矛盾，不得仅描述表面现象。
+解析结构：【表层伪装】揭露虚假框架的具体手法 【核心机制】命名真实的利益转移机制与具体主体 【收割代价】点名谁的利益被牺牲及其量级。（注意：用中文方括号标签，非英文标签）
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【强制研报架构】

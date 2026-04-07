@@ -12,12 +12,14 @@ import {
   FileDown,
   ImageDown,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import RawNarrative from '@/components/features/decode/RawNarrative';
 import DossierReader from '@/components/features/decode/DossierReader';
 import DossierQuotaStrip from '@/components/features/decode/DossierQuotaStrip';
 import VerdictPanel from '@/components/features/decode/VerdictPanel';
 import IntelProfilePanel from '@/components/features/decode/IntelProfilePanel';
 import ChatTerminal from '@/components/features/terminal/ChatTerminal';
+import TerminalQuotaStrip from '@/components/features/terminal/TerminalQuotaStrip';
 import AuthModal from '@/components/features/auth/AuthModal';
 import { SignalRecord, BilingualData } from '@/types/database';
 import type { IntelProfileError } from '@/types/intel-profile';
@@ -32,6 +34,80 @@ import {
 import { IntelExportHtmlMount } from '@/components/export/IntelExportHtmlMount';
 import type { TerminalMessage } from '@/types';
 import type { DossierQuotaPublic } from '@/lib/dossier-quota';
+import type { TerminalQuotaPublic } from '@/lib/terminal-quota';
+import { hasChinese } from '@/utils/text-stream-guard';
+import { useBilingualCache } from '@/hooks/useBilingualCache';
+
+
+/** 消费 /api/v1/translate 的 SSE，拼出完整译文 */
+async function readTranslateSseToText(
+  body: ReadableStream<Uint8Array>
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let lineBuffer = '';
+  let acc = '';
+  let streamDone = false;
+  while (!streamDone) {
+    const { value, done: rDone } = await reader.read();
+    streamDone = rDone;
+    if (value) {
+      lineBuffer += decoder.decode(value, { stream: true });
+      const lines = lineBuffer.split('\n');
+      lineBuffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('data: ') && !trimmed.includes('[DONE]')) {
+          try {
+            const data = JSON.parse(trimmed.slice(6)) as {
+              choices?: Array<{ delta?: { content?: string } }>;
+            };
+            acc += data.choices?.[0]?.delta?.content ?? '';
+          } catch {
+            /* 忽略流碎片 */
+          }
+        }
+      }
+    }
+  }
+  return acc;
+}
+
+function parseFnBlocksTranslated(markdown: string, count: number): string[] {
+  const out: string[] = Array.from({ length: count }, () => '');
+  const re = /\[\[FN_BLOCK:(\d+)\]\]([\s\S]*?)\[\[\/FN_BLOCK\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(markdown)) !== null) {
+    const i = parseInt(m[1], 10);
+    if (i >= 0 && i < count) out[i] = m[2].trim();
+  }
+  return out;
+}
+
+/** EN 模式下缺失 fluff.en 时，批量将中文解释段译为英文并映射回 key */
+async function translateFluffTailsToEnglish(
+  pending: { key: string; tailCn: string }[]
+): Promise<Record<string, string>> {
+  if (pending.length === 0) return {};
+  const blocks = pending.map(
+    (p, i) => `[[FN_BLOCK:${i}]]\n${p.tailCn}\n[[/FN_BLOCK]]`
+  );
+  const content = `Translate all Chinese inside FN_BLOCK markers into fluent English. Each block's inner text MUST be entirely English with zero Chinese characters. Preserve every [[FN_BLOCK:n]] and [[/FN_BLOCK]] tag exactly; only translate the inner text.\n\n${blocks.join('\n\n')}`;
+  const res = await fetch('/api/v1/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ content, targetLang: 'en' }),
+  });
+  if (!res.ok || !res.body) return {};
+  const full = await readTranslateSseToText(res.body);
+  const parts = parseFnBlocksTranslated(full, pending.length);
+  const map: Record<string, string> = {};
+  pending.forEach((p, i) => {
+    if (parts[i]) map[p.key] = parts[i];
+  });
+  return map;
+}
 
 export default function DecodePage() {
   const params = useParams();
@@ -52,6 +128,9 @@ export default function DecodePage() {
   const [dossierQuota, setDossierQuota] = useState<DossierQuotaPublic | null>(
     null
   );
+  const [terminalQuota, setTerminalQuota] = useState<TerminalQuotaPublic | null>(
+    null
+  );
   /** 与 Admin 面板一致：仅 NEXT_PUBLIC_ADMIN_EMAIL 可物理删除 signals */
   const [canPurgeSignals, setCanPurgeSignals] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -69,6 +148,7 @@ export default function DecodePage() {
       if (!session) {
         setIsPro(false);
         setDossierQuota(null);
+        setTerminalQuota(null);
         setCanPurgeSignals(false);
         return;
       }
@@ -86,6 +166,7 @@ export default function DecodePage() {
           data?: {
             isPro?: boolean;
             dossierQuota?: DossierQuotaPublic;
+            terminalQuota?: TerminalQuotaPublic;
           };
         };
         if (json.success && json.data && typeof json.data.isPro === 'boolean') {
@@ -98,15 +179,21 @@ export default function DecodePage() {
         } else {
           setDossierQuota(null);
         }
+        if (json.success && json.data?.terminalQuota) {
+          setTerminalQuota(json.data.terminalQuota);
+        } else {
+          setTerminalQuota(null);
+        }
       } catch {
         setIsPro(false);
         setDossierQuota(null);
+        setTerminalQuota(null);
       }
     },
     []
   );
 
-  const { dossierContent, isStreamingDossier, isTruncated, streamQualityError, dossierRecoveryStatus, startDossierStream } = useDossierStream(
+  const { dossierContent, isStreamingDossier, isTranslating: isDossierTranslating, isTruncated, streamQualityError, dossierRecoveryStatus, startDossierStream } = useDossierStream(
     signal,
     lang,
     {
@@ -136,6 +223,7 @@ export default function DecodePage() {
       },
     }
   );
+  const { resolveOrCreate: resolveFluffCache } = useBilingualCache(signal?.id ?? null, 'fluff');
 
   useEffect(() => { 
      if (!id) return;
@@ -156,6 +244,51 @@ export default function DecodePage() {
  
      fetchSignal(); 
    }, [id]);
+
+  /** 入库后异步补全（enrich）期间轮询刷新，体征与脚注在后台落盘后可无刷新呈现 */
+  const pendingEnrichment =
+    Boolean(
+      signal?.metadata &&
+        typeof signal.metadata === 'object' &&
+        (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true
+    );
+
+  useEffect(() => {
+    if (!id || !pendingEnrichment) return;
+    let cancelled = false;
+    let ticks = 0;
+    const maxTicks = 40;
+    const intervalMs = 3500;
+    const timer = setInterval(() => {
+      void (async () => {
+        ticks += 1;
+        if (cancelled || ticks > maxTicks) {
+          clearInterval(timer);
+          return;
+        }
+        try {
+          const res = await fetch(`/api/decode?id=${id}`);
+          const json = (await res.json()) as {
+            success?: boolean;
+            data?: SignalRecord;
+          };
+          if (!json.success || !json.data || cancelled) return;
+          setSignal(json.data);
+          const still =
+            (json.data.metadata as { enrichmentPending?: boolean } | undefined)?.enrichmentPending === true;
+          if (!still) {
+            clearInterval(timer);
+          }
+        } catch {
+          /* 静默 */
+        }
+      })();
+    }, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [id, pendingEnrichment]);
 
   /**
    * 登录态与 Pro 权益：情报全维用 intelUnlocked；导出能力用 canExport（均要求登录且 Pro，数据来自 /api/me/entitlements）。
@@ -233,11 +366,13 @@ export default function DecodePage() {
 
       // 第一轮：注册 cn 词汇（对中文原文命中）
       cnFluffs.forEach((item, idx) => {
-        // EN 模式语种隔离守卫：如果没有对应的 EN 解释（targetFluffs[idx] 为空），
-        // 跳过此条 CN 词条，绝不允许 CN 解释渗入 EN 模式的词典导致气泡弹出中文。
-        if (lang === 'en' && !targetFluffs[idx]) return;
-
-        const targetItem = targetFluffs[idx] || item;
+        const enLine = enFluffs[idx];
+        let targetItem: string;
+        if (lang === 'en' && enLine?.trim()) {
+          targetItem = enLine;
+        } else {
+          targetItem = targetFluffs[idx] || item;
+        }
         const parsed = parseFluffItem(item, targetItem);
         if (!parsed) {
           if (process.env.NODE_ENV === 'development') {
@@ -245,41 +380,102 @@ export default function DecodePage() {
           }
           return;
         }
-        if (!dict[parsed.key]) {
-          dict[parsed.key] = parsed.explanation;
+        const nk = parsed.key.normalize('NFC');
+        if (!dict[nk]) {
+          dict[nk] = parsed.explanation;
           if (process.env.NODE_ENV === 'development') {
-            console.log('🟢 [模块_发起] -> 加载 cn 词汇:', parsed.key);
+            console.log('🟢 [模块_发起] -> 加载 cn 词汇:', nk);
           }
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🟡 [模块_异步] -> cn Key 重复，已物理丢弃:', parsed.key);
+          console.log('🟡 [模块_异步] -> cn Key 重复，已物理丢弃:', nk);
         }
       });
 
       // 🔧 第二轮：额外注册 en 词汇（对英文原文命中，同时兜底爬虫抓取的英文新闻）
       // explanation 始终使用当前语言对应的解释，保证显示内容正确
       enFluffs.forEach((item, idx) => {
-        // en key 的解释：优先用当前语言的 targetFluffs，没有则用自身
         const targetItem = targetFluffs[idx] || item;
         const parsed = parseFluffItem(item, targetItem);
         if (!parsed) return;
-        if (!dict[parsed.key]) {
-          dict[parsed.key] = parsed.explanation;
+        const nk = parsed.key.normalize('NFC');
+        if (!dict[nk]) {
+          dict[nk] = parsed.explanation;
           if (process.env.NODE_ENV === 'development') {
-            console.log('🟢 [模块_发起] -> 加载 en 词汇:', parsed.key);
+            console.log('🟢 [模块_发起] -> 加载 en 词汇:', nk);
           }
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🟡 [模块_异步] -> en Key 重复，已物理丢弃:', parsed.key);
+          console.log('🟡 [模块_异步] -> en Key 重复，已物理丢弃:', nk);
         }
       });
 
+      // EN 模式：脚注解释不得含中文；无论是否登录都发起翻译，翻译仍失败则静默移除词条（不显示占位符）
+      const polishEnFootnotes: { key: string; tailCn: string }[] = [];
+      if (lang === 'en') {
+        const seenPolish = new Set<string>();
+        for (const key of Object.keys(dict)) {
+          const explanation = dict[key];
+          if (!explanation || !hasChinese(explanation)) continue;
+          if (!seenPolish.has(key)) {
+            seenPolish.add(key);
+            polishEnFootnotes.push({ key, tailCn: explanation });
+          }
+        }
+        if (
+          process.env.NODE_ENV === 'development' &&
+          polishEnFootnotes.length > 0
+        ) {
+          console.log(
+            '🟡 [模块_异步] -> EN 脚注含中文，待译条数:',
+            polishEnFootnotes.length
+          );
+        }
+      }
+
+      // EN 模式：将含中文值的词条从 dict 预先移除，等待翻译异步回填
+      // 确保初始 setDictionary 不会将中文值暴露给 RawNarrative 气泡
+      if (lang === 'en') {
+        for (const { key } of polishEnFootnotes) {
+          delete dict[key];
+        }
+      }
+
       setDictionary(dict);
+
+      if (lang === 'en' && polishEnFootnotes.length > 0) {
+        const sourceTail = polishEnFootnotes
+          .map((item) => `${item.key}::${item.tailCn}`)
+          .join('\n');
+        void resolveFluffCache({
+          sourceLang: 'cn',
+          targetLang: 'en',
+          sourceContent: sourceTail,
+          produce: async () => JSON.stringify(await translateFluffTailsToEnglish(polishEnFootnotes)),
+        }).then((mappedRaw) => {
+          let mapped: Record<string, string> = {};
+          try {
+            mapped = JSON.parse(mappedRaw) as Record<string, string>;
+          } catch {
+            mapped = {};
+          }
+          setDictionary((prev) => {
+            const next: Record<string, string> = { ...prev, ...mapped };
+            // 翻译后仍含中文则静默移除该词条，避免显示简略占位符
+            for (const k of Object.keys(next)) {
+              if (hasChinese(next[k])) {
+                delete next[k];
+              }
+            }
+            return next;
+          });
+        });
+      }
     }
-  }, [signal, lang]);
+  }, [signal, lang, hasSession, resolveFluffCache]);
 
   const handleDossierClick = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      setAuthContext({ title: "DOSSIER LOCKED", subtitle: "登录以解锁流式破译协议。" });
+      setAuthContext({ title: "DOSSIER LOCKED", subtitle: lang === 'cn' ? "登录以解锁流式破译协议。" : "Sign in to unlock the streaming decryption protocol." });
       setIsAuthModalOpen(true);
       return;
     }
@@ -302,7 +498,7 @@ export default function DecodePage() {
   };
 
   const handlePurge = async () => {
-    const confirm = window.confirm("⚠️ [PURGE PROTOCOL] 物理抹杀此资产？");
+    const confirm = window.confirm(lang === 'cn' ? "⚠️ [PURGE PROTOCOL] 物理抹杀此资产？" : "⚠️ [PURGE PROTOCOL] Permanently destroy this asset?");
     if (!confirm) return;
     setIsDeleting(true);
     try {
@@ -314,10 +510,10 @@ export default function DecodePage() {
       if (json.success) {
         router.push('/');
       } else {
-        alert(`抹杀失败: ${json.error}`);
+        alert(lang === 'cn' ? `抹杀失败: ${json.error}` : `Purge failed: ${json.error}`);
       }
-    } catch (_e) { 
-      alert("网络阻断");
+    } catch { 
+      alert(lang === 'cn' ? "网络阻断" : "Network error.");
     } finally { 
       setIsDeleting(false);
     }
@@ -498,10 +694,33 @@ export default function DecodePage() {
 
   return (
     <main className="min-h-screen bg-[var(--td-surface-0)] text-zinc-800 font-sans pb-24">
+      {/* 全屏不透明翻译遮罩：翻译期间完全覆盖页面，无任何模糊透视 */}
+      <AnimatePresence>
+        {isDossierTranslating ? (
+          <motion.div
+            key="translate-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[200] bg-[var(--td-surface-0)] flex flex-col items-center justify-center gap-6"
+          >
+            <Loader2 className="w-12 h-12 text-red-600 animate-spin" />
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm font-mono uppercase tracking-widest text-zinc-500">
+                {lang === 'cn' ? '正在翻译语言协议…' : 'Translating language protocol…'}
+              </p>
+              <p className="text-xs font-mono text-zinc-400">
+                {lang === 'cn' ? '全文分段处理，请稍候' : 'Processing in sections, please wait'}
+              </p>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       {pngBlocks ? (
         <IntelExportHtmlMount ref={pngMountRef} blocks={pngBlocks} />
       ) : null}
-      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authContext.title} subtitle={authContext.subtitle} />
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authContext.title} subtitle={authContext.subtitle} lang={lang} />
       <div className="max-w-[1600px] mx-auto px-6">
         <header className="py-8 flex flex-wrap items-center justify-between gap-4 border-b border-[var(--td-border)] mb-8">
           <button onClick={() => router.push('/')} className="flex items-center gap-3 text-zinc-500 hover:text-red-600 transition-all"><ArrowLeft size={16} /><span className="text-xs font-mono uppercase tracking-widest">Index</span></button>
@@ -568,16 +787,21 @@ export default function DecodePage() {
             </div>
             <div className="flex items-center gap-2 bg-white border border-[var(--td-border)] rounded-md p-1 shadow-sm">
               <Globe className="text-zinc-500 w-4 h-4 ml-2" />
-              <button onClick={() => setLang('cn')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded ${lang === 'cn' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>CN</button>
-              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded ${lang === 'en' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>EN</button>
+                    <button onClick={() => setLang('cn')} disabled={isDossierTranslating} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded disabled:opacity-50 disabled:cursor-not-allowed ${lang === 'cn' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>CN</button>
+              <button onClick={() => setLang('en')} disabled={isDossierTranslating} className={`px-4 py-1.5 text-[10px] font-bold transition-all rounded disabled:opacity-50 disabled:cursor-not-allowed ${lang === 'en' ? 'bg-red-100 text-red-700' : 'text-zinc-500 hover:text-zinc-800'}`}>EN</button>
             </div>
+            {isDossierTranslating ? (
+              <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+                {lang === 'cn' ? '语言协议重组中...' : 'Language protocol compiling...'}
+              </span>
+            ) : null}
             {canPurgeSignals ? (
               <button onClick={handlePurge} disabled={isDeleting} className="group flex items-center justify-center w-9 h-9 bg-white border border-zinc-200 hover:border-red-300 hover:bg-red-50 transition-all rounded-md disabled:opacity-50 shadow-sm" title="Purge"><Trash2 size={16} className="text-zinc-500 group-hover:text-red-600" /></button>
             ) : null}
           </div>
         </header>
 
-        <section className="mb-10"><VerdictPanel verdict={(signal.metadata?.bilingual?.[lang] || signal.verdict) as string} isErased={true} /></section>
+        <section className="mb-10"><VerdictPanel verdict={(signal.metadata?.bilingual?.[lang] || signal.verdict) as string} isErased={true} lang={lang} /></section>
 
         <IntelProfilePanel
           profile={signal.metadata?.intelProfile}
@@ -635,25 +859,49 @@ export default function DecodePage() {
               <DossierReader 
                 content={dossierContent} 
                 isStreaming={isStreamingDossier} 
+                isTranslating={isDossierTranslating}
                 isTruncated={isTruncated} 
                 qualityError={streamQualityError}
                 recoveryHint={dossierRecoveryStatus}
-                dictionary={dictionary} 
+                lang={lang}
               /> 
             )}
           </div>
         </div>
 
-        <div className="mt-12 border-t border-[var(--td-border)] pt-12">
+        <div className="mt-12 border-t border-[var(--td-border)] pt-12 flex flex-col gap-3">
+          <TerminalQuotaStrip
+            quota={terminalQuota}
+            lang={lang}
+            hasSession={hasSession}
+            className="shrink-0"
+          />
           <ChatTerminal
             signalId={id}
             hardFacts={currentHardFacts}
+            lang={lang}
             onRequireAuth={() => {
               setAuthContext({
                 title: 'QUOTA EXCEEDED',
-                subtitle: '登录以解除频率限制。',
+                subtitle: lang === 'cn' ? '登录以解除频率限制。' : 'Sign in to remove rate limits.',
               });
               setIsAuthModalOpen(true);
+            }}
+            onQuotaExceeded={() => {
+              void (async () => {
+                const {
+                  data: { session },
+                } = await supabase.auth.getSession();
+                await fetchEntitlementsForSession(session);
+                setAuthContext({
+                  title: lang === 'cn' ? '审讯次数已用尽' : 'TERMINAL QUOTA EXCEEDED',
+                  subtitle:
+                    lang === 'cn'
+                      ? '本月深度审讯次数已用完。订阅 Pro 可无限追问，或于下月（UTC）重置后再试。'
+                      : 'Monthly terminal quota reached. Subscribe to Pro for unlimited interrogations, or try again next month (UTC).',
+                });
+                setIsAuthModalOpen(true);
+              })();
             }}
             onMessagesChange={setTerminalMessages}
           />

@@ -5,7 +5,10 @@
       "maxDuration": 120
     },
     "src/app/api/v1/ingest/save/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 30
+    },
+    "src/app/api/v1/ingest/enrich/route.ts": {
+      "maxDuration": 60
     },
     "src/app/api/cron/intel-profile/route.ts": {
       "maxDuration": 60

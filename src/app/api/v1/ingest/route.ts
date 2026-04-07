@@ -35,16 +35,18 @@ This is a PHYSICAL HARD BLOCK. Violations corrupt the entire output.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CORE DISSECTION FRAMEWORK (fluff array)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Each fluff entry MUST follow this structure (minimum 100 characters per entry, NO Emoji):
-- [Surface Disguise]: How the language constructs false expectations.
-- [Core Mechanism]: Using financial models or game theory, identify the real asset restructuring, liquidity transfer, or power purge.
-- [Harvest Cost]: Explicitly name whose interests (shareholders, employees, public) are being silently extracted.
+Each fluff entry MUST follow this structure (minimum 150 characters per entry, NO Emoji):
+- [Surface Disguise]: Expose exactly how this phrase constructs false expectations — name the specific rhetorical mechanism, not a generic description.
+- [Core Mechanism]: Using financial models or game theory, identify the real asset restructuring, liquidity transfer, or power purge. Name the specific actor (person/institution/fund) and the specific action.
+- [Harvest Cost]: Explicitly name the specific group whose interests are being silently extracted, and quantify or estimate the scale wherever inferable.
 
 Rules:
 1. Uniqueness: No duplicate or semantically similar terms. Each term must represent an independent business logic.
 2. Value filter: Only extract terms with deceptive, strategic, or concealing significance.
 3. Key rule: The term (left of ::) MUST be copied verbatim from the source text.
 4. NO newline characters (\\n) inside JSON string values.
+5. Contradiction Mandate: Every fluff entry must expose a direct contradiction between the source's stated purpose and the actual financial/power mechanism it serves. Generic surface descriptions with no hidden contradiction are not acceptable — they will be rejected.
+6. Specificity Mandate: Name the specific beneficiary (not just "certain parties" or "the company"), the specific transfer mechanism, and the specific group whose interests are being silently extracted. Vague, non-committal language invalidates the entry.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY JSON OUTPUT FORMAT

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, ShieldAlert, Zap, AlertTriangle } from 'lucide-react';
@@ -7,25 +7,26 @@ import { BookOpen, ShieldAlert, Zap, AlertTriangle } from 'lucide-react';
 export default function DossierReader({ 
   content, 
   isStreaming = false, 
+  isTranslating = false,
   isTruncated = false,
   qualityError = null,
   recoveryHint = null,
-  dictionary = {} 
+  lang = 'cn',
 }: { 
   content: string; 
   isStreaming?: boolean; 
+  isTranslating?: boolean;
   isTruncated?: boolean;
   /** 流式输出质量异常（如异常复读被掐断）时的说明文案 */
   qualityError?: string | null;
   /** 自动恢复过程中性提示（重试、切换通道等） */
   recoveryHint?: string | null;
-  dictionary?: Record<string, string>;
+  /** 当前界面语言，控制组件内部 UI 文案 */
+  lang?: 'cn' | 'en';
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const [mounted] = useState(() => typeof window !== 'undefined');
 
   useEffect(() => {
     if (isStreaming && containerRef.current) {
@@ -51,6 +52,32 @@ export default function DossierReader({
 
   const handleMouseLeave = useCallback(() => setHoverInfo(null), []);
 
+  /**
+   * 将跨行的 [[表面词::深度解析]] 合并为单行，避免按换行切块后丢失闭合 ]] 导致整段降级为纯文本。
+   */
+  const contentWithInlineFootnotes = useMemo(() => {
+    const text = content;
+    const chunks: string[] = [];
+    let i = 0;
+    while (i < text.length) {
+      const open = text.indexOf('[[', i);
+      if (open === -1) {
+        chunks.push(text.slice(i));
+        break;
+      }
+      chunks.push(text.slice(i, open));
+      const close = text.indexOf(']]', open + 2);
+      if (close === -1) {
+        chunks.push(text.slice(open));
+        break;
+      }
+      const segment = text.slice(open, close + 2);
+      chunks.push(segment.replace(/\r?\n/g, ' '));
+      i = close + 2;
+    }
+    return chunks.join('');
+  }, [content]);
+
   const parseBoldAndDict = (text: string, prefixKey: string) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
@@ -63,6 +90,15 @@ export default function DossierReader({
 
   // 🚨 架构师防御矩阵 V2.0：工业级栈式词法解析器 (Stack-based Tokenizer)
   // 彻底免疫大模型幻觉、半截断括号、缺失冒号等物理破坏
+  /** 兼容 ASCII :: 与全角 ：：，取最先出现的分隔符位置 */
+  const footnoteSeparatorIndex = (inner: string): number => {
+    const a = inner.indexOf('::');
+    const b = inner.indexOf('：：');
+    if (a === -1) return b;
+    if (b === -1) return a;
+    return Math.min(a, b);
+  };
+
   const parseInlineFormat = (text: string, blockIndex: number) => {
     const tokens = [];
     let current = 0;
@@ -91,11 +127,12 @@ export default function DossierReader({
 
       // 成功捕获完整括号内容
       const innerContent = text.slice(startIdx + 2, endIdx);
-      const separatorIdx = innerContent.indexOf('::') !== -1 ? innerContent.indexOf('::') : innerContent.indexOf('：：');
+      const separatorIdx = footnoteSeparatorIndex(innerContent);
 
       if (separatorIdx !== -1) {
         // 标准格式：[[词汇::解析]]
         const surfaceWord = innerContent.slice(0, separatorIdx).trim();
+        // 「::」与「：：」均为双字符分隔符
         const deepInsight = innerContent.slice(separatorIdx + 2).trim();
 
         tokens.push(
@@ -121,8 +158,8 @@ export default function DossierReader({
 
   // 🚨 物理流切割引擎，摒弃所有粗暴的 string.replace
   const renderBlocks = () => {
-    // 强制过滤掉所有无意义的空行，防止 DOM 节点臃肿
-    const blocks = content.split(/\n+/).filter(b => b.trim().length > 0);
+    // 强制过滤掉所有无意义的空行，防止 DOM 节点臃肿（脚注已先合并跨行）
+    const blocks = contentWithInlineFootnotes.split(/\n+/).filter(b => b.trim().length > 0);
 
     return blocks.map((block, index) => {
       const trimmed = block.trim();
@@ -150,18 +187,7 @@ export default function DossierReader({
         );
       }
 
-      // 🛡️ 防御性渲染守卫：检测并跳过孤立注脚块
-      // 当 AI 将 [[Term::Analysis]] 抽离为底部列表时，每行只有一个注脚标记，
-      // 去掉所有 [[...]] 内容后剩余正文为空，此时跳过渲染，避免产生无上下文的孤立红字行。
-      // 此守卫不影响正常内联注脚（正常情况下注脚前后有正文，stripped 后仍有内容）。
-      if (trimmed.startsWith('[[') && trimmed.endsWith(']]')) {
-        const strippedOfFootnotes = trimmed.replace(/\[\[[\s\S]*?\]\]/g, '').trim();
-        if (strippedOfFootnotes.length === 0) {
-          return null;
-        }
-      }
-
-      // 常规段落渲染
+      // 常规段落渲染（整段仅为 [[词::析]] 时也正常渲染红泡，不再误删）
       return (
         <p key={`p-${index}`} className="text-zinc-800 font-sans leading-relaxed text-base md:text-lg mb-6 text-justify max-w-prose">
           {parseInlineFormat(trimmed, index)}
@@ -181,9 +207,10 @@ export default function DossierReader({
               <p className="text-[10px] font-mono text-zinc-600 mt-1 uppercase tracking-widest">Top secret · Analysis</p>
             </div>
           </div>
-          {isStreaming ? ( 
+          {isStreaming || isTranslating ? ( 
             <span className="flex items-center gap-2 text-[10px] font-mono text-red-700 uppercase bg-red-50 px-3 py-1.5 rounded-md border border-red-200">
-              <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping" />Intercepting...
+              <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping" />
+              {isTranslating ? (lang === 'cn' ? '正在翻译...' : 'Translating...') : 'Intercepting...'}
             </span> 
           ) : ( 
             <span className="text-[10px] font-mono text-zinc-500 uppercase flex items-center gap-2">
@@ -215,7 +242,7 @@ export default function DossierReader({
               <div className="mt-12 p-6 border border-amber-200 bg-amber-50 rounded-md flex items-start gap-4">
                 <AlertTriangle className="text-amber-600 shrink-0 w-6 h-6 mt-1" />
                 <div>
-                  <h4 className="text-amber-800 font-bold uppercase tracking-widest text-sm mb-2">Output Quality Guard / 输出质量拦截</h4>
+                  <h4 className="text-amber-800 font-bold uppercase tracking-widest text-sm mb-2">{lang === 'cn' ? 'Output Quality Guard / 输出质量拦截' : 'OUTPUT QUALITY GUARD'}</h4>
                   <p className="text-amber-900/90 text-sm leading-relaxed font-mono">
                     {qualityError}
                   </p>
@@ -227,9 +254,11 @@ export default function DossierReader({
               <div className="mt-12 p-6 border border-red-200 bg-red-50 rounded-md flex items-start gap-4">
                 <AlertTriangle className="text-red-600 shrink-0 w-6 h-6 mt-1" />
                 <div>
-                  <h4 className="text-red-800 font-bold uppercase tracking-widest text-sm mb-2">Signal Truncated / 卷宗截断预警</h4>
+                  <h4 className="text-red-800 font-bold uppercase tracking-widest text-sm mb-2">{lang === 'cn' ? 'Signal Truncated / 卷宗截断预警' : 'SIGNAL TRUNCATED'}</h4>
                   <p className="text-red-900/85 text-sm leading-relaxed font-mono">
-                    探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。
+                    {lang === 'cn'
+                      ? '探测到云端算力限制或网络波动，底层逻辑链条未能完全闭环。尾部推演数据已永久丢失。请结合已呈现的前置逻辑自行推断，或使用下方的 PRO 终端继续追问。'
+                      : 'Cloud compute limit or network disruption detected. The tail-end inference chain is permanently lost. Refer to the existing analysis above, or continue with the PRO Terminal below.'}
                   </p>
                 </div>
               </div>

@@ -10,6 +10,10 @@ interface ChatTerminalProps {
   hardFacts: string[];
   onRequireAuth: () => void;
   onMessagesChange?: (messages: TerminalMessage[]) => void;
+  /** 月度配额耗尽时触发，由父组件弹出升级引导 */
+  onQuotaExceeded?: () => void;
+  /** 当前界面语言，控制组件内部 UI 文案 */
+  lang?: 'cn' | 'en';
 }
 
 export default function ChatTerminal({
@@ -17,13 +21,15 @@ export default function ChatTerminal({
   hardFacts,
   onRequireAuth,
   onMessagesChange,
+  onQuotaExceeded,
+  lang = 'cn',
 }: ChatTerminalProps) {
   const [inputValue, setInputValue] = useState('');
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   const { messages, isStreaming, error, submitInterrogation, clearTerminal } =
-    useTerminalMachine({ signalId, hardFacts, onMessagesChange });
+    useTerminalMachine({ signalId, hardFacts, onMessagesChange, onQuotaExceeded });
 
   useEffect(() => {
     if (endOfMessagesRef.current) {
@@ -59,7 +65,7 @@ export default function ChatTerminal({
           <span className="text-xs font-mono text-zinc-600 tracking-widest uppercase">PRO Terminal / {signalId}</span>
         </div>
         <div className="flex items-center gap-4 text-zinc-500">
-          <button onClick={clearTerminal} title="清除物理内存" className="hover:text-red-600 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
+          <button onClick={clearTerminal} title={lang === 'cn' ? '清除物理内存' : 'Clear Memory'} className="hover:text-red-600 transition-colors flex items-center gap-2 text-xs uppercase tracking-widest font-bold">
             <Trash2 className="w-4 h-4" /> CLEAR
           </button>
         </div>
@@ -69,7 +75,7 @@ export default function ChatTerminal({
         {messages.length === 0 && (
           <div className="text-zinc-500 text-xs text-center mt-20 uppercase tracking-[0.2em]">
             <span className="block mb-2 text-red-400">_ SYSTEM STANDBY _</span>
-            等待输入核心指令。请基于已查明的硬通货事实进行追问。
+            {lang === 'cn' ? '等待输入核心指令。请基于已查明的硬通货事实进行追问。' : 'Awaiting input. Interrogate based on the confirmed hard facts above.'}
           </div>
         )}
         
@@ -103,7 +109,7 @@ export default function ChatTerminal({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isStreaming}
-            placeholder="输入指令，洞透底层逻辑..."
+            placeholder={lang === 'cn' ? '输入指令，洞透底层逻辑...' : 'Enter directive to interrogate...'}
             className="w-full bg-white border border-zinc-200 text-zinc-900 font-mono text-base py-4 pl-10 pr-16 placeholder:text-zinc-500 focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-colors disabled:opacity-50 rounded-md"
           />
           <button type="submit" disabled={!inputValue.trim() || isStreaming} className="absolute right-4 text-zinc-500 hover:text-red-600 disabled:text-zinc-300 transition-colors bg-white border border-zinc-200 p-2 rounded-md">

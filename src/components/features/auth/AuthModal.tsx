@@ -10,6 +10,8 @@ interface AuthModalProps {
   onClose: () => void;
   title?: string;
   subtitle?: string;
+  /** 当前界面语言，控制组件内部固定 UI 文案 */
+  lang?: 'cn' | 'en';
 }
 
 /**
@@ -20,9 +22,15 @@ interface AuthModalProps {
 export default function AuthModal({ 
   isOpen, 
   onClose, 
-  title = "ACCESS RESTRICTED / 权限受限", 
-  subtitle = "登录以解锁完整情报体征、暗影卷宗与终端追问。" 
+  title,
+  subtitle,
+  lang = 'cn',
 }: AuthModalProps) {
+  // 根据语言设置默认标题与副标题（调用方传入的优先级更高）
+  const resolvedTitle = title ?? (lang === 'cn' ? 'ACCESS RESTRICTED / 权限受限' : 'ACCESS RESTRICTED');
+  const resolvedSubtitle = subtitle ?? (lang === 'cn'
+    ? '登录以解锁完整情报体征、暗影卷宗与终端追问。'
+    : 'Sign in to unlock full intel profile, shadow dossier, and terminal.');
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -56,7 +64,7 @@ export default function AuthModal({
       router.refresh(); // 强制刷新路由，让 Server Components 感知最新会话
       
     } catch (err: unknown) { // 🚨 架构师防御矩阵：拔除 any 毒瘤，强制类型收缩
-      const errMsg = err instanceof Error ? err.message : '认证物理链路断裂';
+      const errMsg = err instanceof Error ? err.message : (lang === 'cn' ? '认证物理链路断裂' : 'Authentication failed.');
       setError(errMsg);
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因:', errMsg);
@@ -86,8 +94,8 @@ export default function AuthModal({
           <div className="p-8">
             <div className="flex flex-col items-center mb-8 text-center">
               <ShieldAlert className="text-red-600 w-12 h-12 mb-4" />
-              <h2 className="text-xl font-black text-zinc-900 uppercase tracking-widest mb-2">{title}</h2>
-              <p className="text-[var(--td-text-secondary)] text-sm font-sans leading-relaxed">{subtitle}</p>
+              <h2 className="text-xl font-black text-zinc-900 uppercase tracking-widest mb-2">{resolvedTitle}</h2>
+              <p className="text-[var(--td-text-secondary)] text-sm font-sans leading-relaxed">{resolvedSubtitle}</p>
             </div>
 
             <form onSubmit={handleAuth} className="space-y-4">
@@ -129,7 +137,9 @@ export default function AuthModal({
                 className="w-full bg-red-600 border border-red-600 hover:bg-red-700 text-white py-4 flex items-center justify-center gap-2 uppercase tracking-widest font-black text-sm transition-all rounded-md disabled:opacity-50 disabled:cursor-not-allowed mt-6 shadow-sm"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
-                {isLogin ? '建立安全连接 (LOGIN)' : '注册机密档案 (SIGN UP)'}
+                {isLogin
+                  ? (lang === 'cn' ? '建立安全连接 (LOGIN)' : 'ESTABLISH SECURE CONNECTION (LOGIN)')
+                  : (lang === 'cn' ? '注册机密档案 (SIGN UP)' : 'REGISTER CLASSIFIED PROFILE (SIGN UP)')}
               </button>
             </form>
 
@@ -142,7 +152,9 @@ export default function AuthModal({
                 }}
                 className="text-xs font-mono text-[var(--td-text-secondary)] hover:text-red-600 transition-colors tracking-wide underline decoration-zinc-300 underline-offset-4"
               >
-                {isLogin ? "没有权限？申请机密档案 (Sign Up)" : "已有权限？返回安全连接 (Login)"}
+                {isLogin
+                  ? (lang === 'cn' ? '没有权限？申请机密档案 (Sign Up)' : 'No access? Register a classified profile (Sign Up)')
+                  : (lang === 'cn' ? '已有权限？返回安全连接 (Login)' : 'Already registered? Return to secure connection (Login)')}
               </button>
             </div>
           </div>
