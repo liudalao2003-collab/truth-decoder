@@ -128,6 +128,8 @@ export default function DecodePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
   const enrichSelfHealAttemptRef = useRef(0);
+  /** 防止自愈退避与手动重算同时对同一 signal 并发打 profile，烧穿 LLM 预算 */
+  const profileEnrichInFlightRef = useRef(false);
   const [isRetryingProfile, setIsRetryingProfile] = useState(false);
   const [profileRetryCooldownSec, setProfileRetryCooldownSec] = useState(0);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -270,6 +272,12 @@ export default function DecodePage() {
      fetchSignal(); 
    }, [id]);
 
+  // 切换 decode 目标时重置自愈计数与飞行锁，避免跨 ID 串线
+  useEffect(() => {
+    enrichSelfHealAttemptRef.current = 0;
+    profileEnrichInFlightRef.current = false;
+  }, [id]);
+
   /** 入库后异步补全（enrich）期间轮询刷新，体征与脚注在后台落盘后可无刷新呈现 */
   const pendingEnrichment =
     Boolean(
@@ -290,11 +298,12 @@ export default function DecodePage() {
     if (!id) return;
     if (profileRetryCooldownSec > 0 || isRetryingProfile) return;
     setIsRetryingProfile(true);
+    profileEnrichInFlightRef.current = true;
     setProfileRetryCooldownSec(30);
     void (async () => {
       const ac = new AbortController();
-      // 服务端 profile 步骤硬超时为 48s，retry 客户端需留足等待时间
-      const timer = setTimeout(() => ac.abort(), 55_000);
+      // 与 ingest/enrich profile 硬熔断（108s）及路由 maxDuration 对齐，避免客户端提前 Abort
+      const timer = setTimeout(() => ac.abort(), 118_000);
       try {
         await fetch('/api/v1/ingest/enrich', {
           method: 'POST',
@@ -308,6 +317,7 @@ export default function DecodePage() {
         /* 静默：下次可继续手动重试 */
       } finally {
         clearTimeout(timer);
+        profileEnrichInFlightRef.current = false;
       }
 
       try {
@@ -327,6 +337,7 @@ export default function DecodePage() {
   // 🛡️ 自愈补全：Vercel 偶发 504 会导致 enrichmentPending 被卡死；解码页按退避策略补打 profile
   useEffect(() => {
     if (!id || !pendingEnrichment) return;
+    if (isRetryingProfile || profileEnrichInFlightRef.current) return;
     const m = signal?.metadata as { intelProfile?: unknown; enrichmentPending?: boolean } | undefined;
     if (m?.intelProfile) return;
     const attempt = enrichSelfHealAttemptRef.current;
@@ -335,19 +346,25 @@ export default function DecodePage() {
 
     // 延迟重试：先让轮询跑，再按指数退避补火，避免瞬时风暴
     const t = setTimeout(() => {
+      if (profileEnrichInFlightRef.current || isRetryingProfile) return;
+      profileEnrichInFlightRef.current = true;
       enrichSelfHealAttemptRef.current = attempt + 1;
       void fetch('/api/v1/ingest/enrich', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ signalId: id, step: 'profile' }),
-      }).catch(() => {
-        /* 静默：轮询与 cron 仍可兜底 */
-      });
+      })
+        .catch(() => {
+          /* 静默：轮询与 cron 仍可兜底 */
+        })
+        .finally(() => {
+          profileEnrichInFlightRef.current = false;
+        });
     }, delays[attempt]);
 
     return () => clearTimeout(t);
-  }, [id, pendingEnrichment, signal?.metadata]);
+  }, [id, pendingEnrichment, signal?.metadata, isRetryingProfile]);
 
   useEffect(() => {
     if (!id || !pendingEnrichment) return;

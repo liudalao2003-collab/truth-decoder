@@ -13,20 +13,19 @@ import type { IntelProfileError } from '@/types/intel-profile';
 import { isIntelProfileFallback } from '@/types/intel-profile';
 import type { BilingualData } from '@/types/database';
 
-/** 与 vercel.json 对齐；Hobby 档单次仍约 10s，故拆成 intel / profile 两步各享独立预算 */
-export const maxDuration = 60;
+/** 与 vercel.json 对齐；profile 链式 LLM 与 vercel.json 中本路由 maxDuration: 120 一致 */
+export const maxDuration = 120;
 const PENDING_STALE_MS = 3 * 60 * 1000;
 const INTEL_STEP_BUDGET_MS = 8_000;
 /**
- * profile 步骤三层预算：
- * - fetchTimeoutMs：单次 DeepSeek 调用完整超时（44s，覆盖 fetch 连接 + body 读取全程）。
- *   DeepSeek 生成 4096 token JSON 约需 20-35s；44s 留有充足缓冲。
- * - llmBudgetMs：LLM 链整体预算（44s，单次尝试内完成）
- * - hardDeadlineMs：Promise.race 硬熔断（48s），Vercel 60s 前必然返回
+ * profile 步骤三层预算（与 Vercel 本函数 120s 上限对齐，留约 12s 给鉴权与 DB）：
+ * - fetchTimeoutMs：单次 DeepSeek 调用完整超时（含 body 读取），避免挂起拖满整链。
+ * - llmBudgetMs：全文→精简→仅事实等多跳链的总时间上限。
+ * - hardDeadlineMs：Promise.race 硬熔断，确保在平台限制前落盘。
  */
-const PROFILE_STEP_FETCH_TIMEOUT_MS = 44_000;
-const PROFILE_STEP_LLM_BUDGET_MS = 44_000;
-const PROFILE_STEP_HARD_DEADLINE_MS = 48_000;
+const PROFILE_STEP_FETCH_TIMEOUT_MS = 90_000;
+const PROFILE_STEP_LLM_BUDGET_MS = 100_000;
+const PROFILE_STEP_HARD_DEADLINE_MS = 108_000;
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);

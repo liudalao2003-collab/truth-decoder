@@ -267,7 +267,7 @@ def main():
                                 API_ENRICH,
                                 json={"signalId": signal_id, "step": step},
                                 headers={"Authorization": f"Bearer {INGEST_TOKEN}"},
-                                timeout=120,
+                                timeout=130,
                             )
                             if er.status_code != 200:
                                 print(f"   🟡 [补全告警] enrich/{step} HTTP {er.status_code}")

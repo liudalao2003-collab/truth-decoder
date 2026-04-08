@@ -414,11 +414,12 @@ export default function HomePage() {
               const intelRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
                 ...opts,
                 body: JSON.stringify({ signalId: sid, step: 'intel' }),
-              }, 12_000).catch(() => null);
+              }, 15_000).catch(() => null);
+              // profile 含多跳 LLM，须与 ingest/enrich maxDuration（120s）及客户端等待一致，禁止 12s 误杀
               const profileRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
                 ...opts,
                 body: JSON.stringify({ signalId: sid, step: 'profile' }),
-              }, 12_000).catch(() => null);
+              }, 118_000).catch(() => null);
               const intelOk = Boolean(intelRes?.ok);
               const profileOk = Boolean(profileRes?.ok);
               // profile 成功即可视为主链可用；intel 失败可由后续修复链慢补
