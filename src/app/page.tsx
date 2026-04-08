@@ -411,20 +411,16 @@ export default function HomePage() {
               }
             };
             const runOnce = async (): Promise<boolean> => {
-              const [intelRes, profileRes] = await Promise.allSettled([
-                fetchWithTimeout('/api/v1/ingest/enrich', {
-                  ...opts,
-                  body: JSON.stringify({ signalId: sid, step: 'intel' }),
-                }, 12_000),
-                fetchWithTimeout('/api/v1/ingest/enrich', {
-                  ...opts,
-                  body: JSON.stringify({ signalId: sid, step: 'profile' }),
-                }, 18_000),
-              ]);
-              const intelOk =
-                intelRes.status === 'fulfilled' ? intelRes.value.ok : false;
-              const profileOk =
-                profileRes.status === 'fulfilled' ? profileRes.value.ok : false;
+              const intelRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
+                ...opts,
+                body: JSON.stringify({ signalId: sid, step: 'intel' }),
+              }, 12_000).catch(() => null);
+              const profileRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
+                ...opts,
+                body: JSON.stringify({ signalId: sid, step: 'profile' }),
+              }, 12_000).catch(() => null);
+              const intelOk = Boolean(intelRes?.ok);
+              const profileOk = Boolean(profileRes?.ok);
               // profile 成功即可视为主链可用；intel 失败可由后续修复链慢补
               return profileOk || (intelOk && profileOk);
             };

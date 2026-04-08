@@ -15,8 +15,8 @@ export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v2.1';
 
 /** 精简信源长度，降低触发上游 content_filter 的概率 */
 const INTEL_SOURCE_SLIM_CHARS = 4000;
-const PROFILE_LLM_BUDGET_MS = 24_000;
-const PROFILE_FETCH_TIMEOUT_MS = 7_000;
+const DEFAULT_PROFILE_LLM_BUDGET_MS = 24_000;
+const DEFAULT_PROFILE_FETCH_TIMEOUT_MS = 7_000;
 
 function normalizeHardFacts(facts: BilingualData | string[] | undefined): {
   cn: string[];
@@ -71,7 +71,8 @@ const INTEL_FETCH_STRATEGIES: IntelFetchStrategy[] = [
 async function callDeepSeekJson(
   systemPrompt: string,
   userContent: string,
-  deadlineAt: number
+  deadlineAt: number,
+  fetchTimeoutMs: number
 ): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('未配置 DEEPSEEK_API_KEY');
@@ -108,7 +109,7 @@ async function callDeepSeekJson(
     const remaining = deadlineAt - Date.now();
     const timeoutMs = Math.max(
       1200,
-      Math.min(PROFILE_FETCH_TIMEOUT_MS, remaining - 300)
+      Math.min(fetchTimeoutMs, remaining - 300)
     );
     if (timeoutMs <= 1200) {
       throw new Error('Intel profile LLM budget exhausted');
@@ -364,7 +365,8 @@ function buildUserBlock(
 async function fetchIntelProfileJsonString(
   userFull: string,
   userSlim: string,
-  userFactsOnly: string
+  userFactsOnly: string,
+  options?: { llmBudgetMs?: number; fetchTimeoutMs?: number }
 ): Promise<string> {
   const chain: Array<[string, string]> = [
     [SYSTEM_PROMPT, userFull],
@@ -376,13 +378,21 @@ async function fetchIntelProfileJsonString(
   ];
 
   let lastErr: unknown = new Error('unknown');
-  const deadlineAt = Date.now() + PROFILE_LLM_BUDGET_MS;
+  const llmBudgetMs =
+    typeof options?.llmBudgetMs === 'number' && options.llmBudgetMs > 1500
+      ? options.llmBudgetMs
+      : DEFAULT_PROFILE_LLM_BUDGET_MS;
+  const fetchTimeoutMs =
+    typeof options?.fetchTimeoutMs === 'number' && options.fetchTimeoutMs > 1200
+      ? options.fetchTimeoutMs
+      : DEFAULT_PROFILE_FETCH_TIMEOUT_MS;
+  const deadlineAt = Date.now() + llmBudgetMs;
   for (const [sys, block] of chain) {
     if (Date.now() >= deadlineAt) {
       break;
     }
     try {
-      return await callDeepSeekJson(sys, block, deadlineAt);
+      return await callDeepSeekJson(sys, block, deadlineAt, fetchTimeoutMs);
     } catch (e) {
       lastErr = e;
     }
@@ -566,7 +576,8 @@ function parseIntelProfileFromRaw(raw: string): IntelProfile | null {
  */
 export async function generateIntelProfile(
   rawContent: string,
-  hardFacts: BilingualData | string[] | undefined
+  hardFacts: BilingualData | string[] | undefined,
+  options?: { llmBudgetMs?: number; fetchTimeoutMs?: number }
 ): Promise<IntelProfile> {
   logger.start('情报体征短调用');
   const { cn, en } = normalizeHardFacts(hardFacts);
@@ -577,7 +588,7 @@ export async function generateIntelProfile(
 
   try {
     logger.async('情报体征 LLM 链式调用（全文→精简→仅事实）');
-    const raw = await fetchIntelProfileJsonString(userFull, userSlim, userFactsOnly);
+    const raw = await fetchIntelProfileJsonString(userFull, userSlim, userFactsOnly, options);
     const profile = parseIntelProfileFromRaw(raw);
     if (profile) {
       logger.success('情报体征契约校验通过');
