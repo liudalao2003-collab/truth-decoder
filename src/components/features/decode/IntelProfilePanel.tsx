@@ -87,6 +87,8 @@ export default function IntelProfilePanel({
         at: profileProp!.audit.generatedAt,
       }
     : profileErrorProp;
+  const recomputeIdleLabel = lang === 'cn' ? '质量重算' : 'Quality recompute';
+  const recomputeBusyLabel = lang === 'cn' ? '重算中…' : 'Recomputing…';
 
   if (profileError && !profile) {
     return (
@@ -95,8 +97,8 @@ export default function IntelProfilePanel({
           <ShieldAlert className="w-5 h-5 shrink-0" />
           <span>
             {lang === 'cn'
-              ? '情报体征生成失败，请点击下方按钮重试。'
-              : 'Intel signature failed. Click the button below to retry.'}
+              ? '情报体征生成失败，请点击下方按钮进行质量重算。'
+              : 'Intel signature failed. Click the button below to recompute quality.'}
           </span>
         </div>
         {process.env.NODE_ENV === 'development' && (
@@ -116,8 +118,8 @@ export default function IntelProfilePanel({
                 <RefreshCw className="w-3.5 h-3.5" />
               )}
               {retryingProfile
-                ? (lang === 'cn' ? '重新生成中…' : 'Regenerating…')
-                : (lang === 'cn' ? '重试体征生成' : 'Retry generation')}
+                ? recomputeBusyLabel
+                : recomputeIdleLabel}
               {!retryingProfile && retryCooldownSec > 0 ? ` (${retryCooldownSec}s)` : ''}
             </button>
           </div>
@@ -192,15 +194,33 @@ export default function IntelProfilePanel({
               : 'Adversarial sketch from the source; not investment advice or a legal/audit conclusion.'}
           </p>
         </div>
-        {!unlocked && (
-          <button
-            type="button"
-            onClick={onRequireAuth}
-            className="text-[10px] font-bold uppercase tracking-widest px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-md transition-colors shrink-0"
-          >
-            {lang === 'cn' ? '登录解锁全维' : 'Unlock full profile'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRetryProfile && (
+            <button
+              type="button"
+              onClick={onRetryProfile}
+              disabled={retryProfileDisabled}
+              className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest px-4 py-2 rounded-md border border-zinc-200 bg-white text-zinc-700 hover:text-red-700 hover:border-red-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {retryingProfile ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              {retryingProfile ? recomputeBusyLabel : recomputeIdleLabel}
+              {!retryingProfile && retryCooldownSec > 0 ? ` (${retryCooldownSec}s)` : ''}
+            </button>
+          )}
+          {!unlocked && (
+            <button
+              type="button"
+              onClick={onRequireAuth}
+              className="text-[10px] font-bold uppercase tracking-widest px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-md transition-colors shrink-0"
+            >
+              {lang === 'cn' ? '登录解锁全维' : 'Unlock full profile'}
+            </button>
+          )}
+        </div>
       </header>
 
       <IntelExecutiveDigestBanner

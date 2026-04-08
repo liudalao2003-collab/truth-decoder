@@ -300,7 +300,8 @@ export default function DecodePage() {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signalId: id, step: 'profile' }),
+          // 质量重算：即使已有体征，也强制发起新一轮生成。
+          body: JSON.stringify({ signalId: id, step: 'profile', forceRegenerate: true }),
           signal: ac.signal,
         });
       } catch {

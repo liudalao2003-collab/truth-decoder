@@ -59,8 +59,8 @@ export default function IntelProfileLoadingSkeleton({
               <RefreshCw className="w-3.5 h-3.5" />
             )}
             {retrying
-              ? (lang === 'cn' ? '补算中…' : 'Retrying…')
-              : (lang === 'cn' ? '重试体征补算' : 'Retry profile')}
+              ? (lang === 'cn' ? '重算中…' : 'Recomputing…')
+              : (lang === 'cn' ? '质量重算' : 'Quality recompute')}
             {!retrying && retryCooldownSec > 0
               ? ` (${retryCooldownSec}s)`
               : ''}

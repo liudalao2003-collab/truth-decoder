@@ -78,6 +78,7 @@ export type EnrichStep = 'intel' | 'profile';
 interface EnrichBody {
   signalId?: string;
   step?: EnrichStep;
+  forceRegenerate?: boolean;
 }
 
 /**
@@ -96,6 +97,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as EnrichBody;
     const signalId = typeof body.signalId === 'string' ? body.signalId.trim() : '';
     const step = body.step === 'profile' ? 'profile' : 'intel';
+    const forceRegenerate = body.forceRegenerate === true;
 
     if (!signalId) {
       return NextResponse.json({ success: false, error: 'Missing signalId' }, { status: 400 });
@@ -187,7 +189,7 @@ export async function POST(req: Request) {
 
     // step === 'profile'
     const prevMeta = isMetaRecord(rowObj.metadata) ? rowObj.metadata : {};
-    if (!needsIntelProfileRegeneration(prevMeta)) {
+    if (!forceRegenerate && !needsIntelProfileRegeneration(prevMeta)) {
       await supabaseAdmin
         .from('signals')
         .update({
@@ -249,6 +251,16 @@ export async function POST(req: Request) {
 
     const factsForProfile = asBilingualData(rowObj.hard_facts);
     let mergedMeta: Record<string, unknown> = { ...prevMeta };
+    // 质量重算：用户主动触发时记录审计字段，便于线上问题回溯。
+    if (forceRegenerate) {
+      const currentCount =
+        typeof mergedMeta.qualityRecomputeCount === 'number'
+          ? mergedMeta.qualityRecomputeCount
+          : 0;
+      mergedMeta.qualityRecomputeCount = currentCount + 1;
+      mergedMeta.lastRecomputeAt = new Date().toISOString();
+      mergedMeta.lastRecomputeReason = 'user_quality_recompute';
+    }
 
     try {
       const profile = await generateIntelProfile(rawContent, factsForProfile, {
