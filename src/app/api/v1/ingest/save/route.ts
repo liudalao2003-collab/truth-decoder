@@ -24,16 +24,23 @@ export async function POST(req: Request) {
     const safeSnippet = rawContent.substring(0, 100).replace(/[%_]/g, '');
     const { data: existing } = await supabaseAdmin
       .from('signals')
-      .select('id, metadata')
+      .select('id, metadata, owner_id')
       .ilike('raw_content', `${safeSnippet}%`)
-      .limit(1);
+      .limit(8);
 
-    if (existing && existing.length > 0) {
-      const row = existing[0];
+    const reusableRow = (existing ?? []).find((row) => {
+      const typedRow = row as { owner_id?: string | null };
+      if (auth.kind === 'service') return true;
+      const ownerId = typedRow.owner_id ?? null;
+      // 仅复用当前用户可后续 enrich/sync 的记录，避免落入 403 Forbidden 死链
+      return ownerId === null || ownerId === '' || ownerId === auth.userId;
+    });
+
+    if (reusableRow) {
       return NextResponse.json({
         success: true,
         data: {
-          signalId: row.id,
+          signalId: reusableRow.id,
           duplicate: true as const,
           enrichmentRequired: true as const,
         },
