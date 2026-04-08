@@ -9,6 +9,7 @@ const MIN_DOSSIER_LENGTH = 500;
 const MIN_DOSSIER_LENGTH_EN = 3500;
 const MAX_DOSSIER_RETRIES = 3;
 const MAX_TRANSLATE_RETRIES = 3;
+const DOSSIER_TRANSLATE_CHUNK_MAX_CHARS = 6000;
 // EN 模式中文污染红线：中文字符占总字符比超过此值时触发清洗（3%）
 const CHINESE_POLLUTION_THRESHOLD = 0.03;
 // CN 模式英文污染红线：英文字母占总字符比超过此值时触发清洗（2%）
@@ -232,12 +233,47 @@ async function runCnCleanupTranslation(
  * 确保每块的 token 量可控（约 1500-2500 tokens），避免单次翻译超出 max_tokens 8192 上限。
  */
 function splitDossierIntoSections(text: string): string[] {
-  // 以 \n## 作为段落分隔符，保留标题行在每块开头
-  const parts = text.split(/(?=\n## )/);
-  // 过滤掉纯空行块，并去除首尾空白
-  const chunks = parts.map((p) => p.trim()).filter((p) => p.length > 0);
-  // 若分割失败（文本中无 ## 标题），降级为整块处理
-  return chunks.length > 0 ? chunks : [text];
+  const majorParts = text
+    .split(/(?=^##\s+)/m)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  const parts = majorParts.length > 0 ? majorParts : [text];
+  const out: string[] = [];
+
+  // 若某个二级章过长，再按三级标题切分，防止翻译阶段出现缺段/截断
+  for (const part of parts) {
+    if (part.length <= DOSSIER_TRANSLATE_CHUNK_MAX_CHARS) {
+      out.push(part);
+      continue;
+    }
+    const subParts = part
+      .split(/(?=^###\s+)/m)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    if (subParts.length <= 1) {
+      out.push(part);
+      continue;
+    }
+
+    let acc = '';
+    for (const sub of subParts) {
+      if (!acc) {
+        acc = sub;
+        continue;
+      }
+      const next = `${acc}\n\n${sub}`;
+      if (next.length > DOSSIER_TRANSLATE_CHUNK_MAX_CHARS) {
+        out.push(acc);
+        acc = sub;
+      } else {
+        acc = next;
+      }
+    }
+    if (acc) out.push(acc);
+  }
+
+  return out.length > 0 ? out : [text];
 }
 
 /**

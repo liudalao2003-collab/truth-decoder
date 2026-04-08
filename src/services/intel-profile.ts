@@ -15,6 +15,8 @@ export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v2.1';
 
 /** 精简信源长度，降低触发上游 content_filter 的概率 */
 const INTEL_SOURCE_SLIM_CHARS = 4000;
+const PROFILE_LLM_BUDGET_MS = 24_000;
+const PROFILE_FETCH_TIMEOUT_MS = 7_000;
 
 function normalizeHardFacts(facts: BilingualData | string[] | undefined): {
   cn: string[];
@@ -60,8 +62,6 @@ type IntelFetchStrategy = {
 
 const INTEL_FETCH_STRATEGIES: IntelFetchStrategy[] = [
   { useJsonObjectFormat: true, temperature: 0.25, maxTokens: 8192 },
-  { useJsonObjectFormat: true, temperature: 0.35, maxTokens: 8192 },
-  /** 部分环境下 json_object 会偶发空正文，降级为普通补全仍要求 JSON */
   { useJsonObjectFormat: false, temperature: 0.35, maxTokens: 8192 },
 ];
 
@@ -70,7 +70,8 @@ const INTEL_FETCH_STRATEGIES: IntelFetchStrategy[] = [
  */
 async function callDeepSeekJson(
   systemPrompt: string,
-  userContent: string
+  userContent: string,
+  deadlineAt: number
 ): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('未配置 DEEPSEEK_API_KEY');
@@ -78,6 +79,9 @@ async function callDeepSeekJson(
   let lastEmptyDiag: string | undefined;
 
   for (let i = 0; i < INTEL_FETCH_STRATEGIES.length; i++) {
+    if (Date.now() >= deadlineAt) {
+      throw new Error('Intel profile LLM budget exhausted');
+    }
     const strat = INTEL_FETCH_STRATEGIES[i];
     if (i > 0) {
       await new Promise((r) => setTimeout(r, 400 * i));
@@ -101,6 +105,16 @@ async function callDeepSeekJson(
       body.response_format = { type: 'json_object' };
     }
 
+    const remaining = deadlineAt - Date.now();
+    const timeoutMs = Math.max(
+      1200,
+      Math.min(PROFILE_FETCH_TIMEOUT_MS, remaining - 300)
+    );
+    if (timeoutMs <= 1200) {
+      throw new Error('Intel profile LLM budget exhausted');
+    }
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
@@ -108,7 +122,9 @@ async function callDeepSeekJson(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: ac.signal,
     });
+    clearTimeout(timer);
 
     if (!res.ok) {
       const t = await res.text();
@@ -360,9 +376,13 @@ async function fetchIntelProfileJsonString(
   ];
 
   let lastErr: unknown = new Error('unknown');
+  const deadlineAt = Date.now() + PROFILE_LLM_BUDGET_MS;
   for (const [sys, block] of chain) {
+    if (Date.now() >= deadlineAt) {
+      break;
+    }
     try {
-      return await callDeepSeekJson(sys, block);
+      return await callDeepSeekJson(sys, block, deadlineAt);
     } catch (e) {
       lastErr = e;
     }

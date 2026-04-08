@@ -18,6 +18,7 @@ interface ResolveParams {
 
 const memoryCache = new Map<string, string>();
 const inflightCache = new Map<string, Promise<string>>();
+const CACHE_VERSION = 'v2';
 
 function simpleHash(input: string): string {
   let hash = 5381;
@@ -40,7 +41,7 @@ async function buildContentHash(input: string): Promise<string> {
 }
 
 function buildLocalStorageKey(cacheKey: string): string {
-  return `TD_TRANSLATION_CACHE:${cacheKey}`;
+  return `TD_TRANSLATION_CACHE:${CACHE_VERSION}:${cacheKey}`;
 }
 
 export function useBilingualCache(recordId: string | null, namespace: Namespace) {

@@ -6,8 +6,6 @@ import type { IngestIntelBilingual } from '@/services/bilingual-intel-repair';
 import {
   normalizeIngestIntel,
   repairIntelEnglishFromChinese,
-  repairIntelProfileEnglishFromChinese,
-  needsIntelProfileEnglishRepair,
 } from '@/services/bilingual-intel-repair';
 import { generateIntelProfile } from '@/services/intel-profile';
 import { regenerateFullIntelJsonFromRaw } from '@/services/regenerate-ingest-intel';
@@ -166,9 +164,8 @@ export async function POST(req: Request) {
 
     try {
       let profile = await generateIntelProfile(rawContent, factsForProfile);
-      if (needsIntelProfileEnglishRepair(profile)) {
-        profile = await repairIntelProfileEnglishFromChinese(profile);
-      }
+      // 🚨 Vercel 60s 超时防线：profile 步骤禁止再做二次英文化修复（高耗时）
+      // 解释：profile 生成主链已保证 en 字段契约；二次修复在云端高并发下会显著放大超时概率。
       mergedMeta = { ...mergedMeta, intelProfile: profile };
       delete mergedMeta.intelProfileError;
     } catch (e: unknown) {
