@@ -127,7 +127,7 @@ export default function DecodePage() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
-  const enrichSelfHealRef = useRef(false);
+  const enrichSelfHealAttemptRef = useRef(0);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
   const [hasSession, setHasSession] = useState(false);
@@ -276,17 +276,18 @@ export default function DecodePage() {
         (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true
     );
 
-  // 🛡️ 自愈补全：Vercel 偶发 504 会导致 enrichmentPending 被卡死；解码页主动补打一发 profile 补全
+  // 🛡️ 自愈补全：Vercel 偶发 504 会导致 enrichmentPending 被卡死；解码页按退避策略补打 profile
   useEffect(() => {
     if (!id || !pendingEnrichment) return;
-    if (enrichSelfHealRef.current) return;
     const m = signal?.metadata as { intelProfile?: unknown; enrichmentPending?: boolean } | undefined;
     if (m?.intelProfile) return;
+    const attempt = enrichSelfHealAttemptRef.current;
+    const delays = [3800, 10000, 25000];
+    if (attempt >= delays.length) return;
 
-    // 延迟一点点，优先让轮询先跑一轮（避免重复开火）
+    // 延迟重试：先让轮询跑，再按指数退避补火，避免瞬时风暴
     const t = setTimeout(() => {
-      if (enrichSelfHealRef.current) return;
-      enrichSelfHealRef.current = true;
+      enrichSelfHealAttemptRef.current = attempt + 1;
       void fetch('/api/v1/ingest/enrich', {
         method: 'POST',
         credentials: 'include',
@@ -295,7 +296,7 @@ export default function DecodePage() {
       }).catch(() => {
         /* 静默：轮询与 cron 仍可兜底 */
       });
-    }, 3800);
+    }, delays[attempt]);
 
     return () => clearTimeout(t);
   }, [id, pendingEnrichment, signal?.metadata]);

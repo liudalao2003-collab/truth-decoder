@@ -14,6 +14,7 @@ import type { BilingualData } from '@/types/database';
 
 /** 与 vercel.json 对齐；Hobby 档单次仍约 10s，故拆成 intel / profile 两步各享独立预算 */
 export const maxDuration = 60;
+const PENDING_STALE_MS = 3 * 60 * 1000;
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -65,6 +66,7 @@ interface EnrichBody {
  * - profile：情报体征 + 可选英文译补 + 清除 enrichmentPending
  */
 export async function POST(req: Request) {
+  const startedAt = Date.now();
   try {
     const auth = await assertIngestAuthorized(req);
     if (!auth.ok) {
@@ -95,6 +97,12 @@ export async function POST(req: Request) {
     }
 
     const rawContent = typeof rowObj.raw_content === 'string' ? rowObj.raw_content : '';
+    const rowCreatedAtMs = (() => {
+      const s = rowObj.created_at;
+      if (typeof s !== 'string') return null;
+      const t = Date.parse(s);
+      return Number.isNaN(t) ? null : t;
+    })();
 
     if (step === 'intel') {
       let intel = buildIntelFromRow(rowObj);
@@ -139,7 +147,11 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        data: { signalId, step: 'intel' as const },
+        data: {
+          signalId,
+          step: 'intel' as const,
+          elapsedMs: Date.now() - startedAt,
+        },
       });
     }
 
@@ -155,8 +167,54 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        data: { signalId, step: 'profile' as const, skipped: true },
+        data: {
+          signalId,
+          step: 'profile' as const,
+          skipped: true,
+          elapsedMs: Date.now() - startedAt,
+        },
       });
+    }
+
+    // 运维保险：陈旧 pending（>3分钟）直接熔断，避免页面无限加载骨架
+    if (rowCreatedAtMs && Date.now() - rowCreatedAtMs > PENDING_STALE_MS) {
+      const stalePayload: IntelProfileError = {
+        message: 'intel profile pending timeout (stale pending tripped)',
+        at: new Date().toISOString(),
+      };
+      const staleMeta: Record<string, unknown> = {
+        ...prevMeta,
+        intelProfileError: stalePayload,
+        enrichmentPending: false,
+      };
+      delete staleMeta.intelProfile;
+      const { error: staleErr } = await supabaseAdmin
+        .from('signals')
+        .update({ metadata: staleMeta })
+        .eq('id', signalId);
+      if (staleErr) throw staleErr;
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟡 [模块_异步] -> 目标: stale pending tripped', {
+          signalId,
+          ageMs: Date.now() - rowCreatedAtMs,
+        });
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            signalId,
+            step: 'profile' as const,
+            stalePendingTripped: true,
+            elapsedMs: Date.now() - startedAt,
+          },
+        },
+        {
+          headers: { 'x-td-profile-status': 'stale-pending-tripped' },
+        }
+      );
     }
 
     const factsForProfile = asBilingualData(rowObj.hard_facts);
@@ -185,14 +243,26 @@ export async function POST(req: Request) {
 
     if (metaErr) throw metaErr;
 
-    return NextResponse.json({
-      success: true,
-      data: { signalId, step: 'profile' as const },
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          signalId,
+          step: 'profile' as const,
+          elapsedMs: Date.now() - startedAt,
+        },
+      },
+      {
+        headers: { 'x-td-profile-status': 'ok' },
+      }
+    );
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'enrich failed';
     if (process.env.NODE_ENV === 'development') {
-      console.error('🔴 [ingest/enrich] ->', errMsg);
+      console.error('🔴 [ingest/enrich] ->', {
+        errMsg,
+        elapsedMs: Date.now() - startedAt,
+      });
     }
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
