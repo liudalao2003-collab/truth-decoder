@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { ChevronDown, ListChecks, Lock, ShieldAlert, Users } from 'lucide-react';
+import { ChevronDown, ListChecks, Loader2, Lock, RefreshCw, ShieldAlert, Users } from 'lucide-react';
 import IntelProfileRadar from '@/components/features/decode/IntelProfileRadar';
 import IntelExecutiveDigestBanner from '@/components/features/decode/IntelExecutiveDigestBanner';
 import IntelRadarAxisPills from '@/components/features/decode/IntelRadarAxisPills';
@@ -11,6 +11,7 @@ import IntelProfileLoadingSkeleton from '@/components/features/decode/IntelProfi
 import { buildIntelExecutiveDigest } from '@/lib/intel-executive-digest';
 import { RADAR_AXIS_ORDER, radarLabels } from '@/lib/intel-profile-ui';
 import type { IntelProfile, IntelProfileError } from '@/types/intel-profile';
+import { isIntelProfileFallback } from '@/types/intel-profile';
 import type { IntelProfileRadarKey } from '@/types/intel-profile';
 
 interface IntelProfilePanelProps {
@@ -48,8 +49,8 @@ const accordionBtnClass =
  * 情报体征主面板：雷达 + 依据 + 沙盘 + 核验 + 审计；未登录仅开放叙事煽动一维。
  */
 export default function IntelProfilePanel({
-  profile,
-  profileError,
+  profile: profileProp,
+  profileError: profileErrorProp,
   lang,
   unlocked,
   onRequireAuth,
@@ -73,19 +74,53 @@ export default function IntelProfilePanel({
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, []);
 
+  // 检测并纠正遗留的降级占位体征（历史版本曾将 fallback 写入 intelProfile 字段）。
+  // 在 UI 层统一视为生成失败状态，触发重试入口，避免用户看到无意义的"系统占位"内容。
+  const isFallback = profileProp != null && isIntelProfileFallback(profileProp);
+  const profile: IntelProfile | undefined = isFallback ? undefined : profileProp;
+  const profileError: IntelProfileError | undefined = isFallback
+    ? {
+        message:
+          lang === 'cn'
+            ? '体征为系统占位内容（AI 生成超时），请点击重试重新生成'
+            : 'Placeholder profile detected (AI timed out). Click Retry to regenerate.',
+        at: profileProp!.audit.generatedAt,
+      }
+    : profileErrorProp;
+
   if (profileError && !profile) {
     return (
       <section className="mb-10 border border-red-900/40 bg-red-950/20 rounded-sm p-6">
-        <div className="flex items-center gap-3 text-red-400 text-sm font-mono">
+        <div className="flex items-center gap-3 text-red-400 text-sm font-mono mb-4">
           <ShieldAlert className="w-5 h-5 shrink-0" />
           <span>
             {lang === 'cn'
-              ? '情报体征生成失败（可稍后由管理员触发补算）。'
-              : 'Intel signature failed (retry via admin/cron).'}
+              ? '情报体征生成失败，请点击下方按钮重试。'
+              : 'Intel signature failed. Click the button below to retry.'}
           </span>
         </div>
         {process.env.NODE_ENV === 'development' && (
-          <p className="mt-2 text-xs text-zinc-600 font-mono break-all">{profileError.message}</p>
+          <p className="mb-3 text-xs text-zinc-600 font-mono break-all">{profileError.message}</p>
+        )}
+        {onRetryProfile && (
+          <div className="flex items-center justify-center">
+            <button
+              type="button"
+              onClick={onRetryProfile}
+              disabled={retryProfileDisabled}
+              className="inline-flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest px-4 py-2 rounded-md border border-red-300/60 bg-red-950/30 text-red-300 hover:text-white hover:border-red-400 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {retryingProfile ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+              {retryingProfile
+                ? (lang === 'cn' ? '重新生成中…' : 'Regenerating…')
+                : (lang === 'cn' ? '重试体征生成' : 'Retry generation')}
+              {!retryingProfile && retryCooldownSec > 0 ? ` (${retryCooldownSec}s)` : ''}
+            </button>
+          </div>
         )}
       </section>
     );

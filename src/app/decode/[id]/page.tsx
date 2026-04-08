@@ -293,7 +293,8 @@ export default function DecodePage() {
     setProfileRetryCooldownSec(30);
     void (async () => {
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 20_000);
+      // 服务端 profile 步骤硬超时为 48s，retry 客户端需留足等待时间
+      const timer = setTimeout(() => ac.abort(), 55_000);
       try {
         await fetch('/api/v1/ingest/enrich', {
           method: 'POST',

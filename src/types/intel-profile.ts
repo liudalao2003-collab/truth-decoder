@@ -71,3 +71,12 @@ export const IntelProfileErrorSchema = z.object({
 });
 
 export type IntelProfileError = z.infer<typeof IntelProfileErrorSchema>;
+
+/**
+ * 判断一个 IntelProfile 是否为确定性降级兜底输出（AI 未能真实生成）。
+ * promptVersion 含 'fallback' 是唯一标志。
+ * 可在客户端与服务端共用，无外部依赖。
+ */
+export function isIntelProfileFallback(profile: IntelProfile): boolean {
+  return (profile?.audit?.promptVersion ?? '').includes('fallback');
+}

@@ -10,6 +10,7 @@ import {
 import { generateIntelProfile } from '@/services/intel-profile';
 import { regenerateFullIntelJsonFromRaw } from '@/services/regenerate-ingest-intel';
 import type { IntelProfileError } from '@/types/intel-profile';
+import { isIntelProfileFallback } from '@/types/intel-profile';
 import type { BilingualData } from '@/types/database';
 
 /** 与 vercel.json 对齐；Hobby 档单次仍约 10s，故拆成 intel / profile 两步各享独立预算 */
@@ -31,9 +32,17 @@ function isMetaRecord(x: unknown): x is Record<string, unknown> {
 }
 
 function needsIntelProfileRegeneration(meta: Record<string, unknown>): boolean {
-  const hasProfile = meta.intelProfile != null && typeof meta.intelProfile === 'object';
+  const profileObj = meta.intelProfile;
+  // 将降级占位体征（promptVersion 含 'fallback'）视为需重新生成，
+  // 保证用户手动 retry 时可触发真实 AI 调用
+  const hasRealProfile =
+    profileObj != null &&
+    typeof profileObj === 'object' &&
+    !String(
+      ((profileObj as Record<string, unknown>).audit as Record<string, unknown>)?.promptVersion ?? ''
+    ).includes('fallback');
   const hasError = meta.intelProfileError != null;
-  return !hasProfile || hasError;
+  return !hasRealProfile || hasError;
 }
 
 function asBilingualData(x: unknown): { cn: string[]; en: string[] } {
@@ -246,10 +255,21 @@ export async function POST(req: Request) {
         llmBudgetMs: PROFILE_STEP_LLM_BUDGET_MS,
         hardDeadlineMs: PROFILE_STEP_HARD_DEADLINE_MS,
       });
-      // 🚨 Vercel 60s 超时防线：profile 步骤禁止再做二次英文化修复（高耗时）
-      // 解释：profile 生成主链已保证 en 字段契约；二次修复在云端高并发下会显著放大超时概率。
-      mergedMeta = { ...mergedMeta, intelProfile: profile };
-      delete mergedMeta.intelProfileError;
+
+      if (isIntelProfileFallback(profile)) {
+        // 硬超时熔断 / LLM 全失败时，写 intelProfileError 而非占位体征数据。
+        // 确保前端显示"重试"入口，而非把无意义的占位内容误作真实体征展示给用户。
+        const errPayload: IntelProfileError = {
+          message: '情报体征 AI 生成超时，请使用重试按钮重新生成',
+          at: new Date().toISOString(),
+        };
+        mergedMeta = { ...mergedMeta, intelProfileError: errPayload };
+        delete mergedMeta.intelProfile;
+      } else {
+        // 🚨 Vercel 60s 超时防线：profile 步骤禁止再做二次英文化修复（高耗时）
+        mergedMeta = { ...mergedMeta, intelProfile: profile };
+        delete mergedMeta.intelProfileError;
+      }
     } catch (e: unknown) {
       const errPayload: IntelProfileError = {
         message: e instanceof Error ? e.message : '情报体征生成失败',
