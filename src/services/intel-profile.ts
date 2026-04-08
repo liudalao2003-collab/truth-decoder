@@ -11,7 +11,7 @@ import {
 } from '@/types/intel-profile';
 import { logger } from '@/utils/logger';
 
-export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v2';
+export const INTEL_PROFILE_PROMPT_VERSION = 'intel-profile-v2.1';
 
 /** 精简信源长度，降低触发上游 content_filter 的概率 */
 const INTEL_SOURCE_SLIM_CHARS = 4000;
@@ -164,9 +164,9 @@ SCORING LAW (0-100 integers):
 - COHERENCE: If a radar score is high (e.g. >= 70), the matching rationale bullets MUST show equally sharp mechanisms; avoid high scores with vague bullets.
 
 RATIONALE LAW (per dimension, per language):
-- Provide 1 to 3 bullets in each of "cn" and "en" arrays (same count in cn and en for each dimension).
-- Order: first bullet = THE PUNCH LINE (shortest, most incisive attack on the narrative).
-- Following bullets = evidence chain (finer, still anchored).
+- Provide EXACTLY 3 bullets in each of "cn" and "en" arrays for EVERY dimension (same count: 3 cn + 3 en per dimension).
+- Order: bullet1 = THE PUNCH LINE (most incisive); bullet2–3 = evidence chain with named mechanism and transfer direction.
+- LENGTH FLOOR (strict): each "cn" bullet MUST be at least 32 characters; each "en" bullet at least 90 characters. If too short, expand with concrete mechanism detail — never pad with filler adjectives.
 - Each bullet MUST anchor by EITHER a short verbatim phrase from the source OR a fact index "事实N" / "Fact N" where N matches the indexed HARD_FACTS lists (1-based).
 - Each bullet must combine: (1) mechanism — how the narrative pressures the reader or hides a transfer; (2) consequence — who pays, who extracts, or what becomes unverifiable.
 - Do not output legal verdicts or "guilty" language; stay forensic.
@@ -226,8 +226,9 @@ SCORING LAW (0-100 integers):
 - COHERENCE: If a radar score is high (e.g. >= 70), the matching rationale bullets MUST show equally concrete mechanisms.
 
 RATIONALE LAW (per dimension, per language):
-- Provide 1 to 3 bullets in each of "cn" and "en" arrays (same count in cn and en for each dimension).
-- Order: first bullet = sharpest summary line; following bullets = evidence chain.
+- Provide EXACTLY 3 bullets in each of "cn" and "en" arrays for EVERY dimension (same count: 3 cn + 3 en per dimension).
+- Order: bullet1 = sharpest summary; bullet2–3 = evidence chain.
+- LENGTH FLOOR (strict): each "cn" bullet at least 32 characters; each "en" bullet at least 90 characters.
 - Each bullet MUST anchor by EITHER a short verbatim phrase from the source OR a fact index "事实N" / "Fact N" where N matches the indexed HARD_FACTS lists (1-based).
 - Each bullet: (1) mechanism — how the narrative frames the reader; (2) consequence — what becomes hard to verify or who bears cost.
 

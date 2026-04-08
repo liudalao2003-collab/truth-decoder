@@ -10,6 +10,7 @@ export const runtime = 'edge';
  * V9.4 修复：从 MIXED SOURCE HANDLING 中移除所有中文示例字符。
  * 根因：前版本在 system prompt 中嵌入了中文词汇作为示例，导致 AI 看到中文示例后
  * "语言防线被激活"，反而在输出中夹带中文。本版改为纯英文描述，彻底切断污染源。
+ * V9.5：移除 [[Term::Analysis]] 字面范例，增加占位符禁令，避免 CN→EN 译出敷衍注脚。
  */
 export async function POST(req: Request) {
   try {
@@ -31,7 +32,13 @@ ABSOLUTE LANGUAGE LAW — ZERO TOLERANCE
 ZERO CHINESE. ZERO CHINESE. ZERO CHINESE.
 - Every single character — headings, body paragraphs, footnotes inside [[...]], bullet points — MUST be English.
 - FORBIDDEN: Any Chinese character (Unicode U+4E00–U+9FFF), Pinyin, or bilingual parentheticals (e.g. a Chinese word followed by its English translation in parentheses).
-- The [[Term::Analysis]] footnote format MUST be preserved. BOTH sides of :: must be 100% English.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FOOTNOTE SYNTAX — NO PLACEHOLDER TOKENS (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Preserve the physical pattern [[ ... :: ... ]] exactly (double colon, paired brackets). BOTH sides of :: must be 100% English after translation.
+- Translate the prose inside each side faithfully. Do NOT replace a rich footnote with generic labels.
+- FORBIDDEN outputs: left-hand side equal to the bare word "Term" unless that exact word appears verbatim in the source; right-hand side consisting only of the bare word "Analysis" or any other single-token filler; any footnote shorter than the source footnote unless the source was already that short.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MIXED SOURCE HANDLING — CRITICAL

@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ChevronDown, ListChecks, Lock, ShieldAlert, Users } from 'lucide-react';
 import IntelProfileRadar from '@/components/features/decode/IntelProfileRadar';
+import IntelExecutiveDigestBanner from '@/components/features/decode/IntelExecutiveDigestBanner';
+import IntelRadarAxisPills from '@/components/features/decode/IntelRadarAxisPills';
+import IntelStakeholderConflictStrip from '@/components/features/decode/IntelStakeholderConflictStrip';
+import IntelVerificationInteractive from '@/components/features/decode/IntelVerificationInteractive';
+import IntelProfileLoadingSkeleton from '@/components/features/decode/IntelProfileLoadingSkeleton';
+import { buildIntelExecutiveDigest } from '@/lib/intel-executive-digest';
 import { RADAR_AXIS_ORDER, radarLabels } from '@/lib/intel-profile-ui';
 import type { IntelProfile, IntelProfileError } from '@/types/intel-profile';
 import type { IntelProfileRadarKey } from '@/types/intel-profile';
@@ -13,13 +19,20 @@ interface IntelProfilePanelProps {
   lang: 'cn' | 'en';
   unlocked: boolean;
   onRequireAuth: () => void;
+  /** 用于本地核验勾选与笔记的存储键 */
+  signalId: string;
+  /** 入库 enrich 进行中且尚无 intelProfile 时展示骨架 */
+  enrichmentPending?: boolean;
 }
 
 const GUEST_OPEN_KEY: IntelProfileRadarKey = 'narrativeIncitement';
 
+/** 与 guestIntelLockedKeys 一致：游客可见叙事 + 可核验两维分数与依据 */
 function lockedSetForGuest(): Set<IntelProfileRadarKey> {
   return new Set(
-    RADAR_AXIS_ORDER.filter((k) => k !== GUEST_OPEN_KEY)
+    RADAR_AXIS_ORDER.filter(
+      (k) => k !== 'narrativeIncitement' && k !== 'verifiability'
+    )
   );
 }
 
@@ -35,11 +48,21 @@ export default function IntelProfilePanel({
   lang,
   unlocked,
   onRequireAuth,
+  signalId,
+  enrichmentPending = false,
 }: IntelProfilePanelProps) {
   const [openStakeholders, setOpenStakeholders] = useState(false);
   const [openVerify, setOpenVerify] = useState(false);
+  const [selectedAxis, setSelectedAxis] = useState<IntelProfileRadarKey | null>(null);
+  const axisRefs = useRef<Partial<Record<IntelProfileRadarKey, HTMLDivElement | null>>>({});
 
   const lockedKeys = unlocked ? new Set<IntelProfileRadarKey>() : lockedSetForGuest();
+
+  const scrollToAxis = useCallback((key: IntelProfileRadarKey) => {
+    setSelectedAxis(key);
+    const el = axisRefs.current[key];
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, []);
 
   if (profileError && !profile) {
     return (
@@ -59,6 +82,10 @@ export default function IntelProfilePanel({
     );
   }
 
+  if (!profile && enrichmentPending) {
+    return <IntelProfileLoadingSkeleton lang={lang} />;
+  }
+
   if (!profile) {
     return (
       <section className="mb-10 border border-zinc-200 bg-zinc-50 rounded-lg p-6 text-zinc-600 text-sm font-mono">
@@ -67,9 +94,12 @@ export default function IntelProfilePanel({
     );
   }
 
+  const executiveDigest = buildIntelExecutiveDigest(profile, lang, unlocked);
+
   const rationaleBlock = (key: IntelProfileRadarKey) => {
     const lines = profile.rationale[key];
-    const show = unlocked || key === GUEST_OPEN_KEY;
+    const show =
+      unlocked || key === GUEST_OPEN_KEY || key === 'verifiability';
     if (!show) {
       return (
         <button
@@ -121,14 +151,29 @@ export default function IntelProfilePanel({
         )}
       </header>
 
+      <IntelExecutiveDigestBanner
+        digest={executiveDigest}
+        lang={lang}
+        unlocked={unlocked}
+        onRequireAuth={onRequireAuth}
+        onJumpToAxis={scrollToAxis}
+      />
+
       <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 bg-zinc-50/50">
-        <div className="lg:col-span-4 flex justify-center lg:justify-start">
-          <div className="rounded-xl bg-[var(--td-instrument-surface)] ring-1 ring-slate-200/80 p-4 w-full max-w-[260px] flex justify-center lg:justify-start">
+        <div className="lg:col-span-4 flex flex-col items-center lg:items-start">
+          <div className="rounded-xl bg-[var(--td-instrument-surface)] ring-1 ring-slate-200/80 p-4 w-full max-w-[260px] flex flex-col items-center lg:items-start">
             <IntelProfileRadar
               scores={profile.radar}
               lockedKeys={lockedKeys}
               lang={lang}
               size={220}
+            />
+            <IntelRadarAxisPills
+              selected={selectedAxis}
+              onSelect={scrollToAxis}
+              lockedKeys={lockedKeys}
+              lang={lang}
+              onLockedClick={onRequireAuth}
             />
           </div>
         </div>
@@ -136,7 +181,15 @@ export default function IntelProfilePanel({
           {RADAR_AXIS_ORDER.map((key) => (
             <div
               key={key}
-              className="border-b border-zinc-100 pb-4 pt-1 last:border-0 last:pb-1 rounded-lg px-2 -mx-1 hover:bg-zinc-50/90 transition-colors"
+              id={`intel-axis-${key}`}
+              ref={(el) => {
+                axisRefs.current[key] = el;
+              }}
+              className={`border-b border-zinc-100 pb-4 pt-1 last:border-0 last:pb-1 rounded-lg px-2 -mx-1 hover:bg-zinc-50/90 transition-colors scroll-mt-24 ${
+                selectedAxis === key
+                  ? 'ring-2 ring-red-200/90 bg-red-50/40 shadow-sm'
+                  : ''
+              }`}
             >
               <h3 className="text-sm font-medium text-zinc-800 font-sans mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0">
                 <span>{radarLabels(key, lang)}</span>
@@ -165,6 +218,7 @@ export default function IntelProfilePanel({
           </button>
           {openStakeholders && (
             <div className="px-6 pb-6 overflow-x-auto bg-white">
+              <IntelStakeholderConflictStrip profile={profile} lang={lang} />
               <table className="w-full text-left text-xs border border-zinc-200 rounded-md overflow-hidden">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-600 font-mono uppercase text-[10px]">
@@ -200,11 +254,9 @@ export default function IntelProfilePanel({
             />
           </button>
           {openVerify && (
-            <ul className="px-6 pb-6 space-y-2 text-xs text-zinc-700 list-decimal pl-10 bg-white">
-              {profile.verificationChecklist.map((v, i) => (
-                <li key={i}>{lang === 'cn' ? v.item.cn : v.item.en}</li>
-              ))}
-            </ul>
+            <div className="px-6 pb-6 bg-white">
+              <IntelVerificationInteractive profile={profile} lang={lang} signalId={signalId} />
+            </div>
           )}
         </>
       )}

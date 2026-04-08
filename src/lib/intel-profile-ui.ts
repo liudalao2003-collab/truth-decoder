@@ -7,13 +7,11 @@ export const RADAR_AXIS_ORDER: IntelProfileRadarKey[] = [
   'actionUrging',
 ];
 
-const GUEST_OPEN_KEY: IntelProfileRadarKey = 'narrativeIncitement';
+const GUEST_OPEN_KEYS: IntelProfileRadarKey[] = ['narrativeIncitement', 'verifiability'];
 
-/** 未登录时仅开放「叙事煽动」一维的雷达/条形真实展示 */
+/** 未登录时开放「叙事煽动 + 可核验性」两维，与结论前置预览一致 */
 export function guestIntelLockedKeys(): Set<IntelProfileRadarKey> {
-  return new Set(
-    RADAR_AXIS_ORDER.filter((k) => k !== GUEST_OPEN_KEY)
-  );
+  return new Set(RADAR_AXIS_ORDER.filter((k) => !GUEST_OPEN_KEYS.includes(k)));
 }
 
 export function emptyIntelLockedKeys(): Set<IntelProfileRadarKey> {

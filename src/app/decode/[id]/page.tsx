@@ -807,6 +807,13 @@ export default function DecodePage() {
           profile={signal.metadata?.intelProfile}
           profileError={signal.metadata?.intelProfileError as IntelProfileError | undefined}
           lang={lang}
+          signalId={id}
+          enrichmentPending={Boolean(
+            signal.metadata &&
+              typeof signal.metadata === 'object' &&
+              (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true &&
+              !signal.metadata?.intelProfile
+          )}
           unlocked={intelUnlocked}
           onRequireAuth={() => {
             void (async () => {

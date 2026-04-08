@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Sparkles, Loader2, AlertTriangle, Globe, User as UserIcon, LogOut, Crown } from 'lucide-react';
@@ -17,6 +18,14 @@ import type { DossierQuotaPublic } from '@/lib/dossier-quota';
  * 当 ingest SSE 截断导致 JSON.parse 失败或 fluff 未被正则救回时，
  * 从原始拼接串中按契约「词汇::解析」启发式提取 cn 侧 fluff，用于恢复左侧红字气泡。
  */
+/** Feed 卡片：体征已落盘且非补全中，才显示「就绪」观感 */
+function isSignalIntelReady(item: SignalRecord): boolean {
+  const m = item.metadata;
+  if (!m || typeof m !== 'object') return false;
+  if (!m.intelProfile) return false;
+  return (m as { enrichmentPending?: boolean }).enrichmentPending !== true;
+}
+
 function extractFluffCnFromBrokenJsonBlob(blob: string): string[] {
   const fluffIdx = blob.indexOf('"fluff"');
   const slice =
@@ -414,6 +423,7 @@ export default function HomePage() {
           })();
         }
         setInput('');
+        router.prefetch(`/decode/${sid}`);
         router.push(`/decode/${sid}`);
       } else { 
         throw new Error(saveJson.error || '瞬时写入网关异常');
@@ -551,29 +561,38 @@ export default function HomePage() {
           <div className="flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-300">
             <AnimatePresence mode='popLayout'>
               {feed.map((item) => (
-                <motion.div 
-                  key={item.id}
-                  layout
-                  onClick={() => router.push(`/decode/${item.id}`)}
-                  className="group relative bg-white border border-zinc-200/80 p-6 rounded-md shadow-sm ring-1 ring-zinc-950/5 transition-all cursor-pointer overflow-hidden active:scale-[0.98] hover:shadow-md hover:ring-zinc-950/10"
-                >
-                  <div className="absolute top-0 left-0 w-1 h-full bg-red-500/40 opacity-60 group-hover:opacity-100 transition-opacity rounded-l-md" />
-                  <div className="flex items-start justify-between gap-4">
-                    <p className="text-sm font-bold text-zinc-600 group-hover:text-zinc-900 transition-colors italic line-clamp-2 flex-1 min-w-0">
-                      {`"${item.metadata?.bilingual?.[lang] || item.verdict}"`}
-                    </p>
-                    {item.metadata?.intelProfile ? (
-                      <IntelProfileMiniBars
-                        scores={item.metadata.intelProfile.radar}
-                        lockedKeys={
-                          user && isPro
-                            ? emptyIntelLockedKeys()
-                            : guestIntelLockedKeys()
-                        }
-                        lang={lang}
-                      />
-                    ) : null}
-                  </div>
+                <motion.div key={item.id} layout className="relative">
+                  <Link
+                    href={`/decode/${item.id}`}
+                    prefetch
+                    scroll
+                    className="group relative block bg-white border border-zinc-200/80 p-6 rounded-md shadow-sm ring-1 ring-zinc-950/5 transition-all cursor-pointer overflow-hidden active:scale-[0.98] hover:shadow-md hover:ring-zinc-950/10"
+                  >
+                    <div className="absolute top-0 left-0 w-1 h-full bg-red-500/40 opacity-60 group-hover:opacity-100 transition-opacity rounded-l-md" />
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <p className="text-sm font-bold text-zinc-600 group-hover:text-zinc-900 transition-colors italic line-clamp-2">
+                          {`"${item.metadata?.bilingual?.[lang] || item.verdict}"`}
+                        </p>
+                        {!isSignalIntelReady(item) ? (
+                          <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-wider text-amber-900">
+                            {lang === 'cn' ? '体征补全中' : 'Intel loading'}
+                          </span>
+                        ) : null}
+                      </div>
+                      {item.metadata?.intelProfile ? (
+                        <IntelProfileMiniBars
+                          scores={item.metadata.intelProfile.radar}
+                          lockedKeys={
+                            user && isPro
+                              ? emptyIntelLockedKeys()
+                              : guestIntelLockedKeys()
+                          }
+                          lang={lang}
+                        />
+                      ) : null}
+                    </div>
+                  </Link>
                 </motion.div>
               ))}
             </AnimatePresence>

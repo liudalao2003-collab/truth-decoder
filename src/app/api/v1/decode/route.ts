@@ -45,8 +45,9 @@ You MUST structure the report into these 4 Exhaustive Sections. Each section mus
 - IV. BLACK SWAN FORECASTING: Multi-layered predictions of systemic collapse or power shifts.
 
 [FOOTNOTE DENSITY LOCK]:
-Inject 20-30 footnotes using: [[Term::[Surface Narrative]... [Deep Mechanism]... [Strategic Fallout]...]].
-- The "Term" MUST be 100% English.
+Inject 20-30 footnotes using: [[verbatim_words_from_the_source::one_dense_paragraph_of_forensic_analysis]].
+- Left side: exact substring copied from the source text (real phrases from the article — never generic labels such as the single word "Term" unless it literally appears in the source).
+- Right side: one continuous paragraph in English covering surface narrative vs. mechanism vs. fallout. Minimum depth comparable to the Chinese dossier spec.
 - Tone: Cold, analytical, god-like intellectual superiority.`
       : `【系统最高权限指令：TruthDecoder PRO 终极宏观战略引擎 V2.0】
 任务：生成一份细节爆炸、逻辑深度达到业界天花板的《暗影卷宗》Markdown 研报。

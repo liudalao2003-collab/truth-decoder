@@ -12,8 +12,9 @@ export const runtime = 'edge';
  *
  * V9.3 新增修复：
  * 1. [EN 注脚内联强制] 新增 INLINE INJECTION MANDATE 章节，明确禁止注脚单独成行或集中
- *    在底部列表区，强制要求每个 [[Term::Analysis]] 必须内联嵌入在正文句子中间，
+ *    在底部列表区，强制要求每个 [[原文片段::解析]] 形式注脚必须内联嵌入在正文句子中间，
  *    与中文版渲染结构保持 100% 对齐。
+ * V9.5：英文提示词去除 Term/Analysis 字面模板，防止模型输出占位脚注。
  */
 export async function POST(request: Request) {
   try {
@@ -59,7 +60,8 @@ ABSOLUTE LANGUAGE LAW - HIGHEST PRIORITY - ZERO TOLERANCE
 ZERO CHINESE. ZERO CHINESE. ZERO CHINESE.
 This overrides every other instruction. Your ENTIRE output must be 100% English: headings, body text, footnotes inside [[...]], bullet points, and the epilogue.
 FORBIDDEN everywhere: Chinese characters, Pinyin, or bilingual notes like "资产 (assets)".
-Footnote format [[Term::Analysis]]: BOTH sides must be pure English. Chinese inside [[ ]] is an IMMEDIATE CRITICAL FAILURE.
+Footnotes use [[left_side::right_side]]. BOTH sides must be pure English prose. Chinese inside [[ ]] is an IMMEDIATE CRITICAL FAILURE.
+PLACEHOLDER BAN: The left_side MUST NOT be the bare word "Term" unless "Term" appears verbatim in the source text. The right_side MUST NOT be only the word "Analysis" or any single-word filler — each footnote must be a real verbatim span plus a ≥120-word paragraph.
 If you feel the urge to write a Chinese character, STOP and write the English equivalent instead.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -82,9 +84,9 @@ ANTI-CONSENSUS TEST: If your sentence could be published as-is by the original s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FOOTNOTE SYNTAX LAW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Inject 15-20 footnotes using format: [[EnglishTerm::EnglishAnalysis]]
-- "EnglishTerm": verbatim from source (English only).
-- "EnglishAnalysis": single continuous paragraph, NO newlines inside [[ ]], minimum 120 words.
+Inject 15-20 footnotes using format: [[verbatim_source_span::dense_analytical_paragraph]]
+- "verbatim_source_span": exact phrase copied from the provided raw source material (English only). Never use generic stand-ins; the highlighted span must be real words from the article.
+- "dense_analytical_paragraph": single continuous paragraph, NO newlines inside [[ ]], minimum 120 words.
 - Must expose a direct CONTRADICTION between the source's stated narrative and the actual financial/power reality.
 - Structure: [Surface Illusion] expose the false framing → [Structural Mechanism] name the real transfer/capture/purge mechanism with specific actors → [Critical Fallout] quantify or name who pays the price.
 - BOTH sides of :: must be 100% English. No exceptions.
@@ -92,17 +94,17 @@ Inject 15-20 footnotes using format: [[EnglishTerm::EnglishAnalysis]]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INLINE INJECTION MANDATE — CRITICAL STRUCTURE LAW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Each [[Term::Analysis]] footnote MUST be injected INLINE inside a sentence within a paragraph body.
+Each [[verbatim_source_span::dense_analytical_paragraph]] footnote MUST be injected INLINE inside a sentence within a paragraph body.
 STRICTLY FORBIDDEN — any of the following will CORRUPT the output:
   - Creating a "Footnotes", "References", "Glossary", or "Terms" section anywhere.
-  - Placing [[Term::Analysis]] on its own standalone line with no surrounding sentence text.
-  - Grouping or listing multiple [[Term::Analysis]] entries consecutively without prose between them.
+  - Placing a footnote on its own standalone line with no surrounding sentence text.
+  - Grouping or listing multiple footnote entries consecutively without prose between them.
 CORRECT (inject mid-sentence in a paragraph):
   "The article weaponizes [[Prediction Markets::Surface Illusion: The article frames Polymarket odds as objective probability, obscuring that these are speculative bets by undercapitalized retail traders. Structural Mechanism: Prediction market prices reflect momentary sentiment equilibrium, not analytical consensus — they are a liquidity-weighted vote, not a forecast. Critical Fallout: Readers conflate "market believes X" with "X will happen," triggering emotionally-driven entry into positions timed to benefit content producers, not readers.]] data to manufacture false epistemic authority over Bitcoin's price trajectory."
 INCORRECT (FORBIDDEN — standalone line):
   [[Prediction Markets::...]]
   [[Boom-and-Bust Cycles::...]]
-Every single [[Term::Analysis]] must be surrounded by English prose on at least one side.
+Every footnote must be surrounded by English prose on at least one side.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY REPORT STRUCTURE
