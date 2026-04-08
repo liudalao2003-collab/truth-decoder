@@ -320,7 +320,15 @@ async function translateDossierInChunks(
     if (process.env.NODE_ENV === 'development') {
       console.log(`🟡 [模块_异步] -> 目标: 翻译段落 ${i + 1}/${chunks.length}，长度: ${chunk.length} 字符`);
     }
-    const translatedChunk = await translateOneChunk(chunk, targetLang);
+    let translatedChunk = await translateOneChunk(chunk, targetLang);
+    // EN 翻译保险：若源块含脚注标记但译文丢失 [[...::...]]，保留原块避免红泡全部消失
+    if (
+      targetLang === 'en' &&
+      chunk.includes('[[') &&
+      !translatedChunk.includes('[[')
+    ) {
+      translatedChunk = chunk;
+    }
     accumulated = accumulated
       ? `${accumulated}\n\n${translatedChunk}`
       : translatedChunk;

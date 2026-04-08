@@ -397,20 +397,36 @@ export default function HomePage() {
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
             };
-            const runOnce = async (): Promise<boolean> => {
+            const fetchWithTimeout = async (
+              url: string,
+              init: RequestInit,
+              timeoutMs: number
+            ): Promise<Response> => {
+              const ac = new AbortController();
+              const t = setTimeout(() => ac.abort(), timeoutMs);
               try {
-                const intelRes = await fetch('/api/v1/ingest/enrich', {
+                return await fetch(url, { ...init, signal: ac.signal });
+              } finally {
+                clearTimeout(t);
+              }
+            };
+            const runOnce = async (): Promise<boolean> => {
+              const [intelRes, profileRes] = await Promise.allSettled([
+                fetchWithTimeout('/api/v1/ingest/enrich', {
                   ...opts,
                   body: JSON.stringify({ signalId: sid, step: 'intel' }),
-                });
-                const profileRes = await fetch('/api/v1/ingest/enrich', {
+                }, 12_000),
+                fetchWithTimeout('/api/v1/ingest/enrich', {
                   ...opts,
                   body: JSON.stringify({ signalId: sid, step: 'profile' }),
-                });
-                return intelRes.ok && profileRes.ok;
-              } catch {
-                return false;
-              }
+                }, 18_000),
+              ]);
+              const intelOk =
+                intelRes.status === 'fulfilled' ? intelRes.value.ok : false;
+              const profileOk =
+                profileRes.status === 'fulfilled' ? profileRes.value.ok : false;
+              // profile 成功即可视为主链可用；intel 失败可由后续修复链慢补
+              return profileOk || (intelOk && profileOk);
             };
             let ok = await runOnce();
             if (!ok) {

@@ -15,6 +15,7 @@ import type { BilingualData } from '@/types/database';
 /** 与 vercel.json 对齐；Hobby 档单次仍约 10s，故拆成 intel / profile 两步各享独立预算 */
 export const maxDuration = 60;
 const PENDING_STALE_MS = 3 * 60 * 1000;
+const INTEL_STEP_BUDGET_MS = 8_000;
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -106,23 +107,33 @@ export async function POST(req: Request) {
 
     if (step === 'intel') {
       let intel = buildIntelFromRow(rowObj);
+      const intelDeadlineAt = Date.now() + INTEL_STEP_BUDGET_MS;
 
       const cnFluff = intel?.fluff?.cn;
       if (!Array.isArray(cnFluff) || cnFluff.length === 0) {
-        try {
-          const regen = await regenerateFullIntelJsonFromRaw(rawContent);
-          intel = {
-            ...intel,
-            verdict: regen.verdict,
-            facts: regen.facts,
-            fluff: regen.fluff,
-          };
-        } catch {
-          /* 与 save 一致：补全失败则沿用行内数据 */
+        if (Date.now() < intelDeadlineAt) {
+          try {
+            const regen = await regenerateFullIntelJsonFromRaw(rawContent);
+            intel = {
+              ...intel,
+              verdict: regen.verdict,
+              facts: regen.facts,
+              fluff: regen.fluff,
+            };
+          } catch {
+            /* 与 save 一致：补全失败则沿用行内数据 */
+          }
         }
       }
 
-      intel = await repairIntelEnglishFromChinese(intel);
+      // 超时预算内再做英文化修复；预算耗尽则跳过，优先保证主链可落盘
+      if (Date.now() < intelDeadlineAt) {
+        try {
+          intel = await repairIntelEnglishFromChinese(intel);
+        } catch {
+          /* 静默降级 */
+        }
+      }
 
       const prevMeta = isMetaRecord(rowObj.metadata) ? { ...rowObj.metadata } : {};
       const bilingualOut = {
