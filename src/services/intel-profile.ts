@@ -60,9 +60,11 @@ type IntelFetchStrategy = {
   maxTokens: number;
 };
 
+// max_tokens 从 8192 降至 4096：情报体征 JSON 实际约 2000-3000 token，
+// 4096 已足够，同时将 DeepSeek body 生成时间减少约 50%，与 fetchTimeoutMs 配合使用。
 const INTEL_FETCH_STRATEGIES: IntelFetchStrategy[] = [
-  { useJsonObjectFormat: true, temperature: 0.25, maxTokens: 8192 },
-  { useJsonObjectFormat: false, temperature: 0.35, maxTokens: 8192 },
+  { useJsonObjectFormat: true, temperature: 0.25, maxTokens: 4096 },
+  { useJsonObjectFormat: false, temperature: 0.35, maxTokens: 4096 },
 ];
 
 /**
@@ -115,43 +117,54 @@ async function callDeepSeekJson(
       throw new Error('Intel profile LLM budget exhausted');
     }
     const ac = new AbortController();
+    // 🔑 关键修复：timer 必须覆盖 fetch 连接 + res.json() body 读取两个阶段。
+    // 原始代码在 fetch headers 到达后立即 clearTimeout，导致 body 读取（30-50s）
+    // 完全没有超时限制，从而造成函数卡满 Vercel 60s 上限或触发 hardDeadline 熔断。
     const timer = setTimeout(() => ac.abort(), timeoutMs);
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: ac.signal,
-    });
-    clearTimeout(timer);
+    try {
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: ac.signal,
+      });
+      // 不在此处 clearTimeout：保持 abort 信号继续覆盖 body 读取阶段
 
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`DeepSeek HTTP ${res.status}: ${t}`);
-    }
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`DeepSeek HTTP ${res.status}: ${t}`);
+      }
 
-    const data = (await res.json()) as {
-      choices?: Array<{
-        finish_reason?: string;
-        message?: { content?: string | null };
-      }>;
-    };
-    const text = extractAssistantText(data);
-    if (text.length > 0) {
-      return text;
-    }
+      const data = (await res.json()) as {
+        choices?: Array<{
+          finish_reason?: string;
+          message?: { content?: string | null };
+        }>;
+      };
+      // body 完整到达后才清除计时器
+      clearTimeout(timer);
 
-    const fr = data.choices?.[0]?.finish_reason;
-    lastEmptyDiag = `finish_reason=${String(fr)},jsonMode=${strat.useJsonObjectFormat}`;
-    // content_filter 时同一段输入再试 json/text 档位通常仍为空；立即进入下一链路以缩短等待
-    if (fr === 'content_filter') {
-      throw new Error(
-        lastEmptyDiag
-          ? `DeepSeek 返回空内容（${lastEmptyDiag}）`
-          : 'DeepSeek 返回空内容'
-      );
+      const text = extractAssistantText(data);
+      if (text.length > 0) {
+        return text;
+      }
+
+      const fr = data.choices?.[0]?.finish_reason;
+      lastEmptyDiag = `finish_reason=${String(fr)},jsonMode=${strat.useJsonObjectFormat}`;
+      // content_filter 时同一段输入再试 json/text 档位通常仍为空；立即进入下一链路以缩短等待
+      if (fr === 'content_filter') {
+        throw new Error(
+          lastEmptyDiag
+            ? `DeepSeek 返回空内容（${lastEmptyDiag}）`
+            : 'DeepSeek 返回空内容'
+        );
+      }
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
     }
   }
 

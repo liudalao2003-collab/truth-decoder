@@ -19,12 +19,13 @@ const PENDING_STALE_MS = 3 * 60 * 1000;
 const INTEL_STEP_BUDGET_MS = 8_000;
 /**
  * profile 步骤三层预算：
- * - fetchTimeoutMs：单次 DeepSeek 调用的网络超时（12s，给 API 充足响应时间）
- * - llmBudgetMs：LLM 链整体预算（42s，允许约 3 次策略尝试）
- * - hardDeadlineMs：Promise.race 硬熔断（48s），保证函数在 Vercel 60s 限制前完成 DB 写入
+ * - fetchTimeoutMs：单次 DeepSeek 调用完整超时（44s，覆盖 fetch 连接 + body 读取全程）。
+ *   DeepSeek 生成 4096 token JSON 约需 20-35s；44s 留有充足缓冲。
+ * - llmBudgetMs：LLM 链整体预算（44s，单次尝试内完成）
+ * - hardDeadlineMs：Promise.race 硬熔断（48s），Vercel 60s 前必然返回
  */
-const PROFILE_STEP_FETCH_TIMEOUT_MS = 12_000;
-const PROFILE_STEP_LLM_BUDGET_MS = 42_000;
+const PROFILE_STEP_FETCH_TIMEOUT_MS = 44_000;
+const PROFILE_STEP_LLM_BUDGET_MS = 44_000;
 const PROFILE_STEP_HARD_DEADLINE_MS = 48_000;
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
