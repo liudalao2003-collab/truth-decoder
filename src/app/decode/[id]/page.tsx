@@ -128,6 +128,8 @@ export default function DecodePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
   const enrichSelfHealAttemptRef = useRef(0);
+  const [isRetryingProfile, setIsRetryingProfile] = useState(false);
+  const [profileRetryCooldownSec, setProfileRetryCooldownSec] = useState(0);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
   const [hasSession, setHasSession] = useState(false);
@@ -275,6 +277,50 @@ export default function DecodePage() {
         typeof signal.metadata === 'object' &&
         (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true
     );
+
+  useEffect(() => {
+    if (profileRetryCooldownSec <= 0) return;
+    const t = setInterval(() => {
+      setProfileRetryCooldownSec((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [profileRetryCooldownSec]);
+
+  const handleRetryProfile = useCallback(() => {
+    if (!id) return;
+    if (profileRetryCooldownSec > 0 || isRetryingProfile) return;
+    setIsRetryingProfile(true);
+    setProfileRetryCooldownSec(30);
+    void (async () => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 20_000);
+      try {
+        await fetch('/api/v1/ingest/enrich', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signalId: id, step: 'profile' }),
+          signal: ac.signal,
+        });
+      } catch {
+        /* 静默：下次可继续手动重试 */
+      } finally {
+        clearTimeout(timer);
+      }
+
+      try {
+        const res = await fetch(`/api/decode?id=${id}`);
+        const json = (await res.json()) as { success?: boolean; data?: SignalRecord };
+        if (json.success && json.data) {
+          setSignal(json.data);
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        setIsRetryingProfile(false);
+      }
+    })();
+  }, [id, isRetryingProfile, profileRetryCooldownSec]);
 
   // 🛡️ 自愈补全：Vercel 偶发 504 会导致 enrichmentPending 被卡死；解码页按退避策略补打 profile
   useEffect(() => {
@@ -877,6 +923,10 @@ export default function DecodePage() {
               (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true &&
               !signal.metadata?.intelProfile
           )}
+          onRetryProfile={handleRetryProfile}
+          retryProfileDisabled={isRetryingProfile || profileRetryCooldownSec > 0}
+          retryingProfile={isRetryingProfile}
+          retryCooldownSec={profileRetryCooldownSec}
           unlocked={intelUnlocked}
           onRequireAuth={() => {
             void (async () => {

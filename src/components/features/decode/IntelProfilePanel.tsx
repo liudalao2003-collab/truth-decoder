@@ -23,6 +23,11 @@ interface IntelProfilePanelProps {
   signalId: string;
   /** 入库 enrich 进行中且尚无 intelProfile 时展示骨架 */
   enrichmentPending?: boolean;
+  /** 骨架区手动触发 profile-only 补算 */
+  onRetryProfile?: () => void;
+  retryProfileDisabled?: boolean;
+  retryingProfile?: boolean;
+  retryCooldownSec?: number;
 }
 
 const GUEST_OPEN_KEY: IntelProfileRadarKey = 'narrativeIncitement';
@@ -50,6 +55,10 @@ export default function IntelProfilePanel({
   onRequireAuth,
   signalId,
   enrichmentPending = false,
+  onRetryProfile,
+  retryProfileDisabled = false,
+  retryingProfile = false,
+  retryCooldownSec = 0,
 }: IntelProfilePanelProps) {
   const [openStakeholders, setOpenStakeholders] = useState(false);
   const [openVerify, setOpenVerify] = useState(false);
@@ -83,7 +92,15 @@ export default function IntelProfilePanel({
   }
 
   if (!profile && enrichmentPending) {
-    return <IntelProfileLoadingSkeleton lang={lang} />;
+    return (
+      <IntelProfileLoadingSkeleton
+        lang={lang}
+        onRetryProfile={onRetryProfile}
+        retryDisabled={retryProfileDisabled}
+        retrying={retryingProfile}
+        retryCooldownSec={retryCooldownSec}
+      />
+    );
   }
 
   if (!profile) {
