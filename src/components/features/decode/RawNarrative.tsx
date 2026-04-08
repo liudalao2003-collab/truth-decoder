@@ -9,14 +9,23 @@ interface RawNarrativeProps {
   dictionary?: Record<string, string>;
 }
 
-const HighlightMark = React.memo(({ 
-  text, meaning, onEnter, onLeave 
-}: { 
-  text: string; meaning: string; onEnter: (e: React.MouseEvent, t: string) => void; onLeave: () => void;
+const HighlightMark = React.memo(({
+  text,
+  meaning,
+  onEnter,
+  onLeave,
+  onTogglePin,
+}: {
+  text: string;
+  meaning: string;
+  onEnter: (e: React.MouseEvent, t: string) => void;
+  onLeave: () => void;
+  onTogglePin: (e: React.MouseEvent, t: string) => void;
 }) => (
   <mark
     onMouseEnter={(e) => onEnter(e, meaning)}
     onMouseLeave={onLeave}
+    onClick={(e) => onTogglePin(e, meaning)}
     className="bg-red-100 text-red-800 px-1.5 rounded-[2px] border-b border-red-400 transition-colors duration-200 hover:bg-red-200 hover:text-red-950 hover:border-red-500 cursor-crosshair font-semibold"
   >
     {text}
@@ -26,6 +35,7 @@ HighlightMark.displayName = 'HighlightMark';
 
 export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} }: RawNarrativeProps) {
   const [hoverInfo, setHoverInfo] = useState<{ text: string, x: number, y: number, isAbove: boolean } | null>(null);
+  const [pinnedText, setPinnedText] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
   // 🛡️ 架构师装甲：气泡防闪烁延迟锁，允许鼠标平滑移入气泡内部进行滚动
@@ -60,6 +70,7 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
    * 🚨 架构师 V7.2：防溢出智能定位算法与交互桥梁
    */
   const handleMouseEnter = useCallback((e: React.MouseEvent, text: string) => {
+    if (pinnedText) return;
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -79,22 +90,65 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
     }
 
     setHoverInfo({ text, x: safeX, y: safeY, isAbove });
-  }, []);
+  }, [pinnedText]);
 
   const handleMouseLeave = useCallback(() => {
+    if (pinnedText) return;
     // 赋予 150ms 的防闪烁桥梁时间，允许用户鼠标平滑滑入气泡内部
     hoverTimer.current = setTimeout(() => {
       setHoverInfo(null);
     }, 150);
-  }, []);
+  }, [pinnedText]);
 
   const handlePortalMouseEnter = useCallback(() => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
   }, []);
 
   const handlePortalMouseLeave = useCallback(() => {
+    if (pinnedText) return;
     setHoverInfo(null);
-  }, []);
+  }, [pinnedText]);
+
+  const handleTogglePin = useCallback(
+    (e: React.MouseEvent, text: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextPinned = pinnedText === text ? null : text;
+      setPinnedText(nextPinned);
+      if (!nextPinned) {
+        setHoverInfo(null);
+        return;
+      }
+
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const maxW = 420;
+      let safeX = rect.left + rect.width / 2;
+      if (safeX - maxW / 2 < 20) safeX = maxW / 2 + 20;
+      if (safeX + maxW / 2 > window.innerWidth - 20) safeX = window.innerWidth - maxW / 2 - 20;
+
+      let safeY = rect.top - 10;
+      let isAbove = true;
+      if (safeY < 350) {
+        safeY = rect.bottom + 10;
+        isAbove = false;
+      }
+
+      setHoverInfo({ text, x: safeX, y: safeY, isAbove });
+    },
+    [pinnedText]
+  );
+
+  useEffect(() => {
+    if (!pinnedText) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        setPinnedText(null);
+        setHoverInfo(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinnedText]);
 
   return (
     <>
@@ -120,7 +174,16 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
               const meaning =
                 dictionary[token] ?? dictionary[token.normalize('NFC')];
               if (meaning) {
-                return <HighlightMark key={`${index}-${token}`} text={token} meaning={meaning} onEnter={handleMouseEnter} onLeave={handleMouseLeave} />;
+                return (
+                  <HighlightMark
+                    key={`${index}-${token}`}
+                    text={token}
+                    meaning={meaning}
+                    onEnter={handleMouseEnter}
+                    onLeave={handleMouseLeave}
+                    onTogglePin={handleTogglePin}
+                  />
+                );
               }
               return <span key={index} className="opacity-80">{token}</span>;
             })}
@@ -130,13 +193,27 @@ export default function RawNarrative({ rawContent, lang = 'cn', dictionary = {} 
 
       {mounted && hoverInfo && createPortal(
         <div
-          className={`fixed z-[2147483647] w-max max-w-[320px] bg-white/95 backdrop-blur-xl border border-red-200 text-zinc-800 text-sm p-5 rounded-lg shadow-lg pointer-events-none transition-all duration-150 font-sans leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'}`}
+          onMouseEnter={handlePortalMouseEnter}
+          onMouseLeave={handlePortalMouseLeave}
+          className={`fixed z-[2147483647] w-max max-w-[420px] bg-white/95 backdrop-blur-xl border border-red-200 text-zinc-800 text-sm p-5 rounded-lg shadow-lg transition-all duration-150 font-sans leading-relaxed ${hoverInfo.isAbove ? 'transform -translate-x-1/2 -translate-y-full' : 'transform -translate-x-1/2'} ${pinnedText ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{ left: hoverInfo.x, top: hoverInfo.y }}
         >
           <span className="text-red-600 flex items-center gap-2 mb-3 font-mono uppercase tracking-widest font-black border-b border-red-100 pb-2 text-xs">
              <Zap size={14} className="animate-pulse" /> DEEP INSIGHT
           </span>
-          <div className="text-justify whitespace-pre-wrap">{hoverInfo.text}</div>
+          <div className="text-justify whitespace-pre-wrap select-text max-h-[50vh] overflow-auto pr-1">{hoverInfo.text}</div>
+          {pinnedText ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPinnedText(null);
+                setHoverInfo(null);
+              }}
+              className="mt-3 text-[10px] font-mono uppercase tracking-widest text-zinc-500 hover:text-red-700 transition-colors"
+            >
+              {lang === 'cn' ? '再次点击高亮或按 ESC 关闭' : 'Click highlight again or press ESC to close'}
+            </button>
+          ) : null}
         </div>,
         document.body
       )}

@@ -38,6 +38,12 @@ import type { TerminalQuotaPublic } from '@/lib/terminal-quota';
 import { hasChinese } from '@/utils/text-stream-guard';
 import { useBilingualCache } from '@/hooks/useBilingualCache';
 
+const DICT_CACHE_VERSION = 'v1';
+
+function dictCacheKey(signalId: string, lang: 'cn' | 'en'): string {
+  return `td_dict_${DICT_CACHE_VERSION}_${signalId}_${lang}`;
+}
+
 
 /** 消费 /api/v1/translate 的 SSE，拼出完整译文 */
 async function readTranslateSseToText(
@@ -224,6 +230,22 @@ export default function DecodePage() {
     }
   );
   const { resolveOrCreate: resolveFluffCache } = useBilingualCache(signal?.id ?? null, 'fluff');
+
+  // 🚀 进入解码页即恢复本地缓存 dictionary（若存在），让历史资产秒开红泡
+  useEffect(() => {
+    if (!id) return;
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(dictCacheKey(id, lang));
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        setDictionary(parsed);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [id, lang]);
 
   useEffect(() => { 
      if (!id) return;
@@ -432,14 +454,22 @@ export default function DecodePage() {
       }
 
       // EN 模式：将含中文值的词条从 dict 预先移除，等待翻译异步回填
-      // 确保初始 setDictionary 不会将中文值暴露给 RawNarrative 气泡
+      // 旧策略：直接 delete 会导致 key 命中失效 → 红泡高亮延迟出现，体感像“页面加载很慢”
+      // 新策略：保留 key，先用英文占位符保证高亮与可点击；翻译完成后再回填真实英文解释。
       if (lang === 'en') {
         for (const { key } of polishEnFootnotes) {
-          delete dict[key];
+          dict[key] = 'Language protocol compiling…';
         }
       }
 
       setDictionary(dict);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(dictCacheKey(id, lang), JSON.stringify(dict));
+        } catch {
+          /* ignore */
+        }
+      }
 
       if (lang === 'en' && polishEnFootnotes.length > 0) {
         const sourceTail = polishEnFootnotes
@@ -463,6 +493,13 @@ export default function DecodePage() {
             for (const k of Object.keys(next)) {
               if (hasChinese(next[k])) {
                 delete next[k];
+              }
+            }
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem(dictCacheKey(id, lang), JSON.stringify(next));
+              } catch {
+                /* ignore */
               }
             }
             return next;
