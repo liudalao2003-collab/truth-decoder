@@ -16,8 +16,15 @@ import type { BilingualData } from '@/types/database';
 export const maxDuration = 60;
 const PENDING_STALE_MS = 3 * 60 * 1000;
 const INTEL_STEP_BUDGET_MS = 8_000;
-const PROFILE_STEP_LLM_BUDGET_MS = 6_500;
-const PROFILE_STEP_FETCH_TIMEOUT_MS = 2_600;
+/**
+ * profile 步骤三层预算：
+ * - fetchTimeoutMs：单次 DeepSeek 调用的网络超时（12s，给 API 充足响应时间）
+ * - llmBudgetMs：LLM 链整体预算（42s，允许约 3 次策略尝试）
+ * - hardDeadlineMs：Promise.race 硬熔断（48s），保证函数在 Vercel 60s 限制前完成 DB 写入
+ */
+const PROFILE_STEP_FETCH_TIMEOUT_MS = 12_000;
+const PROFILE_STEP_LLM_BUDGET_MS = 42_000;
+const PROFILE_STEP_HARD_DEADLINE_MS = 48_000;
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -235,8 +242,9 @@ export async function POST(req: Request) {
 
     try {
       const profile = await generateIntelProfile(rawContent, factsForProfile, {
-        llmBudgetMs: PROFILE_STEP_LLM_BUDGET_MS,
         fetchTimeoutMs: PROFILE_STEP_FETCH_TIMEOUT_MS,
+        llmBudgetMs: PROFILE_STEP_LLM_BUDGET_MS,
+        hardDeadlineMs: PROFILE_STEP_HARD_DEADLINE_MS,
       });
       // 🚨 Vercel 60s 超时防线：profile 步骤禁止再做二次英文化修复（高耗时）
       // 解释：profile 生成主链已保证 en 字段契约；二次修复在云端高并发下会显著放大超时概率。

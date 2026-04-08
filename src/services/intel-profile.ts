@@ -503,8 +503,11 @@ function coerceIntelProfileLoose(input: unknown): unknown {
   return o;
 }
 
-/** LLM 全失败时的契约内降级，保证入库与页面可用 */
-function buildDeterministicFallbackIntelProfile(): IntelProfile {
+/**
+ * LLM 全失败 / 硬超时熔断时的契约内降级，保证入库与页面可用。
+ * 导出供 enrich route 在 Promise.race 回调中直接使用。
+ */
+export function buildDeterministicFallbackIntelProfile(): IntelProfile {
   const now = new Date().toISOString();
   return {
     schemaVersion: INTEL_PROFILE_SCHEMA_VERSION,
@@ -573,11 +576,16 @@ function parseIntelProfileFromRaw(raw: string): IntelProfile | null {
 
 /**
  * 基于原文与已抽取硬事实生成情报体征；极端失败时返回契约内降级对象，不再抛错阻断入库。
+ *
+ * @param options.hardDeadlineMs - 硬超时熔断（毫秒）：无论 DeepSeek 是否挂起，都在此时限内
+ *   通过 Promise.race 强制返回确定性降级体征，确保调用方能在 Vercel 60s 限制前完成 DB 写入。
+ *   建议在 enrich/profile API 中设置为 48_000（留 ~12s 给 auth + DB 读写）。
+ *   不传则不启用硬熔断（cron / admin 补算场景，超时容忍度更高）。
  */
 export async function generateIntelProfile(
   rawContent: string,
   hardFacts: BilingualData | string[] | undefined,
-  options?: { llmBudgetMs?: number; fetchTimeoutMs?: number }
+  options?: { llmBudgetMs?: number; fetchTimeoutMs?: number; hardDeadlineMs?: number }
 ): Promise<IntelProfile> {
   logger.start('情报体征短调用');
   const { cn, en } = normalizeHardFacts(hardFacts);
@@ -586,17 +594,39 @@ export async function generateIntelProfile(
   const userSlim = buildUserBlock(rawContent, cn, en, 'slim');
   const userFactsOnly = buildUserBlock(rawContent, cn, en, 'factsOnly');
 
-  try {
-    logger.async('情报体征 LLM 链式调用（全文→精简→仅事实）');
-    const raw = await fetchIntelProfileJsonString(userFull, userSlim, userFactsOnly, options);
-    const profile = parseIntelProfileFromRaw(raw);
-    if (profile) {
-      logger.success('情报体征契约校验通过');
-      return profile;
+  // 核心 LLM 尝试链：依次调用多策略，失败时返回确定性降级体征
+  const attempt = async (): Promise<IntelProfile> => {
+    try {
+      logger.async('情报体征 LLM 链式调用（全文→精简→仅事实）');
+      const raw = await fetchIntelProfileJsonString(userFull, userSlim, userFactsOnly, options);
+      const profile = parseIntelProfileFromRaw(raw);
+      if (profile) {
+        logger.success('情报体征契约校验通过');
+        return profile;
+      }
+    } catch (e) {
+      logger.crash(e);
     }
-  } catch (e) {
-    logger.crash(e);
+    return buildDeterministicFallbackIntelProfile();
+  };
+
+  const { hardDeadlineMs } = options ?? {};
+  if (!hardDeadlineMs || hardDeadlineMs <= 0) {
+    return attempt();
   }
 
-  return buildDeterministicFallbackIntelProfile();
+  // 🛡️ 硬超时熔断：无论 DeepSeek 是否挂起（包括 AbortController 未能及时生效的边缘场景），
+  // 都在 hardDeadlineMs 内通过 Promise.race 强制返回降级体征，
+  // 保证 enrich route 有足够时间完成 DB 写入，彻底杜绝 Vercel 60s 504。
+  return Promise.race([
+    attempt(),
+    new Promise<IntelProfile>((resolve) => {
+      setTimeout(() => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔴 [intel-profile_硬超时熔断] -> 原因: 已超硬限制，强制返回确定性降级体征');
+        }
+        resolve(buildDeterministicFallbackIntelProfile());
+      }, hardDeadlineMs);
+    }),
+  ]);
 }
