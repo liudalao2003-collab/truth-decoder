@@ -362,10 +362,14 @@ export function useDossierStream(
       if (typeof signal.dossier_content === 'string') {
         setCache(prev => ({ ...prev, cn: signal.dossier_content as string }));
       } else {
-        setCache({
-          cn: signal.dossier_content.cn || '',
-          en: signal.dossier_content.en || ''
-        });
+        const cn = signal.dossier_content.cn || '';
+        // 🚨 产品一致性优先：EN 视图强制使用 CN→EN 派生翻译，避免“同一资产两套完全不同卷宗”
+        // 策略：只要存在 cn，就清空 en 以触发懒翻译管线；翻译后会静默落盘到 dossier_content.en
+        const en =
+          cn.trim().length > 0
+            ? ''
+            : signal.dossier_content.en || '';
+        setCache({ cn, en });
       }
       setStreamQualityError(null);
     }
@@ -443,6 +447,140 @@ export function useDossierStream(
 
     const rawContent = signal.raw_content;
 
+    // 🚨 产品一致性优先：EN 不再走“独立直出”主路径，统一采用 CN 生成 → EN 翻译
+    // 目的：同一资产在 CN/EN 只存在一套底稿，EN 只是 CN 的派生视图。
+    if (lang === 'en') {
+      setIsStreamingDossier(true);
+      setIsTruncated(false);
+      setStreamQualityError(null);
+      setDossierRecoveryStatus('Switching pipeline: generating in Chinese, then translating to English…');
+      setCache((prev) => ({ ...prev, cn: '', en: '' }));
+
+      try {
+        let overallTruncated = false;
+        let primarySucceeded = false;
+
+        cnFallback: for (let attempt = 0; attempt < MAX_DOSSIER_RETRIES; attempt++) {
+          if (attempt > 0) {
+            setDossierRecoveryStatus('Retrying Chinese generation…');
+          }
+          setCache((prev) => ({ ...prev, cn: '' }));
+
+          let res: Response;
+          try {
+            const out = await postDossierApi({
+              rawContent,
+              lang: 'cn',
+              retryAttempt: attempt,
+            });
+            if (out.kind === 'quota') {
+              setStreamQualityError(QUOTA_ERROR_EN);
+              onQuotaExceeded?.();
+              return;
+            }
+            if (out.kind === 'bad') {
+              continue;
+            }
+            res = out.res;
+          } catch {
+            continue;
+          }
+
+          const streamBodyCn = res.body;
+          if (!streamBodyCn) {
+            continue;
+          }
+
+          const reader = streamBodyCn.getReader();
+          const outcome = await consumeChatCompletionSseStream(reader, (full) => {
+            setCache((prev) => ({ ...prev, cn: full }));
+          });
+
+          if (outcome.abortedByQuality || outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
+            continue;
+          }
+
+          const cnText = outcome.text;
+          if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
+            overallTruncated = true;
+          }
+
+          let translateOk = false;
+          for (let t = 0; t < MAX_TRANSLATE_RETRIES; t++) {
+            if (t > 0) {
+              setDossierRecoveryStatus('Retrying English translation…');
+            }
+            setCache((prev) => ({ ...prev, en: '' }));
+
+            let enText = '';
+            try {
+              enText = await translateDossierInChunks(
+                cnText,
+                'en',
+                (accumulated) => {
+                  setCache((prev) => ({ ...prev, en: accumulated }));
+                }
+              );
+            } catch {
+              continue;
+            }
+
+            if (enText.trim().length < MIN_DOSSIER_LENGTH) {
+              continue;
+            }
+
+            translateOk = true;
+            if (chineseCharRatio(enText) > CHINESE_POLLUTION_THRESHOLD) {
+              const cleanedText = await runEnCleanupTranslation(
+                enText,
+                setDossierRecoveryStatus
+              );
+              setCache((prev) => ({ ...prev, en: cleanedText }));
+            }
+            break;
+          }
+
+          if (translateOk) {
+            primarySucceeded = true;
+          } else {
+            setStreamQualityError(TRANSLATE_FAIL_HINT_EN);
+            primarySucceeded = true;
+          }
+          break cnFallback;
+        }
+
+        if (!primarySucceeded) {
+          setStreamQualityError(FINAL_FAIL_EN);
+          setIsTruncated(true);
+        } else {
+          setIsTruncated(overallTruncated);
+          setCache((finalCache) => {
+            fetch('/api/v1/dossier/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ id: signal.id, dossier_content: finalCache }),
+            })
+              .then(() => {
+                onDossierSynced?.();
+              })
+              .catch(() => {});
+            return finalCache;
+          });
+        }
+      } catch (err: unknown) {
+        if (process.env.NODE_ENV === 'development') console.log('🔴 [流式中断] ->', err);
+        setStreamQualityError(FINAL_FAIL_EN);
+        setIsTruncated(true);
+      } finally {
+        setDossierRecoveryStatus(null);
+        setIsStreamingDossier(false);
+      }
+      return;
+    }
+
     setIsStreamingDossier(true);
     setIsTruncated(false);
     setStreamQualityError(null);
@@ -501,11 +639,8 @@ export function useDossierStream(
           continue;
         }
 
-        if (lang === 'en') {
-          if (!isDossierEnAcceptable(outcome.text, outcome)) {
-            continue;
-          }
-        } else if (outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
+        // 进入此分支时 lang 已收窄为 'cn'（EN 在函数顶部已强制走 CN→EN 管线并 return）
+        if (outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
           continue;
         }
 
@@ -513,16 +648,8 @@ export function useDossierStream(
         if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
           overallTruncated = true;
         }
-        // EN 模式语言纯洁性守卫：直接生成的 EN 卷宗若含中文残留，触发一次清洗
-        if (lang === 'en' && chineseCharRatio(outcome.text) > CHINESE_POLLUTION_THRESHOLD) {
-          const cleanedText = await runEnCleanupTranslation(
-            outcome.text,
-            setDossierRecoveryStatus
-          );
-          setCache((prev) => ({ ...prev, en: cleanedText }));
-        }
         // CN 模式语言纯洁性守卫：直接生成的 CN 卷宗若含英文残留超标，触发一次清洗
-        if (lang === 'cn' && englishCharRatio(outcome.text) > ENGLISH_POLLUTION_THRESHOLD_CN) {
+        if (englishCharRatio(outcome.text) > ENGLISH_POLLUTION_THRESHOLD_CN) {
           const cleanedText = await runCnCleanupTranslation(
             outcome.text,
             setDossierRecoveryStatus
@@ -530,106 +657,6 @@ export function useDossierStream(
           setCache((prev) => ({ ...prev, cn: cleanedText }));
         }
         break;
-      }
-
-      if (!primarySucceeded && lang === 'en') {
-        setCache((prev) => ({ ...prev, en: '' }));
-        setDossierRecoveryStatus(
-          'Switching pipeline: generating in Chinese, then translating to English…'
-        );
-
-        cnFallback: for (let attempt = 0; attempt < MAX_DOSSIER_RETRIES; attempt++) {
-          if (attempt > 0) {
-            setDossierRecoveryStatus('Retrying Chinese generation…');
-          }
-          setCache((prev) => ({ ...prev, cn: '' }));
-
-          let res: Response;
-          try {
-            const out = await postDossierApi({
-              rawContent,
-              lang: 'cn',
-              retryAttempt: attempt,
-            });
-            if (out.kind === 'quota') {
-              // 此分支仅在主界面语言为 en 时进入，固定英文提示
-              setStreamQualityError(QUOTA_ERROR_EN);
-              onQuotaExceeded?.();
-              return;
-            }
-            if (out.kind === 'bad') {
-              continue;
-            }
-            res = out.res;
-          } catch {
-            continue;
-          }
-
-          const streamBodyCn = res.body;
-          if (!streamBodyCn) {
-            continue;
-          }
-
-          const reader = streamBodyCn.getReader();
-          const outcome = await consumeChatCompletionSseStream(reader, (full) => {
-            setCache((prev) => ({ ...prev, cn: full }));
-          });
-
-          if (outcome.abortedByQuality || outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
-            continue;
-          }
-
-          const cnText = outcome.text;
-          if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
-            overallTruncated = true;
-          }
-
-          let translateOk = false;
-          for (let t = 0; t < MAX_TRANSLATE_RETRIES; t++) {
-            if (t > 0) {
-              setDossierRecoveryStatus('Retrying English translation…');
-            }
-            setCache((prev) => ({ ...prev, en: '' }));
-
-            let enText = '';
-            try {
-              // 使用分段翻译替换单次全量翻译，彻底规避 max_tokens 8192 截断
-              enText = await translateDossierInChunks(
-                cnText,
-                'en',
-                (accumulated) => {
-                  setCache((prev) => ({ ...prev, en: accumulated }));
-                }
-              );
-            } catch {
-              continue;
-            }
-
-            if (enText.trim().length < MIN_DOSSIER_LENGTH) {
-              continue;
-            }
-
-            translateOk = true;
-            // EN 模式语言纯洁性守卫第二道：CN→EN 翻译结果若仍含中文残留，触发二次清洗
-            if (chineseCharRatio(enText) > CHINESE_POLLUTION_THRESHOLD) {
-              const cleanedText = await runEnCleanupTranslation(
-                enText,
-                setDossierRecoveryStatus
-              );
-              setCache((prev) => ({ ...prev, en: cleanedText }));
-            }
-            break;
-          }
-
-          if (translateOk) {
-            primarySucceeded = true;
-          } else {
-            // 此处仅在 lang === 'en' 的 CN→EN 兜底分支内，TypeScript 已收窄 lang，固定英文提示
-            setStreamQualityError(TRANSLATE_FAIL_HINT_EN);
-            primarySucceeded = true;
-          }
-          break cnFallback;
-        }
       }
 
       if (!primarySucceeded) {

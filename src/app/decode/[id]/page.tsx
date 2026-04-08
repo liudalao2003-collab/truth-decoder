@@ -127,6 +127,7 @@ export default function DecodePage() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
+  const enrichSelfHealRef = useRef(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authContext, setAuthContext] = useState({ title: '', subtitle: '' });
   const [hasSession, setHasSession] = useState(false);
@@ -274,6 +275,30 @@ export default function DecodePage() {
         typeof signal.metadata === 'object' &&
         (signal.metadata as { enrichmentPending?: boolean }).enrichmentPending === true
     );
+
+  // 🛡️ 自愈补全：Vercel 偶发 504 会导致 enrichmentPending 被卡死；解码页主动补打一发 profile 补全
+  useEffect(() => {
+    if (!id || !pendingEnrichment) return;
+    if (enrichSelfHealRef.current) return;
+    const m = signal?.metadata as { intelProfile?: unknown; enrichmentPending?: boolean } | undefined;
+    if (m?.intelProfile) return;
+
+    // 延迟一点点，优先让轮询先跑一轮（避免重复开火）
+    const t = setTimeout(() => {
+      if (enrichSelfHealRef.current) return;
+      enrichSelfHealRef.current = true;
+      void fetch('/api/v1/ingest/enrich', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signalId: id, step: 'profile' }),
+      }).catch(() => {
+        /* 静默：轮询与 cron 仍可兜底 */
+      });
+    }, 3800);
+
+    return () => clearTimeout(t);
+  }, [id, pendingEnrichment, signal?.metadata]);
 
   useEffect(() => {
     if (!id || !pendingEnrichment) return;
