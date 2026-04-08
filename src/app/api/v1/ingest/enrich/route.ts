@@ -74,6 +74,12 @@ function buildIntelFromRow(row: Record<string, unknown>): IngestIntelBilingual {
 }
 
 export type EnrichStep = 'intel' | 'profile';
+type ProfileStatus =
+  | 'skipped'
+  | 'stale-pending-tripped'
+  | 'success'
+  | 'fallback'
+  | 'error';
 
 interface EnrichBody {
   signalId?: string;
@@ -203,8 +209,11 @@ export async function POST(req: Request) {
           signalId,
           step: 'profile' as const,
           skipped: true,
+          profileStatus: 'skipped' as ProfileStatus,
           elapsedMs: Date.now() - startedAt,
         },
+      }, {
+        headers: { 'x-td-profile-status': 'skipped' },
       });
     }
 
@@ -240,6 +249,7 @@ export async function POST(req: Request) {
             signalId,
             step: 'profile' as const,
             stalePendingTripped: true,
+            profileStatus: 'stale-pending-tripped' as ProfileStatus,
             elapsedMs: Date.now() - startedAt,
           },
         },
@@ -262,6 +272,7 @@ export async function POST(req: Request) {
       mergedMeta.lastRecomputeReason = 'user_quality_recompute';
     }
 
+    let profileStatus: ProfileStatus = 'success';
     try {
       const profile = await generateIntelProfile(rawContent, factsForProfile, {
         fetchTimeoutMs: PROFILE_STEP_FETCH_TIMEOUT_MS,
@@ -278,10 +289,12 @@ export async function POST(req: Request) {
         };
         mergedMeta = { ...mergedMeta, intelProfileError: errPayload };
         delete mergedMeta.intelProfile;
+        profileStatus = 'fallback';
       } else {
         // 🚨 Vercel 60s 超时防线：profile 步骤禁止再做二次英文化修复（高耗时）
         mergedMeta = { ...mergedMeta, intelProfile: profile };
         delete mergedMeta.intelProfileError;
+        profileStatus = 'success';
       }
     } catch (e: unknown) {
       const errPayload: IntelProfileError = {
@@ -289,6 +302,7 @@ export async function POST(req: Request) {
         at: new Date().toISOString(),
       };
       mergedMeta = { ...mergedMeta, intelProfileError: errPayload };
+      profileStatus = 'error';
     }
 
     mergedMeta.enrichmentPending = false;
@@ -306,11 +320,12 @@ export async function POST(req: Request) {
         data: {
           signalId,
           step: 'profile' as const,
+          profileStatus,
           elapsedMs: Date.now() - startedAt,
         },
       },
       {
-        headers: { 'x-td-profile-status': 'ok' },
+        headers: { 'x-td-profile-status': profileStatus },
       }
     );
   } catch (error: unknown) {

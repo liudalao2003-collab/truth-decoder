@@ -104,6 +104,12 @@ export default function IntelProfilePanel({
         {process.env.NODE_ENV === 'development' && (
           <p className="mb-3 text-xs text-zinc-600 font-mono break-all">{profileError.message}</p>
         )}
+        {process.env.NODE_ENV !== 'development' && profileError?.message ? (
+          <p className="mb-3 text-xs text-red-200/90 font-mono break-all text-center">
+            {lang === 'cn' ? '失败原因：' : 'Reason: '}
+            {profileError.message}
+          </p>
+        ) : null}
         {onRetryProfile && (
           <div className="flex items-center justify-center">
             <button
