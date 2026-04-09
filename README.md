@@ -17,15 +17,15 @@
 
 | Secure Gate 指挥台 | 终局裁定与导出 |
 |:---:|:---:|
-| ![Secure Gate 首页](./docs/screenshots/01-home-secure-gate_v2.png?raw=true) | ![终局裁定](./docs/screenshots/02-verdict-export_v2.png?raw=true) |
+| ![Secure Gate 首页](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/01-home-secure-gate_v2.png) | ![终局裁定](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/02-verdict-export_v2.png) |
 
 | Intel Signature 情报体征 | 利益相关方与核验清单 |
 |:---:|:---:|
-| ![情报体征](./docs/screenshots/03-intel-signature_v2.jpg?raw=true) | ![利益链与核验](./docs/screenshots/04-stakeholder-verification_v2.jpg?raw=true) |
+| ![情报体征](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/03-intel-signature_v2.jpg) | ![利益链与核验](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/04-stakeholder-verification_v2.jpg) |
 
 | 原文深读与 Deep Insight | Pro Terminal 深度追问 |
 |:---:|:---:|
-| ![原文高亮](./docs/screenshots/05-deep-insight-source_v2.jpg?raw=true) | ![Pro 终端](./docs/screenshots/06-pro-terminal_v2.png?raw=true) |
+| ![原文高亮](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/05-deep-insight-source_v2.jpg) | ![Pro 终端](https://cdn.jsdelivr.net/gh/liudalao2003-collab/truth-decoder@main/docs/screenshots/06-pro-terminal_v2.png) |
 
 ---
 
