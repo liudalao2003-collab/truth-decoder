@@ -113,6 +113,8 @@ Desktop.ini
 *.jpg
 *.jpeg
 *.png
+# README 与文档用截图允许入库（需在通配 *.png 之后声明例外）
+!docs/screenshots/*.png
 *.gif
 tmp/
 temp/
