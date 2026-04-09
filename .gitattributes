@@ -1,0 +1,2 @@
+# 截图与二进制资源：禁止按文本做换行转换，避免损坏
+docs/screenshots/*.png binary

@@ -2,11 +2,13 @@
 
 > 把长篇通稿、公关话术、财报叙事，拆成你能决策的「硬事实 + 风险结构」——不是摘要，是**叙事情报与可验证结论**。
 
-**English:** [English](#english) · 仓库：<https://github.com/liudalao2003-collab/truth-decoder> · 产品截图使用**仓库根目录相对路径**（`./docs/screenshots/…`），由 GitHub 在 README 页内解析；请勿依赖手动打开 `raw.githubusercontent.com`（公开仓库在部分网络或 CDN 边缘仍可能误报 404，与文件是否在库中无关）。
+**English:** [English](#english) · 仓库：<https://github.com/liudalao2003-collab/truth-decoder> · README 内截图使用相对路径 `./docs/screenshots/*.png`（**标准 PNG 编码**，GitHub 预览与 Raw 均按 PNG 解析）。
 
 ---
 
 ## 产品截图
+
+> 维护说明：截图须为真实 PNG（文件头魔数 `89 50 4E 47…`）。若使用 JPEG 内容却命名为 `.png`，GitHub 文件页与 README 会显示裂图。
 
 | 指挥台入口 | 终局裁定与导出 |
 |:---:|:---:|
