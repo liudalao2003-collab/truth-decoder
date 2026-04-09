@@ -2,7 +2,7 @@
 
 > 把长篇通稿、公关话术、财报叙事，拆成你能决策的「硬事实 + 风险结构」——不是摘要，是**叙事情报与可验证结论**。
 
-**English:** [English](#english) · 推送至 GitHub 前请将下文中的 `YOUR_USERNAME` 换成你的用户名或组织名。
+**English:** [English](#english) · 仓库：<https://github.com/liudalao2003-collab/truth-decoder> · 下方截图使用 `main` 分支 Raw 地址，避免相对路径在 README 中裂图。
 
 ---
 
@@ -10,15 +10,15 @@
 
 | 指挥台入口 | 终局裁定与导出 |
 |:---:|:---:|
-| ![Secure Gate 首页：粘贴叙事与情报流](./docs/screenshots/01-home-secure-gate.png) | ![终局裁定：PDF/图片导出与中英切换](./docs/screenshots/02-verdict-export.png) |
+| ![Secure Gate 首页：粘贴叙事与情报流](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/01-home-secure-gate.png) | ![终局裁定：PDF/图片导出与中英切换](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/02-verdict-export.png) |
 
 | Intel Signature 情报体征 | 利益相关方与核验清单 |
 |:---:|:---:|
-| ![情报体征：对抗式素描与雷达](./docs/screenshots/03-intel-signature.png) | ![利益链与可执行核验](./docs/screenshots/04-stakeholder-verification.png) |
+| ![情报体征：对抗式素描与雷达](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/03-intel-signature.png) | ![利益链与可执行核验](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/04-stakeholder-verification.png) |
 
 | 原文深读与 Deep Insight | Pro Terminal 深度追问 |
 |:---:|:---:|
-| ![原文高亮与深度洞察弹层](./docs/screenshots/05-deep-insight-source.png) | ![Pro 终端：基于硬事实的指令式追问](./docs/screenshots/06-pro-terminal.png) |
+| ![原文高亮与深度洞察弹层](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/05-deep-insight-source.png) | ![Pro 终端：基于硬事实的指令式追问](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/06-pro-terminal.png) |
 
 ---
 
@@ -50,7 +50,7 @@
 - **双语：** **CN / EN** 切换，覆盖中文通稿与国际英文叙事。
 - **Pro 权益提示：** 顶区说明 **Unlimited dossier generations** 与 **ingest 管线无限解析**，方便用户理解付费价值。
 
-![指挥台与情报流](./docs/screenshots/01-home-secure-gate.png)
+![指挥台与情报流](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/01-home-secure-gate.png)
 
 ---
 
@@ -62,7 +62,7 @@
 - **会话选项：** 支持 **Include terminal（this session）** 等扩展能力，把「长卷宗」与「终端追问」串在同一会话里。
 - **导航：** **INDEX** 回到索引或列表，符合「材料很多但要快速跳转」的工作流。
 
-![终局裁定与导出](./docs/screenshots/02-verdict-export.png)
+![终局裁定与导出](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/02-verdict-export.png)
 
 ---
 
@@ -75,7 +75,7 @@
 - **认识论缺口 / 可验证性（Epistemic gap）：** 标出**关键数字或断言**是否缺乏官方或可追溯来源，降低被二手消息带偏的概率。
 - **Intel 雷达图：** 多轴分数一图对比**叙事强度、张力、可验证性、行动压力**，适合横向对比多篇材料或同一主题下的多次解读。
 
-![Intel Signature 情报体征](./docs/screenshots/03-intel-signature.png)
+![Intel Signature 情报体征](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/03-intel-signature.png)
 
 ---
 
@@ -86,7 +86,7 @@
 - **核验清单（Verification checklist）：** 给出**可执行步骤**（例如 WARN、SEC 10-Q/10-K、劳工部门备案、投行报告溯源），并带**完成进度**，把「我觉得不对」变成「下一步查什么」。
 - **My Notes：** 支持在调查过程中做笔记；说明**仅本浏览器存储**时，强调**敏感调研的隐私边界**（具体存储策略以产品实现为准）。
 
-![利益相关方与核验清单](./docs/screenshots/04-stakeholder-verification.png)
+![利益相关方与核验清单](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/04-stakeholder-verification.png)
 
 ---
 
@@ -98,7 +98,7 @@
 - **战略综合：** 右侧可生成**框架化 thesis**（例如多轴「绞杀」式竞争叙事），把碎片化新闻**抬升到可讨论的战略模型**。
 - **交互：** 支持点击高亮再次关闭等操作，适合**长时间屏幕阅读**场景。
 
-![原文深读与 Deep Insight](./docs/screenshots/05-deep-insight-source.png)
+![原文深读与 Deep Insight](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/05-deep-insight-source.png)
 
 ---
 
@@ -109,7 +109,7 @@
 - **Pro 价值：** 顶栏说明 **Unlimited terminal interrogations** 等，面向**高频研究用户**与**无上限额度**需求。
 - **会话清理：** **CLEAR** 等控制，便于在长会话中**重置上下文**。
 
-![Pro Terminal](./docs/screenshots/06-pro-terminal.png)
+![Pro Terminal](https://raw.githubusercontent.com/liudalao2003-collab/truth-decoder/main/docs/screenshots/06-pro-terminal.png)
 
 ---
 
@@ -136,7 +136,7 @@
 ### 安装与本地运行
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/truth-decoder.git
+git clone https://github.com/liudalao2003-collab/truth-decoder.git
 cd truth-decoder
 npm install
 cp .env.example .env.local
@@ -214,7 +214,7 @@ npm run lint
 - **Stack:** Next.js (App Router), React, TypeScript, Supabase, optional Stripe and Upstash Redis.  
 - **Configure:** Copy [`.env.example`](.env.example) to `.env.local`. Never commit secrets.  
 - **Run:** `npm install` → `npm run dev`.  
-- **Screenshots:** [`docs/screenshots/`](./docs/screenshots/)
+- **Screenshots:** [docs/screenshots](https://github.com/liudalao2003-collab/truth-decoder/tree/main/docs/screenshots) (also embedded above via Raw URLs)
 
 ---
 
