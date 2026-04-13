@@ -6,7 +6,7 @@ import { normalizeIngestIntel } from '@/services/bilingual-intel-repair';
 /**
  * 闪电入库：鉴权 + 归一化 + DB 写入，数秒内返回。
  * 重 AI（脚注补全、英文化、情报体征）由客户端在成功后链式调用
- * POST /api/v1/ingest/enrich?step=intel|profile，避免单请求超时。
+ * POST /api/v1/ingest/enrich?step=intel；情报体征见 /api/v1/generation/jobs（intel_profile）。
  */
 export const maxDuration = 30;
 

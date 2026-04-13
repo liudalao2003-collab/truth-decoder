@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { assertIngestAuthorized } from '@/lib/ingest-auth';
+import { canEnrichSignal } from '@/lib/ingest-signal-access';
 import { assertCanStartDossierStream } from '@/lib/dossier-quota';
 import { assertCanStartTerminalStream } from '@/lib/terminal-quota';
 import { createGenerationJobBodySchema } from '@/lib/generation/job-payload-schemas';
+import {
+  isMetaRecord,
+  needsIntelProfileRegeneration,
+} from '@/lib/generation/intel-profile-metadata';
+import { insertIntelProfileGenerationJob } from '@/lib/generation/insert-intel-profile-job';
 import { createClient } from '@/lib/supabase/server';
 import { getSupabaseServiceRoleOrThrow } from '@/lib/supabase';
 
@@ -22,6 +28,74 @@ export async function POST(request: Request) {
     }
 
     const { kind, payload } = parsed.data;
+
+    let admin;
+    try {
+      admin = getSupabaseServiceRoleOrThrow();
+    } catch {
+      return NextResponse.json(
+        { error: '服务器未配置 SUPABASE_SERVICE_ROLE_KEY，无法入队任务。' },
+        { status: 503 }
+      );
+    }
+
+    if (kind === 'intel_profile') {
+      const auth = await assertIngestAuthorized(request);
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const signalId = payload.signalId;
+      const forceRegenerate = payload.forceRegenerate === true;
+
+      const { data: row, error: qErr } = await admin
+        .from('signals')
+        .select('owner_id, metadata')
+        .eq('id', signalId)
+        .maybeSingle();
+
+      if (qErr || !row) {
+        return NextResponse.json({ error: 'Signal not found' }, { status: 404 });
+      }
+
+      const r = row as { owner_id: string | null; metadata: unknown };
+      if (!canEnrichSignal(auth, { owner_id: r.owner_id })) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
+      const prevMeta = isMetaRecord(r.metadata) ? r.metadata : {};
+      if (!forceRegenerate && !needsIntelProfileRegeneration(prevMeta)) {
+        await admin
+          .from('signals')
+          .update({
+            metadata: { ...prevMeta, enrichmentPending: false },
+          })
+          .eq('id', signalId);
+
+        return NextResponse.json({ skipped: true });
+      }
+
+      const userIdForJob = auth.kind === 'user' ? auth.userId : null;
+      const ins = await insertIntelProfileGenerationJob(admin, {
+        signalId,
+        forceRegenerate,
+        userId: userIdForJob,
+      });
+
+      if (!ins.ok) {
+        return NextResponse.json({ error: ins.message }, { status: 500 });
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔵 [模块_成功] -> 产物:', `generation job ${ins.id} (intel_profile)`);
+      }
+
+      return NextResponse.json({
+        id: ins.id,
+        accessToken: ins.accessToken,
+      });
+    }
+
     const supabaseUser = await createClient();
     let userIdForJob: string | null = null;
 
@@ -60,16 +134,6 @@ export async function POST(request: Request) {
         }
       }
       userIdForJob = user?.id ?? null;
-    }
-
-    let admin;
-    try {
-      admin = getSupabaseServiceRoleOrThrow();
-    } catch {
-      return NextResponse.json(
-        { error: '服务器未配置 SUPABASE_SERVICE_ROLE_KEY，无法入队任务。' },
-        { status: 503 }
-      );
     }
 
     const { data: row, error } = await admin

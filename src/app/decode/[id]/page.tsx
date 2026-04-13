@@ -301,22 +301,32 @@ export default function DecodePage() {
     profileEnrichInFlightRef.current = true;
     setProfileRetryCooldownSec(30);
     void (async () => {
-      const ac = new AbortController();
-      // 与 ingest/enrich profile 硬熔断（108s）及路由 maxDuration 对齐，避免客户端提前 Abort
-      const timer = setTimeout(() => ac.abort(), 118_000);
       try {
-        await fetch('/api/v1/ingest/enrich', {
+        const res = await fetch('/api/v1/generation/jobs', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          // 质量重算：即使已有体征，也强制发起新一轮生成。
-          body: JSON.stringify({ signalId: id, step: 'profile', forceRegenerate: true }),
-          signal: ac.signal,
+          body: JSON.stringify({
+            kind: 'intel_profile',
+            payload: { signalId: id, forceRegenerate: true },
+          }),
         });
+        if (res.ok) {
+          const j = (await res.json()) as {
+            skipped?: boolean;
+            id?: string;
+            accessToken?: string;
+          };
+          if (!j.skipped && j.id && j.accessToken) {
+            const { pollGenerationJobFromBrowser } = await import(
+              '@/lib/generation/poll-generation-job-client'
+            );
+            await pollGenerationJobFromBrowser(j.id, j.accessToken);
+          }
+        }
       } catch {
         /* 静默：下次可继续手动重试 */
       } finally {
-        clearTimeout(timer);
         profileEnrichInFlightRef.current = false;
       }
 
@@ -349,11 +359,14 @@ export default function DecodePage() {
       if (profileEnrichInFlightRef.current || isRetryingProfile) return;
       profileEnrichInFlightRef.current = true;
       enrichSelfHealAttemptRef.current = attempt + 1;
-      void fetch('/api/v1/ingest/enrich', {
+      void fetch('/api/v1/generation/jobs', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signalId: id, step: 'profile' }),
+        body: JSON.stringify({
+          kind: 'intel_profile',
+          payload: { signalId: id, forceRegenerate: false },
+        }),
       })
         .catch(() => {
           /* 静默：轮询与 cron 仍可兜底 */

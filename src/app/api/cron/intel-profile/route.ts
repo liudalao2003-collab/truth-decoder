@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
+import { insertIntelProfileGenerationJob } from '@/lib/generation/insert-intel-profile-job';
 import { supabaseAdmin } from '@/lib/supabase';
-import { generateIntelProfile } from '@/services/intel-profile';
-import type { IntelProfileError } from '@/types/intel-profile';
 import { logger } from '@/utils/logger';
 
 function isMetaRecord(x: unknown): x is Record<string, unknown> {
@@ -11,7 +10,8 @@ function isMetaRecord(x: unknown): x is Record<string, unknown> {
 export const maxDuration = 60;
 
 /**
- * Cron：每轮最多补算 3 条缺失 intelProfile 的信号（Bearer CRON_SECRET）。
+ * Cron：每轮最多入队 3 条缺失 intelProfile 的异步任务（Bearer CRON_SECRET）。
+ * 实际 LLM 在 Worker 中执行，避免 Vercel 时长限制。
  */
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
@@ -22,11 +22,11 @@ export async function GET(req: Request) {
   const BATCH = 3;
 
   try {
-    logger.start('Cron intel-profile backfill');
+    logger.start('Cron intel-profile enqueue');
 
     const { data: rows, error: qErr } = await supabaseAdmin
       .from('signals')
-      .select('id, raw_content, hard_facts, metadata')
+      .select('id, metadata')
       .order('created_at', { ascending: false })
       .limit(60);
 
@@ -44,36 +44,22 @@ export async function GET(req: Request) {
     let ok = 0;
 
     for (const row of slice) {
-      const prev = isMetaRecord(row.metadata) ? row.metadata : {};
-      try {
-        const profile = await generateIntelProfile(row.raw_content, row.hard_facts);
-        const rest = { ...prev };
-        delete rest.intelProfileError;
-        await supabaseAdmin
-          .from('signals')
-          .update({ metadata: { ...rest, intelProfile: profile } })
-          .eq('id', row.id);
+      const ins = await insertIntelProfileGenerationJob(supabaseAdmin, {
+        signalId: row.id,
+        forceRegenerate: false,
+        userId: null,
+      });
+      if (ins.ok) {
         ok += 1;
-      } catch (e: unknown) {
-        const errPayload: IntelProfileError = {
-          message: e instanceof Error ? e.message : 'cron intel-profile failed',
-          at: new Date().toISOString(),
-        };
-        const rest2 = { ...prev };
-        delete rest2.intelProfile;
-        await supabaseAdmin
-          .from('signals')
-          .update({ metadata: { ...rest2, intelProfileError: errPayload } })
-          .eq('id', row.id);
       }
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 200));
     }
 
-    logger.success(`Cron intel-profile done ok=${ok}/${slice.length}`);
+    logger.success(`Cron intel-profile enqueue done ok=${ok}/${slice.length}`);
     return NextResponse.json({
       success: true,
-      message: 'Intel profile cron pass',
-      data: { attempted: slice.length, succeeded: ok },
+      message: 'Intel profile cron enqueue pass',
+      data: { attempted: slice.length, enqueued: ok },
     });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Cron intel-profile error';

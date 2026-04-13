@@ -18,6 +18,11 @@ export const terminalJobPayloadSchema = z.object({
     .min(1),
 });
 
+export const intelProfileJobPayloadSchema = z.object({
+  signalId: z.string().min(1),
+  forceRegenerate: z.boolean().optional(),
+});
+
 export const createGenerationJobBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('dossier'),
@@ -26,5 +31,9 @@ export const createGenerationJobBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('terminal'),
     payload: terminalJobPayloadSchema,
+  }),
+  z.object({
+    kind: z.literal('intel_profile'),
+    payload: intelProfileJobPayloadSchema,
   }),
 ]);

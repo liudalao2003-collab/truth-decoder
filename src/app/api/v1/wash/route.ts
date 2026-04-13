@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { assertIngestAuthorized } from '@/lib/ingest-auth';
+import { insertIntelProfileGenerationJob } from '@/lib/generation/insert-intel-profile-job';
 import { supabaseAdmin } from '@/lib/supabase';
-import { generateIntelProfile } from '@/services/intel-profile';
-import type { IntelProfileError } from '@/types/intel-profile';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
@@ -93,20 +92,10 @@ MANDATORY JSON OUTPUT FORMAT
       bilingual: intel.verdict,
       washed: true,
       model: 'deepseek-v3',
+      enrichmentPending: true,
     };
-
-    try {
-      const profile = await generateIntelProfile(rawContent, intel.facts);
-      mergedMeta.intelProfile = profile;
-      delete mergedMeta.intelProfileError;
-    } catch (e: unknown) {
-      const errPayload: IntelProfileError = {
-        message: e instanceof Error ? e.message : '情报体征生成失败',
-        at: new Date().toISOString(),
-      };
-      mergedMeta.intelProfileError = errPayload;
-      delete mergedMeta.intelProfile;
-    }
+    delete mergedMeta.intelProfile;
+    delete mergedMeta.intelProfileError;
 
     const { error: dbError } = await supabaseAdmin
       .from('signals')
@@ -119,6 +108,19 @@ MANDATORY JSON OUTPUT FORMAT
       .eq('id', id);
 
     if (dbError) throw dbError;
+
+    const userIdForJob = auth.kind === 'user' ? auth.userId : null;
+    const queued = await insertIntelProfileGenerationJob(supabaseAdmin, {
+      signalId: id,
+      forceRegenerate: true,
+      userId: userIdForJob,
+    });
+    if (!queued.ok) {
+      return NextResponse.json(
+        { success: false, error: `Wash 已落盘但情报体征任务入队失败：${queued.message}` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true, message: `Signal ${id} Washed & Upgraded` });
   } catch (error: unknown) {

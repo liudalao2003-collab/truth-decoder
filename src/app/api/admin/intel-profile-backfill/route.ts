@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
+import { insertIntelProfileGenerationJob } from '@/lib/generation/insert-intel-profile-job';
 import { supabaseAdmin } from '@/lib/supabase';
 import { createClient } from '@/lib/supabase/server';
-import { generateIntelProfile } from '@/services/intel-profile';
-import type { IntelProfileError } from '@/types/intel-profile';
 import { logger } from '@/utils/logger';
 
 async function verifyCommander() {
@@ -18,10 +17,10 @@ function isMetaRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /**
- * CEO 后台：批量补算缺失的 metadata.intelProfile（节流顺序执行）。
+ * CEO 后台：批量入队缺失 metadata.intelProfile 的异步任务（Worker 消费）。
  */
 export async function POST(req: Request) {
   if (!(await verifyCommander())) {
@@ -39,11 +38,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    logger.start(`情报体征补算 batch limit=${limit}`);
+    logger.start(`情报体征补算入队 batch limit=${limit}`);
 
     const { data: rows, error: qErr } = await supabaseAdmin
       .from('signals')
-      .select('id, raw_content, hard_facts, metadata')
+      .select('id, metadata')
       .order('created_at', { ascending: false })
       .limit(80);
 
@@ -58,41 +57,28 @@ export async function POST(req: Request) {
       }) ?? [];
 
     const slice = targets.slice(0, limit);
-    const results: { id: string; ok: boolean; error?: string }[] = [];
+    const results: { id: string; enqueued: boolean; error?: string }[] = [];
 
     for (const row of slice) {
-      const prev = isMetaRecord(row.metadata) ? row.metadata : {};
-      try {
-        const profile = await generateIntelProfile(row.raw_content, row.hard_facts);
-        const rest = { ...prev };
-        delete rest.intelProfileError;
-        const nextMeta = { ...rest, intelProfile: profile };
-        const { error: uErr } = await supabaseAdmin
-          .from('signals')
-          .update({ metadata: nextMeta })
-          .eq('id', row.id);
-        if (uErr) throw uErr;
-        results.push({ id: row.id, ok: true });
-      } catch (e: unknown) {
-        const errPayload: IntelProfileError = {
-          message: e instanceof Error ? e.message : 'backfill failed',
-          at: new Date().toISOString(),
-        };
-        const rest2 = { ...prev };
-        delete rest2.intelProfile;
-        const nextMeta = { ...rest2, intelProfileError: errPayload };
-        await supabaseAdmin.from('signals').update({ metadata: nextMeta }).eq('id', row.id);
-        results.push({
-          id: row.id,
-          ok: false,
-          error: errPayload.message,
-        });
+      const ins = await insertIntelProfileGenerationJob(supabaseAdmin, {
+        signalId: row.id,
+        forceRegenerate: false,
+        userId: null,
+      });
+      if (ins.ok) {
+        results.push({ id: row.id, enqueued: true });
+      } else {
+        results.push({ id: row.id, enqueued: false, error: ins.message });
       }
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 150));
     }
 
-    logger.success(`补算完成 processed=${results.length}`);
-    return NextResponse.json({ success: true, data: { processed: results.length, results } });
+    const enqueued = results.filter((r) => r.enqueued).length;
+    logger.success(`补算入队完成 enqueued=${enqueued}/${results.length}`);
+    return NextResponse.json({
+      success: true,
+      data: { processed: results.length, enqueued, results },
+    });
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Backfill failure';
     logger.crash(errMsg);

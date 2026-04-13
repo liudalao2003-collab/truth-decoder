@@ -410,20 +410,22 @@ export default function HomePage() {
                 clearTimeout(t);
               }
             };
-            const runOnce = async (): Promise<boolean> => {
+              const runOnce = async (): Promise<boolean> => {
               const intelRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
                 ...opts,
                 body: JSON.stringify({ signalId: sid, step: 'intel' }),
               }, 15_000).catch(() => null);
-              // profile 含多跳 LLM，须与 ingest/enrich maxDuration（120s）及客户端等待一致，禁止 12s 误杀
-              const profileRes = await fetchWithTimeout('/api/v1/ingest/enrich', {
+              // 情报体征改异步队列：入队成功即可，由 Worker 长跑落盘
+              const profileRes = await fetchWithTimeout('/api/v1/generation/jobs', {
                 ...opts,
-                body: JSON.stringify({ signalId: sid, step: 'profile' }),
-              }, 118_000).catch(() => null);
+                body: JSON.stringify({
+                  kind: 'intel_profile',
+                  payload: { signalId: sid, forceRegenerate: false },
+                }),
+              }, 20_000).catch(() => null);
               const intelOk = Boolean(intelRes?.ok);
               const profileOk = Boolean(profileRes?.ok);
-              // profile 成功即可视为主链可用；intel 失败可由后续修复链慢补
-              return profileOk || (intelOk && profileOk);
+              return profileOk || intelOk;
             };
             let ok = await runOnce();
             if (!ok) {

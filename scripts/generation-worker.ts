@@ -12,8 +12,10 @@ import { buildTerminalMessages } from '@/lib/generation/terminal-messages';
 import { accumulateDeepSeekSseResponse } from '@/lib/generation/deepseek-sse-accumulate';
 import {
   dossierJobPayloadSchema,
+  intelProfileJobPayloadSchema,
   terminalJobPayloadSchema,
 } from '@/lib/generation/job-payload-schemas';
+import { runIntelProfileJob } from '@/lib/generation/intel-profile-job-runner';
 
 config({ path: '.env.local' });
 config({ path: '.env' });
@@ -21,7 +23,7 @@ config({ path: '.env' });
 interface GenerationJobRow {
   id: string;
   user_id: string | null;
-  kind: 'dossier' | 'terminal';
+  kind: 'dossier' | 'terminal' | 'intel_profile';
   status: string;
   payload: unknown;
 }
@@ -114,6 +116,32 @@ async function processJob(supabase: SupabaseClient, job: GenerationJobRow): Prom
             finishReason: outcome.finishReason,
             receivedDoneSignal: outcome.receivedDoneSignal,
             abortedByQuality: outcome.abortedByQuality,
+          },
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq('id', id);
+      return;
+    }
+
+    if (job.kind === 'intel_profile') {
+      const p = intelProfileJobPayloadSchema.parse(job.payload);
+      const result = await runIntelProfileJob(supabase, {
+        signalId: p.signalId,
+        forceRegenerate: p.forceRegenerate === true,
+      });
+      const now = new Date().toISOString();
+      if (!result.ok) {
+        await markJobFailed(supabase, id, result.error);
+        return;
+      }
+      await supabase
+        .from('generation_jobs')
+        .update({
+          status: 'completed',
+          result_meta: {
+            profileStatus: result.profileStatus,
+            signalId: result.signalId,
           },
           finished_at: now,
           updated_at: now,

@@ -105,8 +105,10 @@ export default function AdminDashboard() {
       });
       const json = await res.json();
       if (json.success && json.data?.results) {
-        const ok = json.data.results.filter((r: { ok: boolean }) => r.ok).length;
-        alert(`情报体征补算完成：处理 ${json.data.processed} 条，成功 ${ok} 条。`);
+        const ok = json.data.results.filter((r: { enqueued: boolean }) => r.enqueued).length;
+        alert(
+          `情报体征已入队：共 ${json.data.processed} 条，成功入队 ${ok} 条（由 Worker 异步生成）。`
+        );
       } else {
         alert(`补算失败：${json.error || json.message || '未知错误'}`);
       }
