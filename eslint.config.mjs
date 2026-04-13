@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // PM2 CommonJS 配置，require 为正常写法
+    "ecosystem.worker.config.cjs",
   ]),
 ]);
 

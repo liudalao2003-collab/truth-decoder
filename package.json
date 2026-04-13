@@ -7,9 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "worker:generation": "tsx scripts/generation-worker.ts"
+    "worker:generation": "tsx scripts/generation-worker.ts",
+    "worker:pm2": "npx pm2 start ecosystem.worker.config.cjs",
+    "worker:pm2:reload": "npx pm2 reload ecosystem.worker.config.cjs --update-env",
+    "worker:pm2:stop": "npx pm2 stop truth-decoder-worker"
   },
   "dependencies": {
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.3",
     "@sparticuz/chromium": "^143.0.4",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.1",
@@ -26,14 +31,13 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "dotenv": "^16.4.7",
-    "tsx": "^4.19.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "pm2": "^5.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

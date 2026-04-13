@@ -1,0 +1,21 @@
+# 可选：不用 PM2 时，用 systemd 直接托管（复制到 /etc/systemd/system/ 后修改路径与用户）
+# sudo systemctl enable --now truth-decoder-worker
+
+[Unit]
+Description=TruthDecoder generation_jobs Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/truth-decoder
+Environment=NODE_ENV=production
+# 在 WorkingDirectory 下放 .env.local
+ExecStart=/usr/bin/npm run worker:generation
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
