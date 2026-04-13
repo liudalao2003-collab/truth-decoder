@@ -342,20 +342,20 @@ async function translateDossierInChunks(
 }
 
 /**
- * 解析卷宗网关响应：403 且 code 为额度用尽时返回 quota，避免误触发重试。
+ * 解析卷宗异步任务入队：403 且 code 为额度用尽时返回 quota，避免误触发重试。
  */
 async function postDossierApi(body: Record<string, unknown>): Promise<
   | { kind: 'quota' }
   | { kind: 'bad' }
-  | { kind: 'ok'; res: Response }
+  | { kind: 'ok'; jobId: string; accessToken: string }
 > {
-  const res = await fetch('/api/v1/dossier', {
+  const res = await fetch('/api/v1/generation/jobs', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'include',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ kind: 'dossier', payload: body }),
   });
   if (res.status === 403) {
     try {
@@ -368,10 +368,83 @@ async function postDossierApi(body: Record<string, unknown>): Promise<
     }
     return { kind: 'bad' };
   }
-  if (!res.ok || !res.body) {
+  if (!res.ok) {
     return { kind: 'bad' };
   }
-  return { kind: 'ok', res };
+  const j = (await res.json()) as { id: string; accessToken: string };
+  if (!j.id || !j.accessToken) {
+    return { kind: 'bad' };
+  }
+  return { kind: 'ok', jobId: j.id, accessToken: j.accessToken };
+}
+
+/**
+ * 轮询 Supabase 异步任务结果，将增量文本喂给 onAccumulated（对齐原 SSE 增量语义）。
+ */
+async function pollDossierJob(
+  jobId: string,
+  accessToken: string,
+  onAccumulated: (fullText: string) => void
+): Promise<ConsumeSseOutcome> {
+  const deadline = Date.now() + 45 * 60 * 1000;
+  let lastEmitted = '';
+  while (Date.now() < deadline) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 850);
+    });
+    const qs = `?token=${encodeURIComponent(accessToken)}`;
+    const res = await fetch(`/api/v1/generation/jobs/${jobId}${qs}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      continue;
+    }
+    const data = (await res.json()) as {
+      status: string;
+      resultText: string | null;
+      errorMessage: string | null;
+      resultMeta: {
+        finishReason?: string;
+        receivedDoneSignal?: boolean;
+        abortedByQuality?: boolean;
+      } | null;
+    };
+
+    if (data.status === 'failed') {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔴 [模块_崩溃] -> 原因: 卷宗任务失败', data.errorMessage ?? '');
+      }
+      return {
+        text: data.resultText ?? '',
+        abortedByQuality: false,
+        receivedDoneSignal: true,
+        finishReason: 'error',
+      };
+    }
+
+    const text = data.resultText ?? '';
+    if (text !== lastEmitted) {
+      lastEmitted = text;
+      onAccumulated(text);
+    }
+
+    if (data.status === 'completed') {
+      const meta = data.resultMeta;
+      return {
+        text: data.resultText ?? '',
+        abortedByQuality: meta?.abortedByQuality ?? false,
+        receivedDoneSignal: meta?.receivedDoneSignal ?? true,
+        finishReason: meta?.finishReason ?? '',
+      };
+    }
+  }
+
+  return {
+    text: '',
+    abortedByQuality: false,
+    receivedDoneSignal: false,
+    finishReason: 'timeout',
+  };
 }
 
 export interface UseDossierStreamOptions {
@@ -510,7 +583,6 @@ export function useDossierStream(
           }
           setCache((prev) => ({ ...prev, cn: '' }));
 
-          let res: Response;
           try {
             const out = await postDossierApi({
               rawContent,
@@ -525,72 +597,68 @@ export function useDossierStream(
             if (out.kind === 'bad') {
               continue;
             }
-            res = out.res;
+            const outcome = await pollDossierJob(
+              out.jobId,
+              out.accessToken,
+              (full) => {
+                setCache((prev) => ({ ...prev, cn: full }));
+              }
+            );
+
+            if (outcome.abortedByQuality || outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
+              continue;
+            }
+
+            const cnText = outcome.text;
+            if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
+              overallTruncated = true;
+            }
+
+            let translateOk = false;
+            for (let t = 0; t < MAX_TRANSLATE_RETRIES; t++) {
+              if (t > 0) {
+                setDossierRecoveryStatus('Retrying English translation…');
+              }
+              setCache((prev) => ({ ...prev, en: '' }));
+
+              let enText = '';
+              try {
+                enText = await translateDossierInChunks(
+                  cnText,
+                  'en',
+                  (accumulated) => {
+                    setCache((prev) => ({ ...prev, en: accumulated }));
+                  }
+                );
+              } catch {
+                continue;
+              }
+
+              if (enText.trim().length < MIN_DOSSIER_LENGTH) {
+                continue;
+              }
+
+              translateOk = true;
+              if (chineseCharRatio(enText) > CHINESE_POLLUTION_THRESHOLD) {
+                const cleanedText = await runEnCleanupTranslation(
+                  enText,
+                  setDossierRecoveryStatus
+                );
+                setCache((prev) => ({ ...prev, en: cleanedText }));
+              }
+              break;
+            }
+
+            if (translateOk) {
+              primarySucceeded = true;
+            } else {
+              setStreamQualityError(TRANSLATE_FAIL_HINT_EN);
+              primarySucceeded = true;
+            }
+            break cnFallback;
           } catch {
             continue;
           }
-
-          const streamBodyCn = res.body;
-          if (!streamBodyCn) {
-            continue;
-          }
-
-          const reader = streamBodyCn.getReader();
-          const outcome = await consumeChatCompletionSseStream(reader, (full) => {
-            setCache((prev) => ({ ...prev, cn: full }));
-          });
-
-          if (outcome.abortedByQuality || outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
-            continue;
-          }
-
-          const cnText = outcome.text;
-          if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
-            overallTruncated = true;
-          }
-
-          let translateOk = false;
-          for (let t = 0; t < MAX_TRANSLATE_RETRIES; t++) {
-            if (t > 0) {
-              setDossierRecoveryStatus('Retrying English translation…');
-            }
-            setCache((prev) => ({ ...prev, en: '' }));
-
-            let enText = '';
-            try {
-              enText = await translateDossierInChunks(
-                cnText,
-                'en',
-                (accumulated) => {
-                  setCache((prev) => ({ ...prev, en: accumulated }));
-                }
-              );
-            } catch {
-              continue;
-            }
-
-            if (enText.trim().length < MIN_DOSSIER_LENGTH) {
-              continue;
-            }
-
-            translateOk = true;
-            if (chineseCharRatio(enText) > CHINESE_POLLUTION_THRESHOLD) {
-              const cleanedText = await runEnCleanupTranslation(
-                enText,
-                setDossierRecoveryStatus
-              );
-              setCache((prev) => ({ ...prev, en: cleanedText }));
-            }
-            break;
-          }
-
-          if (translateOk) {
-            primarySucceeded = true;
-          } else {
-            setStreamQualityError(TRANSLATE_FAIL_HINT_EN);
-            primarySucceeded = true;
-          }
-          break cnFallback;
         }
 
         if (!primarySucceeded) {
@@ -647,7 +715,6 @@ export function useDossierStream(
         }
         setCache((prev) => ({ ...prev, [lang]: '' }));
 
-        let res: Response;
         try {
           const out = await postDossierApi({
             rawContent,
@@ -664,43 +731,40 @@ export function useDossierStream(
           if (out.kind === 'bad') {
             continue;
           }
-          res = out.res;
+          const targetLang = lang;
+          const outcome = await pollDossierJob(
+            out.jobId,
+            out.accessToken,
+            (full) => {
+              setCache((prev) => ({ ...prev, [targetLang]: full }));
+            }
+          );
+
+          if (outcome.abortedByQuality) {
+            continue;
+          }
+
+          // 进入此分支时 lang 已收窄为 'cn'（EN 在函数顶部已强制走 CN→EN 管线并 return）
+          if (outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
+            continue;
+          }
+
+          primarySucceeded = true;
+          if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
+            overallTruncated = true;
+          }
+          // CN 模式语言纯洁性守卫：直接生成的 CN 卷宗若含英文残留超标，触发一次清洗
+          if (englishCharRatio(outcome.text) > ENGLISH_POLLUTION_THRESHOLD_CN) {
+            const cleanedText = await runCnCleanupTranslation(
+              outcome.text,
+              setDossierRecoveryStatus
+            );
+            setCache((prev) => ({ ...prev, cn: cleanedText }));
+          }
+          break;
         } catch {
           continue;
         }
-
-        const streamBody = res.body;
-        if (!streamBody) {
-          continue;
-        }
-        const reader = streamBody.getReader();
-        const targetLang = lang;
-        const outcome = await consumeChatCompletionSseStream(reader, (full) => {
-          setCache((prev) => ({ ...prev, [targetLang]: full }));
-        });
-
-        if (outcome.abortedByQuality) {
-          continue;
-        }
-
-        // 进入此分支时 lang 已收窄为 'cn'（EN 在函数顶部已强制走 CN→EN 管线并 return）
-        if (outcome.text.trim().length < MIN_DOSSIER_LENGTH) {
-          continue;
-        }
-
-        primarySucceeded = true;
-        if (outcome.finishReason === 'length' || !outcome.receivedDoneSignal) {
-          overallTruncated = true;
-        }
-        // CN 模式语言纯洁性守卫：直接生成的 CN 卷宗若含英文残留超标，触发一次清洗
-        if (englishCharRatio(outcome.text) > ENGLISH_POLLUTION_THRESHOLD_CN) {
-          const cleanedText = await runCnCleanupTranslation(
-            outcome.text,
-            setDossierRecoveryStatus
-          );
-          setCache((prev) => ({ ...prev, cn: cleanedText }));
-        }
-        break;
       }
 
       if (!primarySucceeded) {

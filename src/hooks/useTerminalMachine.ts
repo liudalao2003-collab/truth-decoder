@@ -47,13 +47,17 @@ export function useTerminalMachine({
       const payloadMessages = [contextPayload, ...currentHistory];
 
       if (process.env.NODE_ENV === 'development') {
-        console.log('🟡 [Terminal_异步] -> 接口: /api/terminal, 载荷深度:', payloadMessages.length);
+        console.log('🟡 [Terminal_异步] -> 接口: /api/v1/generation/jobs, 载荷深度:', payloadMessages.length);
       }
 
-      const res = await fetch('/api/terminal', {
+      const res = await fetch('/api/v1/generation/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signalId, messages: payloadMessages }),
+        credentials: 'include',
+        body: JSON.stringify({
+          kind: 'terminal',
+          payload: { signalId, messages: payloadMessages },
+        }),
       });
 
       // 配额超限：触发外部回调，回滚 UI 至提交前状态
@@ -76,51 +80,62 @@ export function useTerminalMachine({
         }
       }
 
-      if (!res.ok) throw new Error(`流式网关阻断: HTTP ${res.status}`);
-      if (!res.body) throw new Error('流式管道未建立');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔵 [Terminal_成功] -> 组件: 终端字节流开始泵入，启动逐字解析');
+      if (!res.ok) throw new Error(`终端任务入队失败: HTTP ${res.status}`);
+      const jobJson = (await res.json()) as { id: string; accessToken: string };
+      if (!jobJson.id || !jobJson.accessToken) {
+        throw new Error('终端任务响应缺少 id 或 accessToken');
       }
 
-      let done = false;
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔵 [Terminal_成功] -> 组件: 任务已入队，开始轮询增量结果');
+      }
 
-          for (const line of lines) {
-            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-              try {
-                const data = JSON.parse(line.slice(6)) as { choices: Array<{ delta?: { content?: string } }> };
-                const delta = data.choices[0]?.delta?.content ?? '';
+      const deadline = Date.now() + 45 * 60 * 1000;
+      let lastText = '';
+      while (Date.now() < deadline) {
+        await new Promise<void>((r) => {
+          setTimeout(r, 800);
+        });
+        const pollRes = await fetch(
+          `/api/v1/generation/jobs/${jobJson.id}?token=${encodeURIComponent(jobJson.accessToken)}`,
+          { credentials: 'include' }
+        );
+        if (!pollRes.ok) {
+          continue;
+        }
+        const data = (await pollRes.json()) as {
+          status: string;
+          resultText: string | null;
+          errorMessage: string | null;
+        };
 
-                if (delta) {
-                  // 核心防线：绝对纯洁的闭包更新，精准锁定 UI 数组最后一条消息进行字符追加
-                  setMessages((prev) => {
-                    const newArr = [...prev];
-                    const lastIdx = newArr.length - 1;
-                    newArr[lastIdx] = {
-                      ...newArr[lastIdx],
-                      content: newArr[lastIdx].content + delta,
-                    };
-                    return newArr;
-                  });
-                }
-              } catch {
-                // 忽略流传输过程中的单行 JSON 碎片化报错
-              }
-            }
-          }
+        if (data.status === 'failed') {
+          throw new Error(data.errorMessage ?? '终端生成任务失败');
+        }
+
+        const full = data.resultText ?? '';
+        if (full !== lastText) {
+          lastText = full;
+          setMessages((prev) => {
+            const newArr = [...prev];
+            const lastIdx = newArr.length - 1;
+            newArr[lastIdx] = {
+              ...newArr[lastIdx],
+              content: full,
+            };
+            return newArr;
+          });
+        }
+
+        if (data.status === 'completed') {
+          streamSucceeded = true;
+          break;
         }
       }
 
-      streamSucceeded = true;
+      if (!streamSucceeded) {
+        throw new Error('终端生成超时，请稍后重试');
+      }
 
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : '字节流解析崩塌';
