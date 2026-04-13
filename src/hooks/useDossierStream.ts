@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { SignalRecord } from '@/types/database';
-import { detectConsecutiveRepetition, chineseCharRatio, englishCharRatio } from '@/utils/text-stream-guard';
+import { chineseCharRatio, englishCharRatio } from '@/utils/text-stream-guard';
 import { useBilingualCache } from '@/hooks/useBilingualCache';
+import { runTranslateViaGenerationJob } from '@/lib/generation/translate-job-client';
 
 const MIN_DOSSIER_LENGTH = 500;
 /** EN 直出卷宗最低可接受长度，避免 500 字「假成功」与早停 */
@@ -63,76 +64,6 @@ function isDossierEnAcceptable(text: string, outcome: ConsumeSseOutcome): boolea
 }
 
 /**
- * 消费 OpenAI 兼容的 chat/completions SSE，带复读安检；通过 onAccumulated 驱动 UI 增量更新。
- */
-async function consumeChatCompletionSseStream(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  onAccumulated: (fullText: string) => void
-): Promise<ConsumeSseOutcome> {
-  const decoder = new TextDecoder('utf-8');
-  let streamDone = false;
-  let lineBuffer = '';
-  let localAcc = '';
-  let receivedDoneSignal = false;
-  let finishReason = '';
-  let abortedByQuality = false;
-
-  outer: while (!streamDone) {
-    const { value, done: readerDone } = await reader.read();
-    streamDone = readerDone;
-    if (value) {
-      lineBuffer += decoder.decode(value, { stream: true });
-      const lines = lineBuffer.split('\n');
-      lineBuffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine.startsWith('data: ')) {
-          if (trimmedLine.includes('[DONE]')) {
-            receivedDoneSignal = true;
-            continue;
-          }
-          try {
-            const data = JSON.parse(trimmedLine.slice(6));
-            const delta = data.choices[0]?.delta?.content || '';
-            const currentFinishReason = data.choices[0]?.finish_reason;
-
-            if (currentFinishReason) {
-              finishReason = currentFinishReason;
-            }
-
-            if (delta) {
-              localAcc += delta;
-              const rep = detectConsecutiveRepetition(localAcc);
-              if (rep.shouldAbort) {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('🔴 [模块_崩溃] -> 原因: SSE 流检测到异常复读，已掐断');
-                }
-                void reader.cancel();
-                localAcc = rep.safePrefix;
-                abortedByQuality = true;
-                onAccumulated(localAcc);
-                break outer;
-              }
-              onAccumulated(localAcc);
-            }
-          } catch {
-            /* 忽略流碎片 */
-          }
-        }
-      }
-    }
-  }
-
-  return {
-    text: localAcc,
-    abortedByQuality,
-    receivedDoneSignal,
-    finishReason,
-  };
-}
-
-/**
  * EN 模式中文污染清洗器：对已生成但含中文残留的 EN 文本，发起一次专项翻译清洗。
  * 最多执行一次，网络异常或输出不合格时静默保留原文，保证 UI 不白屏不崩溃。
  *
@@ -150,23 +81,17 @@ async function runEnCleanupTranslation(
     console.log('🟡 [模块_异步] -> 目标: 检测到 EN 输出含中文残留，启动语言纯洁性清洗通道');
   }
   try {
-    const res = await fetch('/api/v1/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ content: pollutedText, targetLang: 'en' }),
-    });
-    if (!res.ok || !res.body) return pollutedText;
-
-    // 使用局部缓冲积累清洗结果，不直接更新 cache，防止中间态污染状态树
-    let localBuf = '';
-    const reader = res.body.getReader();
-    const cleanOutcome = await consumeChatCompletionSseStream(reader, (full) => {
-      localBuf = full;
-    });
+    const { text, resultMeta } = await runTranslateViaGenerationJob(
+      pollutedText,
+      'en'
+    );
+    const aborted =
+      resultMeta != null &&
+      typeof resultMeta === 'object' &&
+      (resultMeta as { abortedByQuality?: boolean }).abortedByQuality === true;
 
     // 清洗结果不合格（复读截断或内容过短）：静默回退到原文
-    if (cleanOutcome.abortedByQuality || localBuf.trim().length < 200) {
+    if (aborted || text.trim().length < 200) {
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因: 清洗翻译输出不合格，保留原污染文本');
       }
@@ -175,7 +100,7 @@ async function runEnCleanupTranslation(
     if (process.env.NODE_ENV === 'development') {
       console.log('🔵 [模块_成功] -> 产物: EN 语言纯洁性清洗完成，中文残留已清除');
     }
-    return localBuf;
+    return text;
   } catch {
     // 网络异常：静默保留原文
     return pollutedText;
@@ -196,23 +121,16 @@ async function runCnCleanupTranslation(
     console.log('🟡 [模块_异步] -> 目标: 检测到 CN 输出含英文残留，启动语言纯洁性清洗通道');
   }
   try {
-    const res = await fetch('/api/v1/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ content: pollutedText, targetLang: 'cn' }),
-    });
-    if (!res.ok || !res.body) return pollutedText;
+    const { text, resultMeta } = await runTranslateViaGenerationJob(
+      pollutedText,
+      'cn'
+    );
+    const aborted =
+      resultMeta != null &&
+      typeof resultMeta === 'object' &&
+      (resultMeta as { abortedByQuality?: boolean }).abortedByQuality === true;
 
-    // 使用局部缓冲积累清洗结果，不直接更新 cache，防止中间态污染状态树
-    let localBuf = '';
-    const reader = res.body.getReader();
-    const cleanOutcome = await consumeChatCompletionSseStream(reader, (full) => {
-      localBuf = full;
-    });
-
-    // 清洗结果不合格（复读截断或内容过短）：静默回退到原文
-    if (cleanOutcome.abortedByQuality || localBuf.trim().length < 200) {
+    if (aborted || text.trim().length < 200) {
       if (process.env.NODE_ENV === 'development') {
         console.log('🔴 [模块_崩溃] -> 原因: CN 清洗翻译输出不合格，保留原污染文本');
       }
@@ -221,7 +139,7 @@ async function runCnCleanupTranslation(
     if (process.env.NODE_ENV === 'development') {
       console.log('🔵 [模块_成功] -> 产物: CN 语言纯洁性清洗完成，英文残留已清除');
     }
-    return localBuf;
+    return text;
   } catch {
     // 网络异常：静默保留原文
     return pollutedText;
@@ -284,19 +202,8 @@ async function translateOneChunk(
   chunk: string,
   targetLang: 'cn' | 'en'
 ): Promise<string> {
-  const res = await fetch('/api/v1/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ content: chunk, targetLang }),
-  });
-  if (!res.ok || !res.body) {
-    const errData = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(errData.error || `网关物理阻断: HTTP ${res.status}`);
-  }
-  const reader = res.body.getReader();
-  const outcome = await consumeChatCompletionSseStream(reader, () => {});
-  return outcome.text;
+  const { text } = await runTranslateViaGenerationJob(chunk, targetLang);
+  return text;
 }
 
 /**

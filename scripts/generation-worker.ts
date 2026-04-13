@@ -14,8 +14,10 @@ import {
   dossierJobPayloadSchema,
   intelProfileJobPayloadSchema,
   terminalJobPayloadSchema,
+  translateJobPayloadSchema,
 } from '@/lib/generation/job-payload-schemas';
 import { runIntelProfileJob } from '@/lib/generation/intel-profile-job-runner';
+import { buildTranslateMessages } from '@/lib/generation/translate-messages';
 
 config({ path: '.env.local' });
 config({ path: '.env' });
@@ -23,7 +25,7 @@ config({ path: '.env' });
 interface GenerationJobRow {
   id: string;
   user_id: string | null;
-  kind: 'dossier' | 'terminal' | 'intel_profile';
+  kind: 'dossier' | 'terminal' | 'intel_profile' | 'translate';
   status: string;
   payload: unknown;
 }
@@ -142,6 +144,33 @@ async function processJob(supabase: SupabaseClient, job: GenerationJobRow): Prom
           result_meta: {
             profileStatus: result.profileStatus,
             signalId: result.signalId,
+          },
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq('id', id);
+      return;
+    }
+
+    if (job.kind === 'translate') {
+      const p = translateJobPayloadSchema.parse(job.payload);
+      const { messages, streamOptions } = buildTranslateMessages(p.content, p.targetLang);
+      const streamResponse = await createDeepSeekStream(messages, false, streamOptions);
+      const outcome = await accumulateDeepSeekSseResponse(
+        streamResponse.body,
+        touchResult,
+        { flushEveryMs: 800, flushCharDelta: 5000 }
+      );
+      const now = new Date().toISOString();
+      await supabase
+        .from('generation_jobs')
+        .update({
+          status: 'completed',
+          result_text: outcome.text,
+          result_meta: {
+            finishReason: outcome.finishReason,
+            receivedDoneSignal: outcome.receivedDoneSignal,
+            abortedByQuality: outcome.abortedByQuality,
           },
           finished_at: now,
           updated_at: now,

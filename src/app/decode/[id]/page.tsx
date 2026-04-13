@@ -25,6 +25,7 @@ import { SignalRecord, BilingualData } from '@/types/database';
 import type { IntelProfileError } from '@/types/intel-profile';
 import { useGlobalLang } from '@/hooks/useGlobalLang';
 import { useDossierStream } from '@/hooks/useDossierStream';
+import { runTranslateViaGenerationJob } from '@/lib/generation/translate-job-client';
 import { createClient } from '@/lib/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -44,40 +45,6 @@ function dictCacheKey(signalId: string, lang: 'cn' | 'en'): string {
   return `td_dict_${DICT_CACHE_VERSION}_${signalId}_${lang}`;
 }
 
-
-/** 消费 /api/v1/translate 的 SSE，拼出完整译文 */
-async function readTranslateSseToText(
-  body: ReadableStream<Uint8Array>
-): Promise<string> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let lineBuffer = '';
-  let acc = '';
-  let streamDone = false;
-  while (!streamDone) {
-    const { value, done: rDone } = await reader.read();
-    streamDone = rDone;
-    if (value) {
-      lineBuffer += decoder.decode(value, { stream: true });
-      const lines = lineBuffer.split('\n');
-      lineBuffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('data: ') && !trimmed.includes('[DONE]')) {
-          try {
-            const data = JSON.parse(trimmed.slice(6)) as {
-              choices?: Array<{ delta?: { content?: string } }>;
-            };
-            acc += data.choices?.[0]?.delta?.content ?? '';
-          } catch {
-            /* 忽略流碎片 */
-          }
-        }
-      }
-    }
-  }
-  return acc;
-}
 
 function parseFnBlocksTranslated(markdown: string, count: number): string[] {
   const out: string[] = Array.from({ length: count }, () => '');
@@ -99,14 +66,13 @@ async function translateFluffTailsToEnglish(
     (p, i) => `[[FN_BLOCK:${i}]]\n${p.tailCn}\n[[/FN_BLOCK]]`
   );
   const content = `Translate all Chinese inside FN_BLOCK markers into fluent English. Each block's inner text MUST be entirely English with zero Chinese characters. Preserve every [[FN_BLOCK:n]] and [[/FN_BLOCK]] tag exactly; only translate the inner text.\n\n${blocks.join('\n\n')}`;
-  const res = await fetch('/api/v1/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ content, targetLang: 'en' }),
-  });
-  if (!res.ok || !res.body) return {};
-  const full = await readTranslateSseToText(res.body);
+  let full: string;
+  try {
+    const r = await runTranslateViaGenerationJob(content, 'en');
+    full = r.text;
+  } catch {
+    return {};
+  }
   const parts = parseFnBlocksTranslated(full, pending.length);
   const map: Record<string, string> = {};
   pending.forEach((p, i) => {

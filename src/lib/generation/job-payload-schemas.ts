@@ -23,6 +23,11 @@ export const intelProfileJobPayloadSchema = z.object({
   forceRegenerate: z.boolean().optional(),
 });
 
+export const translateJobPayloadSchema = z.object({
+  content: z.string().min(1),
+  targetLang: z.enum(['cn', 'en']),
+});
+
 export const createGenerationJobBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('dossier'),
@@ -35,5 +40,9 @@ export const createGenerationJobBodySchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('intel_profile'),
     payload: intelProfileJobPayloadSchema,
+  }),
+  z.object({
+    kind: z.literal('translate'),
+    payload: translateJobPayloadSchema,
   }),
 ]);

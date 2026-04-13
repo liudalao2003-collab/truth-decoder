@@ -96,6 +96,39 @@ export async function POST(request: Request) {
       });
     }
 
+    if (kind === 'translate') {
+      const auth = await assertIngestAuthorized(request);
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      const userIdForJob = auth.kind === 'user' ? auth.userId : null;
+
+      const { data: row, error: insErr } = await admin
+        .from('generation_jobs')
+        .insert({
+          user_id: userIdForJob,
+          kind: 'translate',
+          status: 'pending',
+          payload: payload as unknown as Record<string, unknown>,
+        })
+        .select('id, access_token')
+        .single();
+
+      if (insErr || !row) {
+        return NextResponse.json({ error: '任务入队失败' }, { status: 500 });
+      }
+
+      const rec = row as { id: string; access_token: string };
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔵 [模块_成功] -> 产物:', `generation job ${rec.id} (translate)`);
+      }
+
+      return NextResponse.json({
+        id: rec.id,
+        accessToken: rec.access_token,
+      });
+    }
+
     const supabaseUser = await createClient();
     let userIdForJob: string | null = null;
 
